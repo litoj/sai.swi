@@ -112,7 +112,8 @@ end
 function M:set_mode(mode)
 	self._active_binds = { mode_bindlist(mode) }
 	self.pager.mode = mode
-	return M.super.set_mode(self, mode)
+	M.super.set_mode(self, mode)
+	return false
 end
 
 function M:set_enabled(val)
@@ -146,7 +147,7 @@ function M:new()
 		event = 'ModeChanged',
 		callback = function(ev)
 			self.mode = ev.mode
-			self.tab = self.tab -- regenerate content in case we're on keybindings
+			self:set_tab(self._tab) -- regenerate content in case we're on keybindings
 		end,
 	}
 

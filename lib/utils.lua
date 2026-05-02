@@ -66,8 +66,9 @@ function U.format_exif(img_meta, tag)
 	end
 	if not tag then return end
 
-	local a, b = tag:match '^(%-?[0-9]+)/([0-9]+)$'
+	local a, b = tag:match '^(%-?[0-9 ]+)/([0-9][0-9 ]*)$'
 	if a then
+		a, b = a:gsub(' ', ''):gsub('^0+(.)', '%1'), b:gsub(' ', ''):gsub('^0+(.)', '%1')
 		local x, y = tonumber(a), tonumber(b)
 		local n = x / y
 		if math.floor(n) == n then -- integer, not rational number -> done

@@ -193,7 +193,7 @@ function M.trigger(state)
 		if not ok then
 			---@diagnostic disable-next-line: param-type-mismatch
 			swayimg.text.set_status(string.gsub(ret, '\t', '  '))
-			print(ret)
+			print('ERROR: ' .. ret)
 		elseif ret then
 			M.unsubscribe { id = hook } -- unsub from all places, not just where it matched
 		end
