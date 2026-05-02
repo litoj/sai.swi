@@ -11,19 +11,29 @@ local tabled = U.tabled
 ---@class swi.api.eventloop: swi.eventloop
 local M = {
 	---@type {[event_name_t]:{[string]:swi.eventloop.hook[]}}
-	_hooks = {},
+	_hooks = {}, ---@private
 	debug_trigger = false,
 	debug_subscribe = false,
 } -- TODO: could improve deleting perf by having a {[hook_id]:counter}
 
 local modes = { 'viewer', 'gallery', 'slideshow' }
-local rev_modes = U.rev_idx(modes)
 
 local function print_debug(name, t)
 	if t.event == 'Subscribed' and name == 'trigger' then return end
 	local tbl = { event = t.event, mode = t.mode, match = t.match or t.pattern, data = t.data }
 	print(U.pretty_trace(name, debug.traceback()), name, U.tbl_to_str(tbl, ''))
 end
+
+local function mk_modes(mode)
+	if not mode then return modes end
+	mode = U.tabled(mode)
+	for i, v in ipairs(mode) do
+		---@diagnostic disable-next-line: assign-type-mismatch
+		mode[v] = i
+	end
+	return mode
+end
+mk_modes(modes)
 
 ---@param cfg swi.eventloop.subscribe.opts
 ---@return swi.eventloop.hook
@@ -32,7 +42,7 @@ local function mk_hook(cfg)
 	local t = tabled(cfg.pattern or cfg.match or { '^' })
 	local i = #t
 	while i > 0 do
-		local p = t[i]
+		local p = t[i] ---@type string
 		if p and not p:match '[*+?%%^$%[%]()]' then
 			--- make direct matches into indexes
 			if p:sub(1, 1) == '!' then
@@ -45,7 +55,7 @@ local function mk_hook(cfg)
 		i = i - 1
 	end
 	cfg.pattern = t ---@cast cfg swi.eventloop.hook
-	cfg.mode = cfg.mode and U.rev_idx(tabled(cfg.mode)) or rev_modes
+	cfg.mode = mk_modes(cfg.mode)
 	return cfg
 end
 
@@ -116,19 +126,23 @@ end
 
 ---@alias swi.eventloop.applicator fun(h:swi.eventloop.hook,ev:event_name_t, pnt:string,i:integer)
 
----@param f swi.eventloop.filter.opts
+---@param f swi.eventloop.filter.opts|swi.eventloop.hook
 ---@param on_match swi.eventloop.applicator
 function M.apply_filtered(f, on_match)
 	---@type (fun(h:swi.eventloop.hook):boolean?)[]
 	local checks = {}
-	if f.id then checks[#checks + 1] = function(h) return f.id == h end end
-	if f.group then checks[#checks + 1] = function(h) return f.group == h.group end end
-	if f.mode and #f.mode ~= 3 then -- if there are only some modes
-		local modes = tabled(f.mode)
-		checks[#checks + 1] = function(h)
-			if not h.mode then return true end
-			for _, m in ipairs(modes) do
-				if h.mode[m] then return true end
+	if f.callback then
+		checks[#checks + 1] = function(h) return f == h end
+	else
+		if f.id then checks[#checks + 1] = function(h) return f.id == h end end
+		if f.group then checks[#checks + 1] = function(h) return f.group == h.group end end
+		if f.mode and #f.mode ~= 3 then -- if there are only some modes
+			local modes = tabled(f.mode)
+			checks[#checks + 1] = function(h)
+				if not h.mode then return true end
+				for _, m in ipairs(modes) do
+					if h.mode[m] then return true end
+				end
 			end
 		end
 	end

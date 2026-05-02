@@ -1,10 +1,10 @@
 ---@module 'swi.lib.utils'
-local M = {}
+local U = {}
 
 ---@generic O
 ---@param loader fun():`O`
 ---@return O
-function M.lazy(loader)
+function U.lazy(loader)
 	return setmetatable({}, {
 		__index = function(self, idx)
 			for k, v in pairs(loader()) do
@@ -18,10 +18,10 @@ end
 ---@generic O
 ---@param x `O`|`O`[]
 ---@return O[]
-function M.tabled(x) return type(x) == 'table' and x or { x } end
+function U.tabled(x) return type(x) == 'table' and x or { x } end
 ---@param t table
 ---@return table # reverse-indexed table of t
-function M.rev_idx(t)
+function U.rev_idx(t)
 	local r = {}
 	for k, v in pairs(t) do
 		r[v] = k
@@ -32,7 +32,7 @@ end
 ---@generic O
 ---@param t `O`
 ---@return O t copy
-function M.soft_copy(t)
+function U.soft_copy(t)
 	local ret = {}
 	for k, v in pairs(t) do
 		ret[k] = v
@@ -40,12 +40,23 @@ function M.soft_copy(t)
 	return ret
 end
 
+---@generic O:table, M:table
+---@param self `O`
+---@param module `M`
+---@return O|M self with module methods and default values
+function U.new_object(self, module)
+	for k, v in pairs(module) do
+		if self[k] == nil then self[k] = type(v) == 'table' and U.soft_copy(v) or v end
+	end
+	return self
+end
+
 ---Nicely format the requested value to human readable rational numbers.
 ---@param img_meta table<string,string> the `.meta` field of the image
 ---@param tag string name/path of the exif value to get
 --- single-word tags resolve to `Exif.Photo.<>`  or `Exif.Image.<>`
 ---@return string?
-function M.format_exif(img_meta, tag)
+function U.format_exif(img_meta, tag)
 	if not img_meta then return end
 
 	if tag and tag:find('.', 0, true) then
@@ -72,7 +83,7 @@ function M.format_exif(img_meta, tag)
 end
 
 ---A list of translations of vim-like+key-emmited symbols back to their names
-M.key_map = {
+U.key_map = {
 	BS = 'BackSpace',
 	Del = 'Delete',
 	Esc = 'Escape',
@@ -95,18 +106,18 @@ M.key_map = {
 	[']'] = 'bracketright',
 }
 for _, v in ipairs { 'Middle', 'Left', 'Right' } do
-	M.key_map[v:sub(1, 1) .. 'MB'] = 'Mouse' .. v
-	M.key_map[v .. 'Mouse'] = 'Mouse' .. v
+	U.key_map[v:sub(1, 1) .. 'MB'] = 'Mouse' .. v
+	U.key_map[v .. 'Mouse'] = 'Mouse' .. v
 end
 for _, v in ipairs { 'Left', 'Right', 'Up', 'Down' } do
-	M.key_map['SM' .. v:sub(1, 1)] = 'Scroll' .. v
-	M.key_map[v:sub(1, 1) .. 'MS'] = 'Scroll' .. v
+	U.key_map['SM' .. v:sub(1, 1)] = 'Scroll' .. v
+	U.key_map[v:sub(1, 1) .. 'MS'] = 'Scroll' .. v
 end
 
 ---Parse vim-like shortcuts into classic gui-style.
 ---@param bind string
 ---@return string
-function M.transform_key(bind)
+function U.transform_key(bind)
 	if bind:match '^<.+>$' then bind = bind:sub(2, -2) end
 	bind = bind:gsub('[AM][+-]', 'Alt+', 1):gsub('S[+-]', 'Shift+', 1):gsub('C[+-]', 'Ctrl+', 1)
 
@@ -114,20 +125,20 @@ function M.transform_key(bind)
 		bind = bind:gsub('Shift%+Tab$', 'Shift+ISO_Left_Tab')
 	else
 		local key = bind:match '[^+-]*.$'
-		bind = bind:sub(1, -#key - 1) .. (M.key_map[key] or key)
+		bind = bind:sub(1, -#key - 1) .. (U.key_map[key] or key)
 	end
 	return bind
 end
 
-M.rev_key_map = M.rev_idx(M.key_map)
+U.rev_key_map = U.rev_idx(U.key_map)
 
-function M.short_key_name(bind)
+function U.short_key_name(bind)
 	bind = bind:gsub('Alt[+-]', 'A-'):gsub('Shift[+-]', 'S-'):gsub('Ctrl[+-]', 'C-')
 	if bind:match 'ISO_Left_Tab$' then
 		bind = bind:gsub('S-(.*)ISO_Left_Tab', '%1')
 	else
 		local key = bind:match '[^+-]*.$'
-		local found = M.rev_key_map[key]
+		local found = U.rev_key_map[key]
 		bind = bind:sub(1, -#key - 1) .. (found or key)
 		if found then return ('<%s>'):format(bind) end
 	end
@@ -135,17 +146,17 @@ function M.short_key_name(bind)
 	return bind
 end
 
-M.max_tbl_len = 80
+U.max_tbl_len = 80
 
 ---@param t table
 ---@param indent string?
-function M.tbl_to_str(t, indent)
+function U.tbl_to_str(t, indent)
 	indent = (indent or '') .. '  '
 	local s = {}
-	local space = M.max_tbl_len
+	local space = U.max_tbl_len
 	for k, v in pairs(t) do
 		if type(v) == 'table' then
-			v = M.tbl_to_str(v, indent)
+			v = U.tbl_to_str(v, indent)
 		elseif type(v) == 'function' then
 			v = 'fn()'
 		elseif type(v) == 'string' then
@@ -165,23 +176,23 @@ function M.tbl_to_str(t, indent)
 end
 
 ---Original tostring method
-M.ts = tostring
+U.ts = tostring
 
-function M.to_pretty_str(x)
-	if type(x) == 'table' then return M.tbl_to_str(x, '') end
+function U.to_pretty_str(x)
+	if type(x) == 'table' then return U.tbl_to_str(x, '') end
 	if type(x) == 'number' then
 		if x > 0x00ffffff then return ('0x%x'):format(x) end
 		if math.floor(x * 100) == x * 100 then return '' .. x end
 		return ('%.5f'):format(x)
 	end
-	return M.ts(x)
+	return U.ts(x)
 end
 
-_G.tostring = M.to_pretty_str
+_G.tostring = U.to_pretty_str
 
 ---@param action_match string luapat to match the last internal trace to trim
 ---@param stacktrace string use debug.traceback() to get the trace
-function M.pretty_trace(action_match, stacktrace)
+function U.pretty_trace(action_match, stacktrace)
 	return stacktrace
 		:gsub(': in main chunk.*$', '') -- trim all calls past the main trace
 		:gsub('^.-' .. action_match .. "'\n", '') -- trim interals up to traced fn
@@ -193,51 +204,44 @@ function M.pretty_trace(action_match, stacktrace)
 		:gsub('\n(%S)', '\n\t%1') -- indent continuing lines
 end
 
-function M.get_var_container(path)
-	local val = _G
-	for key in path:gmatch '([^.]+)%.' do
-		if val == nil then return false end
-		val = val[key]
+function U.print_trace() print(U.pretty_trace('print_trace', debug.traceback())) end
+
+function U.ordered_binds(api)
+	local binds = {}
+	for k, v in pairs(api.get_mappings()) do ---@cast v bindcfg
+		if not binds[v.cb] then
+			binds[v.cb] = {
+				bind = {},
+				info = v.desc or (type(v.cb) == 'string' and v.cb) or v.trace,
+				-- quality of the source information
+				qual = v.default and 0 or (v.desc and 1) or (type(v.cb) == 'string' and 2) or 3,
+			}
+		end
+		table.insert(binds[v.cb].bind, k)
 	end
-	return val
-end
 
----@param path string
----@return false? false if operation failed due to incomplete path
-function M.set_var_by_path(path, new)
-	local val = M.get_var_container(path)
-	if not val then return false end
-	val[path:match '[^.]+$'] = new
-end
-
----@param path string
----@return any
-function M.get_var_by_path(path) return M.get_var_container(path)[path:match '[^.]+$'] end
-
----@param ptn string|string[]? event pattern to specify which exact options to watch for
----@return fun():table<string,{old:any,new:any}> reclaimer call it to finish collection of option changes
-function M.capture_opt_changes(ptn)
-	local t = {}
-	local hook_id = e.subscribe {
-		event = 'OptionSet',
-		pattern = ptn,
-		callback = function(ev)
-			---@diagnostic disable-next-line: undefined-field
-			t[ev.match] = { old = ev.old_data, new = ev.data }
-		end,
-	}
-	return function()
-		e.unsubscribe { event = 'OptionSet', id = hook_id }
-		return t
+	local out = {}
+	for _, v in pairs(binds) do
+		table.sort(v.bind, function(a, b) return #a < #b or (#a == #b and a < b) end)
+		out[#out + 1] = v
 	end
+	table.sort(out, function(a, b)
+		if a.qual ~= b.qual then return a.qual < b.qual end
+		if a.qual < 3 then return a.info < b.info end
+		return #a.info < #b.info or (#a.info == #b.info and a.info < b.info)
+	end)
+
+	return out
 end
 
----Restore captured option changes back to their original values.
----@param captured table<string,{old:any,new:any}> captured changes from capture_opt_changes()
-function M.restore_captured_changes(captured)
-	for path, state in pairs(captured) do
-		if state.old ~= nil then M.set_var_by_path(path, state.old) end
+---@param api swi.lib.keybind_processor
+---@param fmt_str string how to separate keybind list from the action
+function U.str_bindlist(api, fmt_str)
+	local out = {}
+	for _, k in ipairs(U.ordered_binds(api)) do
+		out[#out + 1] = (fmt_str):format(table.concat(k.bind, ', '), k.info:gsub('[\t\n]', ' '))
 	end
+	return out
 end
 
-return M
+return U

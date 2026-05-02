@@ -2,7 +2,7 @@
 ---@module 'swi.api.text'
 ---@class swi.api.text: swi.text
 local M = {
-	_api = swayimg.text,
+	super = swayimg.text,
 	_path = 'swi.text',
 
 	-- settings that are not set directly in text.cpp
@@ -23,35 +23,27 @@ local M = {
 
 M.is_visible = swayimg.text.visible
 
----@param self swi.api.text
-local function set_enabled(self, val)
+function M:set_enabled(val)
 	if val == true then
-		self._api.show()
-		self._api.set_timeout(0)
+		self.super.show()
+		self.super.set_timeout(0)
 	elseif val == false then
-		self._api.hide()
+		self.super.hide()
 	else
-		self._api.set_timeout(val)
+		self.super.set_timeout(val)
 	end
 end
 
 -- transform scale factor into a pixel value
----@param self swi.api.text
-local function set_spacing(self, val) self._api.set_spacing(math.floor((val - 1) * self._size)) end
----@param self swi.api.text
-local function set_size(self, val)
-	self._api.set_size(val)
+function M:set_line_spacing(val) self.super.set_spacing(math.floor((val - 1) * self._size)) end
+
+function M:set_size(val)
+	self.super.set_size(val)
 
 	-- update line spacing
 	self._size = val
-	set_spacing(self, self._line_spacing)
+	self:set_line_spacing(self._line_spacing)
 	return true
 end
-
-M._overrides = {
-	enabled = { set = set_enabled },
-	line_spacing = { set = set_spacing },
-	size = { set = set_size },
-}
 
 return require('swi.lib.proxy').new(M)

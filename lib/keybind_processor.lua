@@ -1,20 +1,27 @@
 ---@module 'swi.lib.keybind_processor'
 local U = require 'swi.lib.utils'
 
-local M = {}
-
 ---@class swi.lib.keybind_processor: keybind_processor
 ---@field _path string path to the module for error processing
----@field _mappings bind_map
+---@field _mappings bind_map|{[string]:{_traced:boolean}}
 ---Function to set a mapping directly without updating the active mappings.
 ---Nil action gets replaced with the default handler for unbound keys
 ---@field _rawmap fun(self:swi.lib.keybind_processor,b:string,action:fun()?,bindcfg:bindcfg?)
 ---@field warn_on_duplicates boolean
+local M = {}
 
----@param self swi.lib.keybind_processor
 ---@return swi.lib.keybind_processor
-function M.new(self)
-	self._mappings = {}
+function M:new()
+	if self._mappings then
+		local trace = U.pretty_trace('keybind_processor.+new', debug.traceback())
+		for _, v in pairs(self._mappings) do
+			v.trace = trace
+			v._traced = true
+			v.default = true
+		end
+	else
+		self._mappings = {}
+	end
 
 	self.remap = function(b, cfg)
 		b = U.transform_key(b)
@@ -58,7 +65,6 @@ function M.new(self)
 		for _, v in pairs(self._mappings) do
 			if not v._traced then
 				v.trace = pretty_trace(v.trace)
-				---@diagnostic disable-next-line: inject-field
 				v._traced = true
 			end
 		end

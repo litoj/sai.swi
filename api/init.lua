@@ -1,4 +1,4 @@
----@diagnostic disable: invisible
+---@diagnostic disable: invisible,inject-field
 ---@module 'swi.api.init'
 
 local proxy = require 'swi.lib.proxy'
@@ -7,12 +7,11 @@ local e = require 'swi.api.eventloop'
 ---@type swi
 ---@diagnostic disable-next-line: missing-fields
 local M = {
-	_api = swayimg,
+	super = swayimg,
 	_path = 'swi',
-	_overrides = {},
 	initialized = false,
 
-	_overlay = false, -- enabled by default in sway and disabled otherwise
+	_overlay = true, -- enabled by default in sway and disabled otherwise
 	_exif_orientation = true, -- automatically applied only to raw files
 	_antialiasing = true,
 	_decoration = true,
@@ -71,18 +70,20 @@ function M.exec(cmd)
 	e.trigger { event = 'ShellCmdPost', match = cmd, data = out }
 end
 
-M._overrides.mode = {
-	set = function(self, v)
-		local m = self._api.get_mode()
-		self._api.set_mode(v)
-		e.trigger { event = 'ModeChanged', mode = v, match = ('%s:%s'):format(m:sub(1, 1), v:sub(1, 1)), data = m }
-		return false
-	end,
-}
+---@param v appmode_t
+function M:set_mode(v)
+	local m = self.super.get_mode()
+	m = { event = 'ModeChangedPre', mode = m, match = ('%s:%s'):format(m:sub(1, 1), v:sub(1, 1)), data = v }
+	e.trigger(m)
+	self.super.set_mode(v)
+	m.event = 'ModeChanged'
+	m.data = m.mode
+	m.mode = v
+	e.trigger(m)
+	return false
+end
 
-M._overrides.apply_raw_wb = {
-	set = function(self, v) self._api.set_format_params('raw', { camera_wb = v }) end,
-}
+function M:set_apply_raw_wb(v) self.super.set_format_params('raw', { camera_wb = v }) end
 
 -- ensure even the default keymappings trigger our events by redefining the defaults
 _G.swi = proxy.new(M)
@@ -96,7 +97,6 @@ swayimg.on_window_resize(function()
 		if ows.width ~= ws.width or ows.height ~= ws.height then
 			-- TODO: find a way to distinguish focus events from resizing (both can happen at once)
 			e.trigger { event = 'WinResized', data = ws }
-			---@diagnostic disable-next-line: inject-field
 			M._old_winsize = ws
 		end
 	else

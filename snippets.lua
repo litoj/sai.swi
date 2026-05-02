@@ -26,7 +26,7 @@ function M.print_option_changes(enable)
 		-- register after base config has been loaded
 		swi.eventloop.subscribe { -- Print messages on option update
 			event = 'OptionSet',
-			pattern = { '!swi.imagelist.size', '^swi%.?[^.]*%.[^.]*$' }, -- all main opts - not the subsubtables (text etc.)
+			pattern = { '!swi.imagelist.size', '^[^.]+%.?[^.]*%.[^.]*$' }, -- all main opts - not the subsubtables (text etc.)
 			group = 'print_var_change',
 			callback = function(ev)
 				local v = ev.data

@@ -6,7 +6,7 @@ local api = swayimg.imagelist
 
 ---@type swi.imagelist
 ---@diagnostic disable-next-line: missing-fields
-local M = { _api = api, _path = 'swi.imagelist', _overrides = {}, marked = {} }
+local M = { super = api, _path = 'swi.imagelist', marked = {} }
 
 local mlist = {}
 local msize = 0
@@ -66,7 +66,7 @@ end
 function M.get_current() return swayimg[swayimg.get_mode()].get_image() end
 function M.remove(x, silent)
 	local ci = M.get_current()
-	if x == ci.path then e.trigger { event = 'ImgChangePre', data = ci } end
+	if x == ci.path then e.trigger { event = 'ImgChangedPre', data = ci } end
 	api.remove(x)
 	set_mark(x, false)
 	if not silent then e.trigger { event = 'OptionSet', match = 'swi.imagelist.size', data = last_lsize } end

@@ -6,16 +6,17 @@ local e = require 'swi.api.eventloop'
 local M = {}
 
 function M.__index(self, idx)
-	local v = self._overrides[idx] or self._overrides['*']
-	if v and v.get then return v.get(self, idx) end
+	local fnname = 'get_' .. idx
+	local v = rawget(self, fnname)
+	if v then return v(self, idx) end
 
-	v = self._api[idx] -- get fn
+	v = self.super[idx] -- get fn
 	if v ~= nil then -- directly forward access to the old api
 		if type(v) == 'function' then rawset(self, idx, v) end
 		return v
 	end
 
-	v = self._api['get_' .. idx] -- get variable
+	v = self.super[fnname] -- get variable
 	if v then return v() end -- idiomatic getter
 
 	v = rawget(self, '_' .. idx)
@@ -25,12 +26,14 @@ function M.__index(self, idx)
 end
 
 function M.__newindex(self, idx, val)
-	local fn = self._overrides[idx] or self._overrides['*']
 	local old = rawget(self, '_' .. idx)
-	if type(fn) == 'table' and fn.set then
+
+	local fnname = 'set_' .. idx
+	local fn = rawget(self, fnname)
+	if fn then
 		-- set the field only if the setter allows it
 		---@diagnostic disable-next-line: cast-local-type
-		fn = fn.set(self, val, idx)
+		fn = fn(self, val, idx)
 		if fn == nil then
 			rawset(self, '_' .. idx, val)
 			---@diagnostic disable-next-line: cast-local-type
@@ -39,7 +42,7 @@ function M.__newindex(self, idx, val)
 			val = self['_' .. idx]
 		end
 	else
-		fn = type(val) == 'boolean' and self._api['enable_' .. idx] or self._api['set_' .. idx]
+		fn = type(val) == 'boolean' and self.super['enable_' .. idx] or self.super[fnname]
 		if not fn then error('tried to assign: ' .. self._path .. '.' .. idx) end
 
 		fn(val)
@@ -58,7 +61,6 @@ end
 ---@return O base
 function M.new(base)
 	---@diagnostic disable-next-line: inject-field
-	if not base._api then base._api = {} end
 	if base._trigger == nil then base._trigger = true end
 	return setmetatable(base, M)
 end

@@ -8,8 +8,7 @@ local api = swayimg.gallery
 ---@class swi.api.gallery: swi.gallery, swi.api.mode_base
 ---@diagnostic disable-next-line: missing-fields
 local M = {
-	_api = api,
-	_overrides = {},
+	super = api,
 
 	-- settings that are not set directly in gallery.cpp
 	_embedded_thumb = true,
@@ -34,7 +33,7 @@ local M = {
 }
 
 M.text = require('swi.api.mode_text').new {
-	_api = api,
+	super = api,
 	_api_name = 'gallery',
 	_topleft = { 'File:\t{name}' },
 	_topright = { '{list.index} of {list.total}' },
@@ -45,38 +44,35 @@ M.text = require('swi.api.mode_text').new {
 M.go = setmetatable({}, {
 	__index = function(tbl, idx)
 		tbl[idx] = function()
-			e.trigger { event = 'ImgChangePre', mode = 'gallery', match = 'gallery', data = api.get_image() }
+			e.trigger { event = 'ImgChangedPre', mode = 'gallery', match = 'gallery', data = api.get_image() }
 			api.switch_image(idx)
 		end
 		return tbl[idx]
 	end,
 })
 
-M._overrides.cache_limit = {
-	---@param self swi.api.gallery
-	set = function(self, x)
-		x = math.floor(x)
-		self._api.limit_cache(x)
-		self._cache_limit = x
-		return true
-	end,
-}
+function M:set_cache_limit(x)
+	x = math.floor(x)
+	self.super.limit_cache(x)
+	self._cache_limit = x
+	return true
+end
 local function set_size(self, x, idx)
 	x = math.floor(x)
-	self._api['set_' .. idx](x)
+	self.super['set_' .. idx](x)
 	rawset(self, '_' .. idx, x)
 	return true
 end
-M._overrides.thumb_size = { set = set_size }
-M._overrides.padding_size = { set = set_size }
+M.set_thumb_size = set_size
+M.set_padding_size = set_size
 
 e.subscribe { -- ad-hoc registering for when user wants to subscribe
 	event = 'Subscribed',
 	mode = 'gallery',
-	pattern = 'ImgChange',
+	pattern = 'ImgChanged',
 	callback = function()
 		api.on_image_change(
-			function() e.trigger { event = 'ImgChange', mode = 'gallery', match = 'gallery', data = api.get_image() } end
+			function() e.trigger { event = 'ImgChanged', mode = 'gallery', match = 'gallery', data = api.get_image() } end
 		)
 		return true
 	end,

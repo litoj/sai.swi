@@ -73,14 +73,20 @@ What's up with the name? You tell me:
     - `%m`: doesn't execute the command if no files were marked
   - `%`: unquoted current (like in 4.x): `v.map('', [[bash -c '$(which trash || echo rm) "%"']])`
 - custom **help mode** that lets you see all available keybindings or settings
-- temporary keybind mode: easily create custom modes that temporarily change the mappings
+- **custom modes**: easily create custom modes that temporarily change the mappings, settings and
+  even hooks
   ```lua
   v.map('a', function() swi.antialiasing = not swi.antialiasing end)
   v.map('s', require'swi.snippets'.cycle_scale)
   v.map('d', function() l.remove(l.get_current().path) end)
-  -- create a custom bind override
-  local x = require'swi.lib.bind_override'.new { mode = 'viewer' }
-  v.map('x', function() x.enabled = not x.enabled end, 'Toggle panning keybind mode')
+  -- create a custom mode override
+  local x = require('swi.lib.mode_override').new { _path = 'panner', _auto_help = true }
+  -- automatically disable on mode change (otherwise stays active in viewer mode)
+  x.swi.eventloop.subscribe { event = 'ModeChangedPre', callback = function() x.enabled = false end }
+  -- use the highest precission
+  x.swi.viewer.pan.default_size = 1
+  v.map('y', function() x.enabled = not x.enabled end, 'Toggle panning keybind mode')
+  x.map('F1', function() x.help_pager.enabled = not x.help_pager.enabled end, 'Toggle this help')
   x.map('a', v.pan.left, 'Pan left') -- add description to show in help mode properly
   x.map('w', v.pan.up, 'Pan up')
   x.map('s', v.pan.down, 'Pan down')

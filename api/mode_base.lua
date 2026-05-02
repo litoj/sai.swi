@@ -6,7 +6,7 @@ local e = require 'swi.api.eventloop'
 local kp = require 'swi.lib.keybind_processor'
 
 ---@class swi.api.mode_base: mode_base, swi.lib.keybind_processor
----@field _api swayimg_appmode
+---@field super swayimg_appmode
 local M = { warn_on_duplicates = true }
 
 ---@generic O: swi.api.mode_base
@@ -14,7 +14,7 @@ local M = { warn_on_duplicates = true }
 ---@param api_name appmode_t
 ---@return O
 function M.new(self, api_name)
-	local api = self._api ---@diagnostic disable-line: undefined-field
+	local api = self.super ---@diagnostic disable-line: undefined-field
 	---@diagnostic disable: inject-field
 	self._path = 'swi.' .. api_name
 

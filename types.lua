@@ -1,21 +1,11 @@
 ---@meta swi
 
----NOTE: default bindings are not overriden and therefore do not trigger our eventloop
-
----@class override
----@field get? fun(self:proxy,idx:string):(unknown)
----What should happen when setting a field.
----Return boolean to indicate manual update of the backing field ('_'..idx) to prevent override.
----Return `false` to end execution and not trigger an OptionSet event
----@field set? fun(self:proxy,val:unknown,idx:string):(boolean?)
-
----Api conversion provider
+---Field backer and api conversion provider
+--- Define set_xxx(self,val,idx) to use a custom setter for var named (idx=) `xxx`
+--- Define get_xxx(self,idx) to use a custom getter for var named (idx=) `xxx`
 ---@class proxy
----Overrides that handle the behaviour difference between the apis
----`['*']` is a general handler used for all I/O when defined (replaces api)
----@field protected _overrides {['*']:override?, [string]:override}
+---@field protected super table the api that we are replacing and redirecting calls to
 ---@field protected _path string object path to this new api (swi.xxx) or just a name for errors
----@field protected _api table the api that we are replacing and redirecting calls to
 ---@field protected _trigger boolean? trigger events on setting a field (default: true)
 
 --------------------------------------------------------------------------------
@@ -78,11 +68,12 @@ function swi.set_window_size(width, height) end
 --- Event loop processing
 
 ---@alias event_name_t
----| "ImgChange" # after selected image has changed, match: mode, data: new image
----| "ImgChangePre" # just before selecting a different image, match: mode, data: old image
+---| "ImgChanged" # after selected image has changed, match: mode, data: new image
+---| "ImgChangedPre" # just before selecting a different image, match: mode, data: old image
 ---| "OptionSet" # after setting any option in the api, match: opt object path, data: opt value
 ---| "ShellCmdPost" # after swi.exec, match: cmd, data: output
 ---| "ModeChanged" # match: 'o:n' as in old:new, mode: new mode, data: old mode
+---| "ModeChangedPre" # match: 'o:n' as in old:new, mode: old mode, data: new mode
 ---| "WinResized" # when a window is resized, data: new size
 ---| "SwiEnter" # just after loading config and initializing imagelist
 ---| "SwiLeavePre" # before exiting swayimg - hooks for given statuscode must deregister to exit
@@ -131,7 +122,7 @@ function swi.eventloop.subscribe(hook) end
 ---@return table<hook_id,swi.eventloop.subscribe.opts>
 function swi.eventloop.get_subscribed(f) end
 
----@param f swi.eventloop.filter.opts
+---@param f swi.eventloop.filter.opts|swi.eventloop.hook
 function swi.eventloop.unsubscribe(f) end
 
 ---@param state event_cfg
@@ -264,7 +255,7 @@ function keybind_processor.get_mappings() end
 ---@alias extended_text_template
 ---| text_template_t basic single-line template string
 ---| mode_base.text.dyntext event-based generator
----| fun(img:swayimg.image|swayimg.entry):(string|string[]?) generator for ImgChange event
+---| fun(img:swayimg.image|swayimg.entry):(string|string[]?) generator for ImgChanged event
 
 ---A more dynamic approach to updating the text layer.
 --- - custom functions to generate text on image change.
@@ -275,14 +266,14 @@ function keybind_processor.get_mappings() end
 ---or specify the full exif path (without `meta.` prefix), like {Exif.Fujifilm.Rating}
 ---`utils.format_exif` then automatically formats the values.
 ---HINT: to see what tags are available: `print(swi.viewer.get_image().meta)`
----@class mode_base.text: proxy
+---@class mode_base.text
 ---@field topleft extended_text_template[] Text layer scheme for top-left corner
 ---@field topright extended_text_template[] Text layer scheme for top-right corner
 ---@field bottomleft extended_text_template[] Text layer scheme for bottom-left corner
 ---@field bottomright extended_text_template[] Text layer scheme for bottom-right corner
 
 ---Base class providing text overlay layout fields shared by all display modes.
----@class mode_base: proxy, keybind_processor
+---@class mode_base: keybind_processor, proxy
 ---@field text mode_base.text access to setting the overlay fields/indexes
 ---@field mark_color integer Mark icon color in ARGB format
 ---@field pinch_factor number how aggressive should the effect be
@@ -449,8 +440,15 @@ function swi.gallery.get_image() end
 ---Reload thumbnails.
 function swi.gallery.reload() end
 
----@class swi.help: proxy, keybind_processor
+-- Paging object to manage scrollable output
+---@class help_pager: proxy
+---@field page integer
+---@field page_size integer Readonly - useful do advance by all visible lines instead of fixed page
+---@field total_pages integer Readonly
+---@field line integer
+
+---@class swi.help: keybind_processor
 ---@field enabled boolean
----@field pager swi.lib.pager holds the scrolling position of the tab - .line, .page
+---@field pager help_pager
 ---@field tab integer which help tab are we on
 swi.help = {}

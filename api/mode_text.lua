@@ -1,14 +1,25 @@
 ---@module 'swi.api.mode_text'
 
 local U = require 'swi.lib.utils'
-local proxy = require 'swi.lib.proxy'
 local e = require 'swi.api.eventloop'
 
----@class swi.api.mode_text
----@field _api swayimg_appmode|swayimg.gallery
+---@class swi.api.mode_text.base
+---@field super swayimg_appmode|swayimg.gallery
 ---@field _api_name appmode_t
 
+---@class swi.api.mode_text: swi.api.mode_text.base, mode_base.text
+---@field _tracked {[block_position_t]:mode_text.tracker}|false
 local M = {}
+
+---@param self swi.api.mode_text.base
+---@return mode_base.text
+function M.new(self)
+	---@diagnostic disable: inject-field
+	self._path = ('swi.%s.text'):format(self._api_name)
+	self._tracked = false
+	---@diagnostic disable-next-line: return-type-mismatch
+	return setmetatable(self, M)
+end
 
 ---@class mode_text.tracker
 ---@field [integer] extended_text_template
@@ -77,16 +88,16 @@ local function render_on_img(tracker, api, placement, img)
 	api.set_text(placement, p)
 end
 
-local primed
+local primed -- for temporarily blocking rendering until swi is loaded
 ---@param self swi.api.mode_text
 local function initialize(self)
 	local tracked = {}
-	rawset(self, 'tracked', tracked)
+	self._tracked = tracked
 
 	local function on_change(ev)
 		if not next(tracked) then return end
 		for placement, config in pairs(tracked) do
-			render_on_img(config, self._api, placement, ev.data)
+			render_on_img(config, self.super, placement, ev.data)
 		end
 	end
 
@@ -100,23 +111,21 @@ local function initialize(self)
 			event = 'SwiEnter',
 			callback = function()
 				render_on_img = primed
-				on_change { data = U.lazy(self._api.get_image) }
+				on_change { data = U.lazy(self.super.get_image) }
 				return true
 			end,
 		}
 	end
 
-	e.subscribe { event = 'ImgChange', mode = self._api_name, callback = on_change }
-	return tracked
+	e.subscribe { event = 'ImgChanged', mode = self._api_name, callback = on_change }
 end
 
----@param self swi.api.mode_text
 ---@param placement block_position_t
-local function set_text(self, x, placement)
+function M:__newindex(placement, x)
+	self['_' .. placement] = x
 	local group = ('%s.dyntext.%s'):format(self._api_name, placement)
 
-	local tracked = rawget(self, 'tracked') ---@type {[block_position_t]:mode_text.tracker}
-	if tracked and tracked[placement] then e.unsubscribe { group = group } end
+	if self._tracked and self._tracked[placement] then e.unsubscribe { group = group } end
 
 	local new_tr = {}
 	local processed = {}
@@ -143,7 +152,7 @@ local function set_text(self, x, placement)
 			local cfg = U.soft_copy(v)
 			cfg.callback = function(...)
 				render_hook(processed, i, v.callback, ...)
-				self._api.set_text(placement, processed)
+				self.super.set_text(placement, processed)
 			end
 			cfg.group = group
 			cfg.mode = self._api_name
@@ -159,26 +168,19 @@ local function set_text(self, x, placement)
 	end
 
 	if next(new_tr) or has_hooks then
-		if not tracked then tracked = initialize(self) end
+		if not self._tracked then initialize(self) end
 
 		new_tr.processed = processed
-		tracked[placement] = new_tr
+		self._tracked[placement] = new_tr
 		if swayimg.get_mode() == self._api_name then
-			render_on_img(new_tr, self._api, placement, U.lazy(self._api.get_image))
+			render_on_img(new_tr, self.super, placement, U.lazy(self.super.get_image))
 		end
 	else
-		if tracked then tracked[placement] = nil end
-		self._api.set_text(placement, x)
+		if self._tracked then self._tracked[placement] = nil end
+		self.super.set_text(placement, x)
 	end
 end
 
----@param self swi.api.mode_text
----@return swi.api.mode_text
-function M.new(self)
-	---@diagnostic disable: inject-field
-	self._path = ('swi.%s.text'):format(self._api_name)
-	self._overrides = { ['*'] = { set = set_text } }
-	return proxy.new(self)
-end
+function M.__index(self, idx) return rawget(self, '_' .. idx) end
 
 return M

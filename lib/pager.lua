@@ -2,54 +2,53 @@
 ---@module 'swi.lib.pager'
 
 local e = swi.eventloop
-local proxy = require 'swi.lib.proxy'
+local backer = require 'swi.lib.backer'
 local U = require 'swi.lib.utils'
 
--- Paging object to manage scrollable output
----@class swi.lib.pager.base: proxy
+---@class swi.lib.pager: help_pager
+---Activation toggle. Configure all the preceding definition fields before enabling.
+---@field enabled boolean
 ---@field mode appmode_t in which mode should we set the data
 ---@field position block_position_t where should we output to
 ---@field title string title in the non-scrollable header
 ---@field lines string[] the output to be paged
----Activation toggle. Configure all the preceding definition fields before enabling.
----@field enabled boolean
----@field page integer
----@field page_size integer Readonly - useful do advance by all visible lines instead of fixed page
----@field total_pages integer
----@field line integer
-
----@class swi.lib.pager: swi.lib.pager.base
 local M = {
-	_path = 'pager',
-	_overrides = {},
 	_trigger = false,
-	_hooks = {}, ---@private
+	_hooks = {}, ---@protected
 
+	---@type appmode_t|false
+	_mode = false, ---@protected
 	---@type mode_base.text|false
 	_mode_text = false, ---@private
-	_enabled = false, ---@private
+	_enabled = false, ---@protected
 	---@type block_position_t
-	_position = 'topleft', ---@private
+	_position = 'topleft', ---@protected
 	---@type extended_text_template[]|false
-	_original_text = false, ---@private
+	_original_text = false, ---@protected
 
-	_title = '', ---@private
+	_title = '', ---@protected
 	---@type string[]
-	_lines = {}, ---@private
+	_lines = {}, ---@protected
 
-	_line = 1, ---@private
-	_page = 1, ---@private
+	_line = 1, ---@protected
+	_page = 1, ---@protected
 
-	_page_size = 1, ---@private
-	_total_pages = 1, ---@private
+	_page_size = 1, ---@protected
+	_total_pages = 1, ---@protected
 
 	---@type string[]
-	_last_render = {}, ---@private
-	_last_start = -1, ---@private
-	_last_end = 0, ---@private
+	_last_render = {}, ---@protected
+	_last_start = -1, ---@protected
+	_last_end = 0, ---@protected
 
 	size_factor = 0.75,
 }
+
+---@return swi.lib.pager
+function M:new()
+	if self._mode then self._mode_text = swi[self._mode].text end
+	return backer.new(U.new_object(self, M))
+end
 
 function M:prepare_renderer()
 	self._last_render = {}
@@ -117,7 +116,7 @@ function M:render(redraw_if_unchanged)
 
 	self._mode_text[self._position] = out
 	-- this is faster but doesn't allow the lines to contain escape sequences
-	-- self._mode_text._api.set_text(self._position, out)
+	-- self._mode_text.super.set_text(self._position, out)
 end
 
 ---@private
@@ -166,11 +165,11 @@ end
 function M:bulk_change(applicator)
 	if not self._enabled then return applicator(self) end
 	---@type false|fun(self,val):boolean?
-	local set_enable = self._overrides.enabled.set
-	self._overrides.enabled.set = function(self, val)
+	local set_enabled = self.set_enabled
+	self.set_enabled = function(self, val)
 		if val == false then
-			self._overrides.enabled.set = set_enable
-			set_enable = false
+			self.set_enabled = set_enabled
+			set_enabled = false
 		end
 		return false
 	end
@@ -178,130 +177,93 @@ function M:bulk_change(applicator)
 	self._enabled = false
 	applicator(self)
 	self._enabled = true
-	if set_enable then
-		self._overrides.enabled.set = set_enable
+	if set_enabled then
+		self.set_enabled = set_enabled
 		self:recalibrate(false, true)
 	else
 		self.enabled = false
 	end
 end
 
-M._overrides.position = {
-	---@param self swi.lib.pager
-	---@param position block_position_t
-	set = function(self, position)
-		self:_restore_original()
-		self._position = position
+---@param position block_position_t
+function M:set_position(position)
+	self:_restore_original()
+	self._position = position
+	self:_on_dst_change()
+	return false
+end
+
+---@param title string
+function M:set_title(title)
+	self._title = title
+	self:render()
+end
+
+---@param lines string[]
+function M:set_lines(lines)
+	self._lines = lines
+	if self._enabled then self:recalibrate(false, true) end
+	return false
+end
+
+---@param linenr integer
+function M:set_line(linenr)
+	if #self._lines == 0 then return false end
+	--- sets max to the beginning of last page
+	-- self._line = math.max(1, math.min(self._page_size * (self._total_pages - 1) + 1, linenr))
+	--- sets max to leave max 1 line empty at the end
+	self._line = math.max(1, math.min(#self._lines - self._page_size + 2, linenr))
+	self._page = math.ceil((self._line - 1) / self._page_size) + 1
+	self:render()
+	return false
+end
+
+---@param pagenr integer
+function M:set_page(pagenr)
+	self:set_line((pagenr - 1) * self._page_size + 1)
+	return false
+end
+
+---@param mode appmode_t
+function M:set_mode(mode)
+	self:_restore_original()
+	self._mode = mode
+	self._mode_text = swi[mode].text
+	self:_on_dst_change()
+	return false
+end
+
+function M:set_enabled(val)
+	if val == self._enabled then return false end
+
+	if val then
+		if not self._mode then self.mode = swi.mode end
 		self:_on_dst_change()
-		return false
-	end,
-}
+		self._enabled = true
+		self:recalibrate(true, true)
 
-M._overrides.title = {
-	---@param self swi.lib.pager
-	---@param title string
-	set = function(self, title)
-		self._title = title
-		self:render()
-	end,
-}
+		-- Listen for WinResized and OptionSet updates to recalculate per_page and re-render pager
+		local function recal(e) self:recalibrate(true, false) end
+		self._hooks = {
+			e.subscribe {
+				event = 'WinResized',
+				callback = recal,
+			},
+			e.subscribe {
+				event = 'OptionSet',
+				pattern = { 'swi.text.size', 'swi.text.line_spacing' },
+				callback = recal,
+			},
+		}
+	else
+		self._enabled = false
+		for _, v in ipairs(self._hooks) do
+			e.unsubscribe { id = v }
+		end
 
-M._overrides.lines = {
-	---@param self swi.lib.pager
-	---@param lines string[]
-	set = function(self, lines)
-		self._lines = lines
-		if self._enabled then self:recalibrate(false, true) end
-		return false
-	end,
-}
-
-M._overrides.line = {
-	---@param self swi.lib.pager
-	---@param linenr integer
-	set = function(self, linenr)
-		if #self._lines == 0 then return false end
-		--- sets max to the beginning of last page
-		-- self._line = math.max(1, math.min(self._page_size * (self._total_pages - 1) + 1, linenr))
-		--- sets max to leave max 1 line empty at the end
-		self._line = math.max(1, math.min(#self._lines - self._page_size + 2, linenr))
-		self._page = math.ceil((self._line - 1) / self._page_size) + 1
-		self:render()
-		return false
-	end,
-}
-
-M._overrides.page = {
-	---@param self swi.lib.pager
-	---@param pagenr integer
-	set = function(self, pagenr)
-		self._overrides.line.set(self, (pagenr - 1) * self._page_size + 1)
-		return false
-	end,
-}
-
-M._overrides.mode = {
-	---@param self swi.lib.pager
-	---@param mode appmode_t
-	set = function(self, mode)
 		self:_restore_original()
-		self._mode_text = swi[mode].text
-		self:_on_dst_change()
-		return false
-	end,
-	get = function(self)
-		return ({
-			[swi.viewer.text] = 'viewer',
-			[swi.slideshow.text] = 'slideshow',
-			[swi.gallery.text] = 'gallery',
-		})[self._mode_text]
-	end,
-}
-
-M._overrides.enabled = {
-	---@param self swi.lib.pager
-	set = function(self, val)
-		if val == self._enabled then return end
-		if val and not self._mode_text then self.mode = swi.mode end
-		self._enabled = val
-
-		if val then
-			self:recalibrate(true, true)
-
-			-- Listen for WinResized and OptionSet updates to recalculate per_page and re-render pager
-			local function recal(e) self:recalibrate(true, false) end
-			self._hooks = {
-				e.subscribe {
-					event = 'WinResized',
-					callback = recal,
-				},
-				e.subscribe {
-					event = 'OptionSet',
-					pattern = { 'swi.text.size', 'swi.text.line_spacing' },
-					callback = recal,
-				},
-			}
-		else
-			for _, v in ipairs(self._hooks) do
-				e.unsubscribe { id = v }
-			end
-
-			self:_restore_original()
-		end
-		return false
-	end,
-}
-
----@param opts? swi.lib.pager.base base config
----@return swi.lib.pager
-function M.new(opts)
-	local self = proxy.new(U.soft_copy(M))
-	if opts then
-		for k, v in pairs(opts) do
-			self[k] = v
-		end
 	end
-	return self
+	return false
 end
 
 return M

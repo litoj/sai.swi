@@ -7,13 +7,13 @@ local mode_base = require 'swi.api.mode_base'
 local mode_text = require 'swi.api.mode_text'
 
 ---@class swi.api.viewer: swi.viewer, swi.api.mode_base
----@field _api swayimg.viewer
+---@field super swayimg.viewer
 ---@field _last {w:integer,h:integer,x:integer,y:integer}|false
----@field text swi.api.mode_text
+---@field text swi.api.mode_text.base
 local M = {}
 
 ---@return swi.viewer.panner
-function M.new_panner(self)
+local function new_panner(self)
 	local pan
 	pan = {
 		default_size = 50,
@@ -30,11 +30,11 @@ function M.new_panner(self)
 	return pan
 end
 
-function M.new_go(api, api_name)
+local function new_go(api, api_name)
 	return setmetatable({}, {
 		__index = function(tbl, idx)
 			tbl[idx] = function()
-				e.trigger { event = 'ImgChangePre', mode = api_name, match = api_name, data = U.lazy(api.get_image) }
+				e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazy(api.get_image) }
 				api.switch_image(idx)
 			end
 			return tbl[idx]
@@ -42,19 +42,20 @@ function M.new_go(api, api_name)
 	})
 end
 
-function M.set_default_scale(self, x)
+---@param x default_scale_t|'keep_by_width'|'keep_by_height'|'keep_by_size'
+function M:set_default_scale(x)
 	if x:sub(1, 8) == 'keep_by_' then
 		if not ({ width = 1, height = 1, size = 1 })[x:sub(9)] then error('Invalid default scale: ' .. x) end
 		x = 'keep'
 		self._last = { w = 0, h = 0, x = 0, y = 0 }
 		e.subscribe {
-			event = 'ImgChangePre',
+			event = 'ImgChangedPre',
 			mode = self.text._api_name,
 			group = '_cust_default_scale',
 			callback = function(state)
 				local i = state.data
 				---@diagnostic disable-next-line: assign-type-mismatch
-				self._last = self._api.get_position()
+				self._last = self.super.get_position()
 				self._last.w = i.width
 				self._last.h = i.height
 			end,
@@ -63,36 +64,50 @@ function M.set_default_scale(self, x)
 		e.unsubscribe { group = '_cust_default_scale', match = self.text._api_name }
 		self._last = false
 	end
-	self._api.set_default_scale(x)
+	self.super.set_default_scale(x)
 end
 
-function M.set_scale(self, x)
+function M:set_scale(x)
 	if type(x) == 'string' then
-		self._api.set_fix_scale(x)
+		self.super.set_fix_scale(x)
 	else
-		self._api.set_abs_scale(x)
+		self.super.set_abs_scale(x)
 	end
 end
-function M.get_scale(self)
+function M:get_scale()
 	local val = rawget(self, '_scale') or rawget(self, '_default_scale')
-	if type(val) == 'string' and val:sub(1, 4) == 'keep' then return self._api.get_scale() end
+	if type(val) == 'string' and val:sub(1, 4) == 'keep' then return self.super.get_scale() end
 	return val
 end
 
-function M.set_position(self, x)
+function M:set_position(x)
 	if type(x) == 'string' then
-		self._api.set_fix_position(x)
+		self.super.set_fix_position(x)
 	else
-		self._api.set_abs_position(x.x, x.y)
+		self.super.set_abs_position(x.x, x.y)
 	end
 end
 
-function M.set_img_bg(self, x)
+function M:set_image_background(x)
 	if type(x) == 'table' then
-		self._api.set_image_chessboard(x.size, x[1], x[2])
+		self.super.set_image_chessboard(x.size, x[1], x[2])
 	else
-		self._api.set_image_background(x)
+		self.super.set_image_background(x)
 	end
+end
+
+function M:set_preload_limit(x)
+	x = math.floor(x)
+	self.super.limit_preload(x)
+	rawset(self, '_preload_limit', x)
+	return true
+end
+
+function M:set_history_limit(x)
+	x = math.floor(x)
+	self.super.limit_history(x)
+	rawset(self, '_history_limit', x)
+	return true
 end
 
 ---@param api_name 'viewer'|'slideshow'
@@ -100,7 +115,7 @@ end
 function M.new(api_name)
 	local api = swayimg[api_name] ---@type swayimg.viewer
 	local self = {
-		_api = api,
+		super = api,
 		_last = false,
 
 		--- https://github.com/artemsen/swayimg/blob/master/src/viewer.cpp#L29
@@ -115,7 +130,7 @@ function M.new(api_name)
 		self._window_background = 0xff000000
 		self._history_limit = 1
 		self.text = mode_text.new {
-			_api = api,
+			super = api,
 			_api_name = api_name,
 			_topleft = {
 				'File:\t{name}',
@@ -138,7 +153,7 @@ function M.new(api_name)
 		self._window_background = 'auto'
 		self._history_limit = 0
 		self.text = mode_text.new {
-			_api = api,
+			super = api,
 			_api_name = api_name,
 			_topleft = {},
 			_topright = { '{name}' },
@@ -150,45 +165,22 @@ function M.new(api_name)
 	---@cast self swi.api.viewer
 
 	self.get_abs_scale = api.get_scale
-	self.go = M.new_go(api)
-	self.pan = M.new_panner(self)
+	self.pan = new_panner(self)
+	self.go = new_go(api)
 	self.scale_centered = function(s, x, y)
 		api.set_abs_scale(s, x, y)
 		rawset(self, '_scale', s)
 	end
 	self.open = function(path)
-		e.trigger { event = 'ImgChangePre', mode = api_name, match = api_name, data = U.lazy(api.get_image) }
+		e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazy(api.get_image) }
 		api.open(path)
 		e.trigger { event = 'OptionSet', mode = api_name, match = 'swi.imagelist.size', data = swi.imagelist.size() }
 	end
 
-	self._overrides = {
-		default_scale = { set = M.set_default_scale },
-		scale = { set = M.set_scale, get = M.get_scale },
-		position = { set = M.set_position },
-		image_background = { set = M.set_img_bg },
-		preload_limit = {
-			set = function(self, x)
-				x = math.floor(x)
-				self._api.limit_preload(x)
-				rawset(self, '_preload_limit', x)
-				return true
-			end,
-		},
-		history_limit = {
-			set = function(self, x)
-				x = math.floor(x)
-				self._api.limit_history(x)
-				rawset(self, '_history_limit', x)
-				return true
-			end,
-		},
-	}
-
 	api.on_image_change(function()
 		local last = self._last
 		local img = last and api.get_image() or U.lazy(api.get_image)
-		e.trigger { event = 'ImgChange', mode = api_name, match = api_name, data = img }
+		e.trigger { event = 'ImgChanged', mode = api_name, match = api_name, data = img }
 
 		rawset(self, '_scale', nil)
 		if not last then return end
@@ -207,6 +199,11 @@ function M.new(api_name)
 		api.set_abs_scale(api.get_scale() * f, 0, 0)
 		api.set_abs_position(last.x, last.y)
 	end)
+
+	for k, v in pairs(M) do
+		self[k] = v
+	end
+	self.new = nil
 
 	self = mode_base.new(self, api_name) ---@type swi.api.viewer
 
