@@ -18,7 +18,8 @@ local M = {
 	---@type swi.api.mode_base|false
 	_mode_api = false, ---@private
 	_enabled = false, ---@protected
-	_omaps = {}, ---@type bind_map saved original mappings per mode
+	---@type bind_map saved original mappings per mode
+	_omaps = {}, ---@private
 }
 
 ---@return swi.lib.bind_override

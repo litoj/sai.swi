@@ -122,4 +122,37 @@ function M.print_shell_output()
 	}
 end
 
+function M.two_pane_mode()
+	local super = require 'swi.lib.mode_override'
+	local tp = { ---@class tp: swi.lib.mode_override
+		_mode = 'gallery',
+		_path = 'two-paned',
+	}
+	function tp:set_enabled(val)
+		if self._enabled == val then return end
+		if val then self.swi.gallery.thumb_size = swi.get_window_size().width / 2 end
+		return super.set_enabled(self, val)
+	end
+
+	super.new(tp)
+
+	swi.eventloop.subscribe {
+		event = 'WinResized',
+		callback = function(e) tp.swi.gallery.thumb_size = e.data.width / 2 end,
+	}
+	tp.swi.mode = 'gallery'
+	local g = tp.swi.gallery
+	g.padding_size = 0
+	g.cache_limit = 0
+	g.preload = false
+	g.border_size = 5
+	g.selected_scale = 1
+	g.window_color = 0xff808080
+
+	v.map('t', function() tp.enabled = true end, 'Enable Two-pane mode')
+	tp.map('t', function() tp.enabled = false end, 'Disable Two-pane mode')
+
+	return tp
+end
+
 return M

@@ -4,6 +4,7 @@ local e = require 'swi.api.eventloop'
 
 ---@class swi.lib.backer: proxy
 ---@field super? table unused element of proxy definition
+
 local M = {}
 
 function M.__index(self, idx)

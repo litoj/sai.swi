@@ -191,17 +191,10 @@ function M:new()
 	self.swi = wrap(self, swi)
 	rawset(self.swi, 'eventloop', evloop_wrap(self))
 	self.swi.eventloop.subscribe {
-		event = 'ModeChangedPre',
+		event = { 'ModeChangedPre', 'ModeChanged' },
 		callback = function(e)
-			e = rawget(self.swi, e.mode)
-			if e then e(false) end
-		end,
-	}
-	self.swi.eventloop.subscribe {
-		event = 'ModeChanged',
-		callback = function(e)
-			e = rawget(self.swi, e.mode)
-			if e and self._enabled then e(true) end
+			local vars = rawget(self.swi, e.mode)
+			if vars then vars(e.event == 'ModeChanged') end
 		end,
 	}
 
