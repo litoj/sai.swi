@@ -181,10 +181,12 @@ do -- Event and Hook type definitions
 
 	---@class event.SwiEnter: event.base
 	---@field event 'SwiEnter'
+	---@field match 'true'|'false' `initializing`: false during actual initialization, true otherwise
 
 	---Hook for SwiEnter events
 	---@class hook.SwiEnter: hook.base
 	---@field event 'SwiEnter'
+	---@field pattern? 'false' to run only on startup and be ignored otherwise
 	---@field callback fun(ev:event.SwiEnter):(boolean?)
 
 	---@class event.SwiLeavePre: event.base

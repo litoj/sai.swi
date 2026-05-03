@@ -53,7 +53,7 @@ local function wrap(mo, api)
 	local vars = {}
 	local cfg = checked_mode_opts[api]
 	local avail = cfg and function(idx) return cfg.fb[idx] == nil or cfg.mode == swi.mode end
-		or function(idx) return true end
+		or function() return true end
 	return setmetatable({}, {
 		__index = function(self, idx)
 			rawset(self, idx, wrap(mo, api[idx]))

@@ -53,7 +53,7 @@ function M:set_default_scale(x)
 			mode = self.text._api_name,
 			group = '_cust_default_scale',
 			callback = function(state)
-				local i = state.data
+				local i = state.data or error()
 				---@diagnostic disable-next-line: assign-type-mismatch
 				self._last = self.super.get_position()
 				self._last.w = i.width

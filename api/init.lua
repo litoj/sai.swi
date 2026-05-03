@@ -90,9 +90,8 @@ function M:set_apply_raw_wb(v) self.super.set_format_params('raw', { camera_wb =
 _G.swi = proxy.new(M)
 
 local x
-
 swayimg.on_window_resize(function()
-	if x then
+	if x then -- handle as normal resize event
 		local ws = swayimg.get_window_size()
 		local ows = M._old_winsize
 		if ows.width ~= ws.width or ows.height ~= ws.height then
@@ -100,7 +99,8 @@ swayimg.on_window_resize(function()
 			e.trigger { event = 'WinResized', data = ws }
 			M._old_winsize = ws
 		end
-	else
+	else -- handle as initialization
+		-- deduplicate initial resizing
 		if x == nil and not swi.overlay then
 			x = false
 			return
@@ -108,12 +108,14 @@ swayimg.on_window_resize(function()
 			x = swi[swi.mode]
 			x.scale = x.default_scale -- fix incorrect initial size with overlay disabled
 		end
+
 		x = true
 		swi.initialized = true
 		rawset(M, '_old_winsize', swayimg.get_window_size())
 
-		e.trigger { event = 'SwiEnter' }
-
+		-- resolve initial event
+		local ev = { event = 'SwiEnter', match = 'false', data = false }
+		e.trigger(ev)
 		if e._hooks.SwiEnter then
 			e._hooks.SwiEnter = nil
 
@@ -124,13 +126,16 @@ swayimg.on_window_resize(function()
 			if o == '1003\n' then print [[Naughty, naughty! Didn't clean those hookers today...]] end
 		end
 
+		-- resolve lazy initiators
+		ev.match = 'true'
+		ev.data = true
 		e.subscribe {
 			event = 'Subscribed',
 			pattern = 'SwiEnter',
 			-- ensure all hooks expecting initialization get loaded
 			-- (especially the lazy ones not checking swi.initialized)
 			callback = function(h)
-				h.data.callback()
+				if h.data.pattern ~= 'true' then h.data.callback(ev) end
 				e._hooks.SwiEnter = nil
 			end,
 		}

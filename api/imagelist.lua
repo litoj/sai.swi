@@ -56,6 +56,7 @@ function marked.get()
 end
 
 function marked.set_current(enabled, silent)
+	---@diagnostic disable-next-line: redefined-local
 	local api = swayimg[swayimg.get_mode()] ---@type swayimg.gallery
 	local img = api.get_image()
 	if enabled == 'toggle' then enabled = not img.mark end

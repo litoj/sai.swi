@@ -166,6 +166,7 @@ function M:bulk_change(applicator)
 	if not self._enabled then return applicator(self) end
 	---@type false|fun(self,val):boolean?
 	local set_enabled = self.set_enabled
+	---@diagnostic disable-next-line: redefined-local
 	self.set_enabled = function(self, val)
 		if val == false then
 			self.set_enabled = set_enabled
@@ -243,7 +244,7 @@ function M:set_enabled(val)
 		self:recalibrate(true, true)
 
 		-- Listen for WinResized and OptionSet updates to recalculate per_page and re-render pager
-		local function recal(e) self:recalibrate(true, false) end
+		local function recal(_) self:recalibrate(true, false) end
 		self._hooks = {
 			e.subscribe {
 				event = 'WinResized',
