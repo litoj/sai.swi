@@ -1,3 +1,4 @@
+---@diagnostic disable: invisible
 ---@module 'swi.lib.mode_override'
 
 local U = require 'swi.lib.utils'
@@ -14,9 +15,13 @@ local pager = require 'swi.lib.pager'
 ---@field help_pager? swi.lib.pager included to provide custom keybind help `_path` is defined
 local M = {
 	super = require 'swi.lib.bind_override',
-	_help_bind_fmt = '%s\t%s',
-	---@type boolean should help_pager be automatically enabled while mode is active
-	_auto_help = false,
+	-- protected vars - readonly after initialization
+	_persist_mode_change = false, ---@protected if disabled mode change disables the mode
+	_help_bind_fmt = '%s\t%s', ---@protected
+
+	-- runtime vars - may be changed by the user any time
+	save_user_changes = false, --- update setting override values to currrent state before restoring
+	auto_help = false, --- should help_pager be automatically enabled while mode is active
 }
 setmetatable(M, { __index = M.super })
 
@@ -30,46 +35,30 @@ local checked_mode_opts = {
 	[swi.slideshow] = { mode = 'slideshow', fb = viewer_fb },
 }
 
---[[ local var_meta = { -- slow, but this would allow lazy variable loading with dynamicity
-	__index = function(t, x)
-		if x == 'new' then
-			t = rawget(t, '_new')
-			if type(t) == 'function' then
-				return t()
-			else
-				return t
-			end
-		else
-			return rawget(t, x)
-		end
-	end,
-	__newindex = function(t, x, v)
-		if x == 'new' then x = '_new' end
-		rawset(t, x, v)
-	end,
-} ]]
-
+---@param mo swi.lib.mode_override
 local function wrap(mo, api)
-	local vars = {}
 	local cfg = checked_mode_opts[api]
 	local avail = cfg and function(idx) return cfg.fb[idx] == nil or cfg.mode == swi.mode end
 		or function() return true end
-	return setmetatable({}, {
+	return setmetatable({ _vars = {} }, {
 		__index = function(self, idx)
-			rawset(self, idx, wrap(mo, api[idx]))
+			local subapi = rawget(api, idx)
+			if not getmetatable(subapi) then return self._vars[idx] end
+
+			rawset(self, idx, wrap(mo, subapi))
 			return self[idx]
 		end,
-		__newindex = function(_, idx, val)
+		__newindex = function(self, idx, val)
 			if val == nil then -- reset the var
-				if mo._enabled and avail(idx) and vars[idx].old ~= nil then api[idx] = vars[idx].old end
+				if mo._enabled and avail(idx) and self._vars[idx].old ~= nil then api[idx] = self._vars[idx].old end
 
-				vars[idx] = nil
+				self._vars[idx] = nil
 			else
-				local x = vars[idx]
+				local x = self._vars[idx]
 				if not x then
 					x = {}
 
-					vars[idx] = x
+					self._vars[idx] = x
 				end
 
 				x.new = val
@@ -83,23 +72,25 @@ local function wrap(mo, api)
 			local ot = api._trigger
 			api._trigger = false
 			if enable then
-				for k, v in pairs(vars) do
+				for k, v in pairs(self._vars) do
 					if avail(k) then
 						if v.old == nil then v.old = api[k] end
 						api[k] = v.new
 					end
 				end
 			else
+				local update = mo.save_user_changes
 				local fb = cfg and cfg.fb or ''
-				for k, v in pairs(vars) do
+				for k, v in pairs(self._vars) do
 					if avail(k) then
 						if v.old ~= nil then
+							if update then v.new = api[k] end
 							api[k] = v.old
 						else
 							k = fb[k] -- name of the fallback key
-							if k then
-								if (vars[k] or {}).old ~= nil then
-									api[k] = vars[k].old
+							if k and avail(k) then
+								if (self._vars[k] or {}).old ~= nil then
+									api[k] = self._vars[k].old
 								else
 									api[k] = api[k]
 								end
@@ -119,6 +110,7 @@ local function wrap(mo, api)
 	})
 end
 
+---@param mo swi.lib.mode_override
 local function evloop_wrap(mo)
 	local e = swi.eventloop
 	---@type {[hook_cfg]:1}
@@ -195,8 +187,14 @@ function M:new()
 	self.swi.eventloop.subscribe {
 		event = { 'ModeChangedPre', 'ModeChanged' },
 		callback = function(e)
+			if e.event == 'ModeChangedPre' and self._mode == e.mode and not self._persist_mode_change then
+				self.enabled = false
+				return
+			end
+
 			local vars = rawget(self.swi, e.mode)
-			if vars then vars(e.event == 'ModeChanged') end
+			-- check if enabled because swi vars may get disabled before events -> avoid double update
+			if vars and self._enabled then vars(e.event == 'ModeChanged') end
 		end,
 	}
 
@@ -220,7 +218,7 @@ function M:set_enabled(val)
 	end
 	self.swi(val)
 
-	if self._auto_help then self.help_pager.enabled = val end
+	if self.auto_help then self.help_pager.enabled = val end
 
 	return true
 end

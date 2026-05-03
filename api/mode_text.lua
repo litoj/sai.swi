@@ -94,13 +94,6 @@ local function initialize(self)
 	local tracked = {}
 	self._tracked = tracked
 
-	local function on_change(ev)
-		if not next(tracked) then return end
-		for placement, config in pairs(tracked) do
-			render_on_img(config, self.super, placement, ev.data)
-		end
-	end
-
 	if not swi.initialized then -- ensure we don't try to render before app has initialized
 		if not primed then
 			primed = render_on_img
@@ -109,15 +102,15 @@ local function initialize(self)
 
 		e.subscribe {
 			event = 'SwiEnter',
+			once = true,
 			callback = function()
 				render_on_img = primed
-				on_change { data = U.lazy(self.super.get_image) }
-				return true
+				for placement, config in pairs(tracked) do
+					render_on_img(config, self.super, placement, U.lazy(self.super.get_image))
+				end
 			end,
 		}
 	end
-
-	e.subscribe { event = 'ImgChanged', mode = self._api_name, callback = on_change }
 end
 
 ---@param placement block_position_t
@@ -127,7 +120,7 @@ function M:__newindex(placement, x)
 
 	if self._tracked and self._tracked[placement] then e.unsubscribe { group = group } end
 
-	local new_tr = {}
+	local new_tr = {} -- fn register
 	local processed = {}
 	local has_hooks = false
 	for i, v in pairs(x) do -- find all custom templates
@@ -138,17 +131,15 @@ function M:__newindex(placement, x)
 				varpaths[#varpaths + 1] = path
 			end
 
-			if #varpaths > 0 then
+			if #varpaths > 0 then -- dynamic variables
 				v = generate_var_updater(v, varpaths)
-			elseif v:find '[^{]{[A-Z]' or v:find '^{[A-Z]' then
+			elseif v:find '[^{]{[A-Z]' or v:find '^{[A-Z]' then -- exif variables
 				v = generate_exif_updater(v)
 			end
 		end
 
 		-- register the generators and normal lines to be ready to render and update
 		if type(v) == 'table' then ---@cast v mode_base.text.dyntext
-			has_hooks = true
-
 			local cfg = U.soft_copy(v)
 			cfg.callback = function(...)
 				render_hook(processed, i, v.callback, ...)
@@ -160,6 +151,7 @@ function M:__newindex(placement, x)
 
 			-- load the default value
 			render_hook(processed, i, v.callback, nil)
+			has_hooks = true
 		elseif type(v) == 'function' then
 			new_tr[i] = v
 		else
@@ -169,6 +161,16 @@ function M:__newindex(placement, x)
 
 	if next(new_tr) or has_hooks then
 		if not self._tracked then initialize(self) end
+
+		if next(new_tr) then -- update on image change only if functions are in use
+			e.subscribe {
+				event = 'ImgChanged',
+				pattern = self._api_name,
+				callback = function(ev) render_on_img(new_tr, self.super, placement, ev.data) end,
+			}
+		else
+			e.unsubscribe { event = 'ImgChanged', pattern = self._api_name, group = group }
+		end
 
 		new_tr.processed = processed
 		self._tracked[placement] = new_tr

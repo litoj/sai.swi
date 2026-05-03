@@ -70,11 +70,14 @@ e.subscribe { -- ad-hoc registering for when user wants to subscribe
 	event = 'Subscribed',
 	mode = 'gallery',
 	pattern = 'ImgChanged',
-	callback = function()
+	once = true,
+	callback = function(ev)
+		local h = ev.data ---@type hook.ImgChanged|hook_cfg
+		if #h.mode == 3 and not h.pattern.gallery then return end
+
 		api.on_image_change(
 			function() e.trigger { event = 'ImgChanged', mode = 'gallery', match = 'gallery', data = api.get_image() } end
 		)
-		return true
 	end,
 }
 

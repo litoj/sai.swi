@@ -210,14 +210,13 @@ do -- Event and Hook type definitions
 
 	---@class event.Subscribed: event.base
 	---@field event 'Subscribed'
-	---@field match event_name_t event being subscribed to
+	---@field match string event being subscribed to
 	---@field mode appmode_t[] hook's mode
 	---@field data swi.eventloop.hook hook config
 
 	---Hook for Subscribed events
 	---@class hook.Subscribed: hook.base
 	---@field event 'Subscribed'
-	---@field pattern? event_name_t|string[]
 	---@field mode appmode_t[]
 	---@field callback fun(ev:event.Subscribed):(boolean?)
 

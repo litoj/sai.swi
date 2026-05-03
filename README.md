@@ -80,7 +80,7 @@ What's up with the name? You tell me:
   v.map('s', require'swi.snippets'.cycle_scale)
   v.map('d', function() l.remove(l.get_current().path) end)
   -- create a custom mode override
-  local x = require('swi.lib.mode_override').new { _path = 'panner', _auto_help = true }
+  local x = require('swi.lib.mode_override').new { _path = 'panner', auto_help = true }
   -- automatically disable on mode change (otherwise stays active in viewer mode)
   x.swi.eventloop.subscribe { event = 'ModeChangedPre', callback = function() x.enabled = false end }
   -- use the highest precission

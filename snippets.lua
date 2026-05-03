@@ -7,13 +7,12 @@ function M.load_dir_if_single()
 	local function check_n_load()
 		local l = swi.imagelist
 		if l.size() == 1 then l.add(l.get_current().path:match '.+/') end
-		return true
 	end
 
 	if swi.initialized then
 		check_n_load()
 	else
-		e.subscribe { event = 'SwiEnter', callback = check_n_load }
+		e.subscribe { event = 'SwiEnter', once = true, callback = check_n_load }
 	end
 end
 
@@ -61,14 +60,12 @@ function M.print_option_changes(enable)
 				)
 			end,
 		}
-
-		return true
 	end
 
 	if swi.initialized then
 		register_printer()
 	else
-		e.subscribe { event = 'SwiEnter', callback = register_printer }
+		e.subscribe { event = 'SwiEnter', once = true, callback = register_printer }
 	end
 end
 
@@ -131,28 +128,34 @@ function M.two_pane_mode()
 	local tp = { ---@class tp: swi.lib.mode_override
 		_mode = 'gallery',
 		_path = 'two-paned',
+		save_user_changes = true,
 	}
 	function tp:set_enabled(val)
-		if self._enabled == val then return end
-		if val then self.swi.gallery.thumb_size = swi.get_window_size().width / 2 end
+		if self._enabled == val then
+			if val then swi.mode = 'gallery' end
+			return
+		end
+		if val and not self.swi.gallery.thumb_size then
+			self.swi.gallery.thumb_size = swi.get_window_size().width / 2
+		end
 		return super.set_enabled(self, val)
 	end
 
 	super.new(tp)
 
-	e.subscribe {
-		event = 'WinResized',
-		callback = function(e) tp.swi.gallery.thumb_size = e.data.width / 2 end,
-	}
 	tp.swi.mode = 'gallery'
-	local g = tp.swi.gallery
-	g.padding_size = 0
-	g.cache_limit = 0
-	g.preload = false
-	g.border_size = 5
-	g.selected_scale = 1
-	g.window_color = 0xff808080
-	g.hover = true
+	local tg = tp.swi.gallery
+	tp.swi.eventloop.subscribe {
+		event = 'WinResized',
+		callback = function(ev) tg.thumb_size = ev.data.width / 2 end,
+	}
+	tg.padding_size = 0
+	tg.cache_limit = 0
+	tg.preload = false
+	tg.border_size = 5
+	tg.selected_scale = 1
+	tg.window_color = 0xff808080
+	tg.hover = true
 
 	v.map('t', function() tp.enabled = true end, 'Enable Two-pane mode')
 	tp.map('t', function() tp.enabled = false end, 'Disable Two-pane mode')

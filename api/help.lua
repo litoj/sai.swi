@@ -7,7 +7,8 @@ local U = require 'swi.lib.utils'
 local M = {
 	super = require 'swi.lib.mode_override',
 	_path = 'swi.help',
-	_auto_help = true,
+	_persist_mode_change = true,
+	auto_help = true,
 
 	_tab = 1,
 
