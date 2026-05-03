@@ -177,6 +177,19 @@ function M.new(api_name)
 		e.trigger { event = 'OptionSet', mode = api_name, match = 'swi.imagelist.size', data = swi.imagelist.size() }
 	end
 
+	self.export = function(path)
+		-- local ot = swi.text.status_timeout
+		local t = swayimg.text -- TODO: find a fix to get the message rendered
+		-- t.set_status_timeout(0)
+		-- t.set_status('Exporting to ' .. path)
+		-- self.reload(function()
+		api.export(path)
+		-- t.set_status_timeout(ot)
+		t.set_status 'Export done'
+		e.trigger { event = 'User', match = 'ExportFinished', data = path }
+		-- end)
+	end
+
 	api.on_image_change(function()
 		local last = self._last
 		local img = last and api.get_image() or U.lazy(api.get_image)
@@ -184,6 +197,7 @@ function M.new(api_name)
 
 		rawset(self, '_scale', nil)
 		if not last then return end
+		self._last = false -- to make changes only when ImgChangedPre was fired
 
 		---@diagnostic disable-next-line: undefined-field
 		local mode = self._default_scale:sub(9)

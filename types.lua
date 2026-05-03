@@ -65,41 +65,212 @@ function swi.get_window_size() end
 ---@param height integer Height of the window in pixels
 function swi.set_window_size(width, height) end
 
---- Event loop processing
+--------------------------
+--- Eventloop processing
+--------------------------
+
+---@class event.base
+---@field event event_name_t
+---@field mode? appmode_t|appmode_t[]
+---@field match? string value the hooks should match against - describes the payload
+---@field data? unknown observed object
 
 ---@alias event_name_t
----| "ImgChanged" # after selected image has changed, match: mode, data: new image
----| "ImgChangedPre" # just before selecting a different image, match: mode, data: old image
----| "OptionSet" # after setting any option in the api, match: opt object path, data: opt value
----| "ShellCmdPost" # after swi.exec, match: cmd, data: output
----| "ModeChanged" # match: 'o:n' as in old:new, mode: new mode, data: old mode
----| "ModeChangedPre" # match: 'o:n' as in old:new, mode: old mode, data: new mode
----| "WinResized" # when a window is resized, data: new size
----| "SwiEnter" # just after loading config and initializing imagelist
----| "SwiLeavePre" # before exiting swayimg - hooks for given statuscode must deregister to exit
----| "Signal" # USR1 or USR2 received by swayimg
----| "Subscribed" # when a hook gets subscribed, match: event, mode: hook's mode, data: hook config
----| "User" # custom user-emitted/triggered signaling
+---| 'ImgChanged' # after selected image has changed, match: mode, data: new image
+---| 'ImgChangedPre' # just before selecting a different image, match: mode, data: old image
+---| 'OptionSet' # after setting any option in the api, match: opt object path, data: opt value
+---| 'ShellCmdPost' # after swi.exec, match: cmd, data: output
+---| 'ModeChanged' # match: 'o:n' as in old:new, mode: new mode, data: old mode
+---| 'ModeChangedPre' # match: 'o:n' as in old:new, mode: old mode, data: new mode
+---| 'WinResized' # when a window is resized, data: new size
+---| 'SwiEnter' # just after loading config and initializing imagelist
+---| 'SwiLeavePre' # before exiting swayimg - hooks for given statuscode must deregister to exit
+---| 'Signal' # USR1 or USR2 received by swayimg
+---| 'Subscribed' # when a hook gets subscribed, match: event, mode: hook's mode, data: hook config
+---| 'User' # custom user-emitted/triggered signaling
 
----@class event_cfg
----@field event event_name_t
----@field match? string value the hooks should match against - describes the payload
----@field data any the object in observation
-
----@class event_state: event_cfg
----@field mode appmode_t
----@field match string match of the pattern
-
----@class swi.eventloop.subscribe.opts
+---@class hook.base
 ---@field event event_name_t|event_name_t[]
 ---@field mode? appmode_t|appmode_t[]
 ---@field group? string
 ---Simple string to match directly, luapat,
 ---or negated simple match ("!plainstr") to forbid that match
 ---@field pattern? string|string[]
----@field callback fun(ev:event_state):(boolean?)
+---@field once? boolean should the hook be unsubscribed after first call
+---@field callback fun(ev:swi.eventloop.event):(boolean?) return true to unsubscribe
 
----@alias hook_id table
+do -- Event and Hook type definitions
+	---@class event.ImgChanged: event.base
+	---@field event 'ImgChanged'
+	---@field match appmode_t
+	---@field data swayimg.entry|swayimg.image
+
+	---Hook for ImgChanged events
+	---@class hook.ImgChanged: hook.base
+	---@field event 'ImgChanged'
+	---@field pattern? appmode_t|string[] prefer `pattern` over `mode` for better performance
+	---@field callback fun(ev:event.ImgChanged):(boolean?)
+
+	---@class event.ImgChangedPre: event.base
+	---@field event 'ImgChangedPre'
+	---@field match appmode_t
+	---@field data swayimg.entry|swayimg.image
+
+	---Hook for ImgChangedPre events
+	---@class hook.ImgChangedPre: hook.base
+	---@field event 'ImgChangedPre'
+	---@field pattern? appmode_t|string[] prefer `pattern` over `mode` for better performance
+	---@field callback fun(ev:event.ImgChangedPre):(boolean?)
+
+	---@class event.OptionSet: event.base
+	---@field event 'OptionSet'
+	---@field match string option object path
+	---@field data unknown option value
+
+	---Hook for OptionSet events
+	---@class hook.OptionSet: hook.base
+	---@field event 'OptionSet'
+	---@field callback fun(ev:event.OptionSet):(boolean?)
+
+	---@class event.ShellCmdPost: event.base
+	---@field event 'ShellCmdPost'
+	---@field match string command that was executed
+	---@field data? string command output
+
+	---Hook for ShellCmdPost events
+	---@class hook.ShellCmdPost: hook.base
+	---@field event 'ShellCmdPost'
+	---@field callback fun(ev:event.ShellCmdPost):(boolean?)
+
+	---@alias mode_diff 'v:g'|'g:v'|'s:v'|'v:s'|'s:g'|'g:s' # 'old:new' format
+
+	---@class event.ModeChanged: event.base
+	---@field event 'ModeChanged'
+	---@field match mode_diff
+	---@field mode appmode_t new mode
+	---@field data appmode_t old mode
+
+	---Hook for ModeChanged events
+	---@class hook.ModeChanged: hook.base
+	---@field event 'ModeChanged'
+	---@field pattern? mode_diff|string[]
+	---@field mode appmode_t
+	---@field callback fun(ev:event.ModeChanged):(boolean?)
+
+	---@class event.ModeChangedPre: event.base
+	---@field event 'ModeChangedPre'
+	---@field match mode_diff
+	---@field mode appmode_t old mode
+	---@field data appmode_t new mode
+
+	---Hook for ModeChangedPre events
+	---@class hook.ModeChangedPre: hook.base
+	---@field event 'ModeChangedPre'
+	---@field pattern? mode_diff|string[]
+	---@field mode appmode_t
+	---@field callback fun(ev:event.ModeChangedPre):(boolean?)
+
+	---@class event.WinResized: event.base
+	---@field event 'WinResized'
+	---@field data {width: integer, height: integer} new window size
+
+	---Hook for WinResized events
+	---@class hook.WinResized: hook.base
+	---@field event 'WinResized'
+	---@field callback fun(ev:event.WinResized):(boolean?)
+
+	---@class event.SwiEnter: event.base
+	---@field event 'SwiEnter'
+
+	---Hook for SwiEnter events
+	---@class hook.SwiEnter: hook.base
+	---@field event 'SwiEnter'
+	---@field callback fun(ev:event.SwiEnter):(boolean?)
+
+	---@class event.SwiLeavePre: event.base
+	---@field event 'SwiLeavePre'
+	---@field data integer exit status code
+
+	---Hook for SwiLeavePre events
+	---@class hook.SwiLeavePre: hook.base
+	---@field event 'SwiLeavePre'
+	---@field callback fun(ev:event.SwiLeavePre):(boolean?)
+
+	---@class event.Signal: event.base
+	---@field event 'Signal'
+	---@field match 'USR1'|'USR2'
+
+	---Hook for Signal events
+	---@class hook.Signal: hook.base
+	---@field event 'Signal'
+	---@field pattern? 'USR1'|'USR2'|string[]
+	---@field callback fun(ev:event.Signal):(boolean?)
+
+	---@class event.Subscribed: event.base
+	---@field event 'Subscribed'
+	---@field match event_name_t event being subscribed to
+	---@field mode appmode_t[] hook's mode
+	---@field data swi.eventloop.hook hook config
+
+	---Hook for Subscribed events
+	---@class hook.Subscribed: hook.base
+	---@field event 'Subscribed'
+	---@field pattern? event_name_t|string[]
+	---@field mode appmode_t[]
+	---@field callback fun(ev:event.Subscribed):(boolean?)
+
+	---@class event.User: event.base
+	---@field event 'User'
+	---@field match string custom match string
+
+	---Hook for User events
+	---@class hook.User: hook.base
+	---@field event 'User'
+	---@field callback fun(ev:event.User):(boolean?)
+
+	---@class event.User.ExportFinished: event.User
+	---@field event 'User'
+	---@field match 'ExportFinished'
+	---@field data string path of the exported file
+
+	---Hook for User.ExportFinished events
+	---@class hook.User.ExportFinished: hook.User
+	---@field pattern? 'ExportFinished'|string[]
+	---@field callback fun(ev:event.User.ExportFinished):(boolean?)
+
+	---@alias swi.eventloop.event
+	---| event.ImgChanged
+	---| event.ImgChangedPre
+	---| event.OptionSet
+	---| event.ShellCmdPost
+	---| event.ModeChanged
+	---| event.ModeChangedPre
+	---| event.WinResized
+	---| event.SwiEnter
+	---| event.SwiLeavePre
+	---| event.Signal
+	---| event.Subscribed
+	---| event.User
+	---| event.User.ExportFinished
+
+	---@alias swi.eventloop.hook
+	---| hook.base
+	---| hook.ImgChanged
+	---| hook.ImgChangedPre
+	---| hook.OptionSet
+	---| hook.ShellCmdPost
+	---| hook.ModeChanged
+	---| hook.ModeChangedPre
+	---| hook.WinResized
+	---| hook.SwiEnter
+	---| hook.SwiLeavePre
+	---| hook.Signal
+	---| hook.Subscribed
+	---| hook.User
+	---| hook.User.ExportFinished
+end
+
+---@alias hook_id hook.base
 
 ---@class swi.eventloop.filter.opts
 ---@field event? event_name_t|event_name_t[]
@@ -108,25 +279,30 @@ function swi.set_window_size(width, height) end
 ---@field mode? appmode_t|appmode_t[]
 ---@field match? string|string[]
 
----Event loop processor
+---Eventloop processor
 ---@class swi.eventloop
 ---@field debug_trigger boolean print all triggered events and where they were triggered from
 ---@field debug_subscribe boolean print all hook registrations and where they were triggered from
 swi.eventloop = {}
 
----@param hook swi.eventloop.subscribe.opts
+---@param hook swi.eventloop.hook
 ---@return hook_id id that can be used to remove the hook
 function swi.eventloop.subscribe(hook) end
 
 ---@param f? swi.eventloop.filter.opts
----@return table<hook_id,swi.eventloop.subscribe.opts>
+---@return table<hook_id,swi.eventloop.hook>
 function swi.eventloop.get_subscribed(f) end
 
----@param f swi.eventloop.filter.opts|swi.eventloop.hook
+---@param f swi.eventloop.filter.opts
 function swi.eventloop.unsubscribe(f) end
 
----@param state event_cfg
+---@param state swi.eventloop.event|event.base
 function swi.eventloop.trigger(state) end
+
+---Temporarily substitute all events matching the same conditions until self-deregistration.
+---NOTE: can be undone only by the callback or with `once=true` - cannot use unsubscribe()
+---@param cfg swi.eventloop.hook
+function swi.eventloop.takeover_subscribe(cfg) end
 
 --------------------------------------------------------------------------------
 -- Image list
@@ -142,45 +318,47 @@ function swi.eventloop.trigger(state) end
 ---@field fsmon boolean Allow filesystem monitoring for changes and updating images
 swi.imagelist = {}
 
----Get current image entry (may or may not have loaded metadata)
----@return swayimg.entry
-function swi.imagelist.get_current() end
+do
+	---Get current image entry (may or may not have loaded metadata)
+	---@return swayimg.entry
+	function swi.imagelist.get_current() end
 
----Get size of image list.
----@return integer # Number of entries in the image list
-function swi.imagelist.size() end
+	---Get size of image list.
+	---@return integer # Number of entries in the image list
+	function swi.imagelist.size() end
 
----Get list of all entries in the image list.
----@return swayimg.entry[] # Array with all entries
-function swi.imagelist.get() end
+	---Get list of all entries in the image list.
+	---@return swayimg.entry[] # Array with all entries
+	function swi.imagelist.get() end
 
----Add entry to the image list.
----@param path string Path to add
----@param silent true? whether to supress emmiting size change event
-function swi.imagelist.add(path, silent) end
+	---Add entry to the image list.
+	---@param path string Path to add
+	---@param silent true? whether to supress emmiting size change event
+	function swi.imagelist.add(path, silent) end
 
----Remove entry from the image list.
----@param path string Path to remove
----@param silent true? whether to supress emmiting size change event
-function swi.imagelist.remove(path, silent) end
+	---Remove entry from the image list.
+	---@param path string Path to remove
+	---@param silent true? whether to supress emmiting size change event
+	function swi.imagelist.remove(path, silent) end
 
----Helper for working with marks on images
----Changes to the size get emitted as OptionSet(`swi.imagelist.marked.size`)
----@class swi.imagelist.marked
-swi.imagelist.marked = {}
+	---Helper for working with marks on images
+	---Changes to the size get emitted as OptionSet(`swi.imagelist.marked.size`)
+	---@class swi.imagelist.marked
+	swi.imagelist.marked = {}
 
----Get number of marked images.
----@return integer
-function swi.imagelist.marked.size() end
+	---Get number of marked images.
+	---@return integer
+	function swi.imagelist.marked.size() end
 
----Get list of all marked paths.
----@return string[] paths of all marked images
-function swi.imagelist.marked.get() end
+	---Get list of all marked paths.
+	---@return string[] paths of all marked images
+	function swi.imagelist.marked.get() end
 
----Toggle the marked state of the current entry.
----@param state boolean|'toggle'
----@param silent true? whether to supress emmiting size change event
-function swi.imagelist.marked.set_current(state, silent) end
+	---Toggle the marked state of the current entry.
+	---@param state boolean|'toggle'
+	---@param silent true? whether to supress emmiting size change event
+	function swi.imagelist.marked.set_current(state, silent) end
+end
 
 --------------------------------------------------------------------------------
 -- Text overlay layer
@@ -214,70 +392,76 @@ function swi.text.set_status(status) end
 -- Base mode class
 --------------------------------------------------------------------------------
 
----@class keybind_processor
-local keybind_processor = {}
+do
+	---@class keybind_processor
+	local keybind_processor = {}
 
----Map a keyboard or mouse event to an action.
----@param bind string|string[] 1 or more mouse or keyboard events to map - `Alt+s`, etc.
----@param action fun()|string callback function to run or shell command to execute
----@param desc string? optional description of the action
-function keybind_processor.map(bind, action, desc) end
+	---Map a keyboard or mouse event to an action.
+	---@param bind string|string[] 1 or more mouse or keyboard events to map - `Alt+s`, etc.
+	---@param action fun()|string callback function to run or shell command to execute
+	---@param desc string? optional description of the action
+	function keybind_processor.map(bind, action, desc) end
 
----@param bind string keybind to disable
-function keybind_processor.unmap(bind) end
+	---@param bind string keybind to disable
+	function keybind_processor.unmap(bind) end
 
----@class bindcfg
----@field cb function|string the action that runs on the binding activation (or the shell command)
----@field trace string where was the binding defined
----@field desc? string optional description of the action
----@field default? boolean is it the default swayimg bind
+	---@class bindcfg
+	---@field cb function|string the action that runs on the binding activation (or the shell command)
+	---@field trace string where was the binding defined
+	---@field desc? string optional description of the action
+	---@field default? boolean is it the default swayimg bind
 
----@param bind string
----@param bindcfg bindcfg config to set the bind to
----@return bindcfg? old_bind previous config set for this binding
-function keybind_processor.remap(bind, bindcfg) end
+	---@param bind string
+	---@param bindcfg bindcfg config to set the bind to
+	---@return bindcfg? old_bind previous config set for this binding
+	function keybind_processor.remap(bind, bindcfg) end
 
----@alias bind_map table<string,bindcfg>
+	---@alias bind_map table<string,bindcfg>
 
----@return bind_map map of the user bindings
-function keybind_processor.get_mappings() end
+	---@return bind_map map of the user bindings
+	function keybind_processor.get_mappings() end
 
----Extension to create event-based textlayer updates.
----When triggered, the callback gets evaluated and value set to its position in the text block.
----@class mode_base.text.dyntext: swi.eventloop.subscribe.opts
----@field group? nil This eventhook field gets set automatically for auto-deregistration
----Generator of the text to be displayed.
----NOTE: An initial call call without args is made to get the initial value of the text.
----@field callback fun(ev:event_state|nil):(string|string[]?)
+	---Extension to create event-based textlayer updates.
+	---When triggered, the callback gets evaluated and value set to its position in the text block.
+	---@class mode_base.text.dyntext: hook.base
+	---@field group? nil This eventhook field gets set automatically for auto-deregistration
+	---Generator of the text to be displayed.
+	---NOTE: An initial call call without args is made to get the initial value of the text.
+	---@field callback fun(ev:swi.eventloop.event|nil):(string|string[]?)
 
----Extended text layer functionality for setting dynamic text values.
----Multiline generators should remember the size of their previous output to reset the lines to ''
----@alias extended_text_template
----| text_template_t basic single-line template string
----| mode_base.text.dyntext event-based generator
----| fun(img:swayimg.image|swayimg.entry):(string|string[]?) generator for ImgChanged event
+	---Extended text layer functionality for setting dynamic text values.
+	---Multiline generators should remember the size of their previous output to reset the lines to ''
+	---@alias extended_text_template
+	---| text_template_t basic single-line template string
+	---| mode_base.text.dyntext event-based generator
+	---| fun(img:swayimg.image|swayimg.entry):(string|string[]?) generator for ImgChanged event
 
----A more dynamic approach to updating the text layer.
---- - custom functions to generate text on image change.
---- - custom hooks to update the text when an event is triggered.
----   - for tracking variables just template the varpath: `'Marked: {swi.imagelist.marked.size}'`
----
----In viewer+slideshow mode you can use exif tags directly, like {ExposureTime}
----or specify the full exif path (without `meta.` prefix), like {Exif.Fujifilm.Rating}
----`utils.format_exif` then automatically formats the values.
----HINT: to see what tags are available: `print(swi.viewer.get_image().meta)`
----@class mode_base.text
----@field topleft extended_text_template[] Text layer scheme for top-left corner
----@field topright extended_text_template[] Text layer scheme for top-right corner
----@field bottomleft extended_text_template[] Text layer scheme for bottom-left corner
----@field bottomright extended_text_template[] Text layer scheme for bottom-right corner
+	---A more dynamic approach to updating the text layer.
+	--- - custom functions to generate text on image change.
+	--- - custom hooks to update the text when an event is triggered.
+	---   - for tracking variables just template the varpath: `'Marked: {swi.imagelist.marked.size}'`
+	---
+	---In viewer+slideshow mode you can use exif tags directly, like {ExposureTime}
+	---or specify the full exif path (without `meta.` prefix), like {Exif.Fujifilm.Rating}
+	---`utils.format_exif` then automatically formats the values.
+	---HINT: to see what tags are available: `print(swi.viewer.get_image().meta)`
+	---@class mode_base.text
+	---@field topleft extended_text_template[] Text layer scheme for top-left corner
+	---@field topright extended_text_template[] Text layer scheme for top-right corner
+	---@field bottomleft extended_text_template[] Text layer scheme for bottom-left corner
+	---@field bottomright extended_text_template[] Text layer scheme for bottom-right corner
 
----Base class providing text overlay layout fields shared by all display modes.
----@class mode_base: keybind_processor, proxy
----@field text mode_base.text access to setting the overlay fields/indexes
----@field mark_color integer Mark icon color in ARGB format
----@field pinch_factor number how aggressive should the effect be
-local mode_base = {}
+	---Base class providing text overlay layout fields shared by all display modes.
+	---@class mode_base: keybind_processor, proxy
+	---@field text mode_base.text access to setting the overlay fields/indexes
+	---@field mark_color integer Mark icon color in ARGB format
+	---@field pinch_factor number how aggressive should the effect be
+	local mode_base = {}
+
+	---Reload current view. Causes ImgChanged event.
+	---@param cb? fun() optional callback for action after the refresh
+	function mode_base.reload(cb) end
+end
 
 --------------------------------------------------------------------------------
 -- Viewer mode
@@ -386,7 +570,8 @@ do
 	function swi.viewer.rotate(angle) end
 
 	---Export currently displayed frame to PNG file.
-	---@param path string Path to the file
+	---@see event.User.ExportFinished
+	---@param path string Path of the exported file
 	function swi.viewer.export(path) end
 
 	---Add/replace/remove meta info for currently displayed image.
@@ -436,9 +621,6 @@ function swi.gallery.switch_image(dir) end
 ---Get information about currently selected image.
 ---@return swayimg.entry # Currently selected image entry
 function swi.gallery.get_image() end
-
----Reload thumbnails.
-function swi.gallery.reload() end
 
 -- Paging object to manage scrollable output
 ---@class help_pager: proxy

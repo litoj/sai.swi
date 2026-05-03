@@ -26,11 +26,20 @@ function M.new(self, api_name)
 		api.on_signal(sig, function() e.trigger { event = 'Signal', match = sig } end)
 	end
 
+	self.reload = function(cb)
+		if cb then e.subscribe {
+			event = 'ImgChanged',
+			once = true,
+			callback = cb,
+		} end
+		self.super.reload()
+	end
+
 	function self:_rawmap(b, action)
 		if b:match 'Mouse' or b:match 'Scroll' then
-			api.on_mouse(b, action or function() swi.text.status = 'Unhandled mouse: ' .. b end)
+			api.on_mouse(b, action or function() swi.text.set_status('Unhandled mouse: ' .. b) end)
 		else
-			api.on_key(b, action or function() swi.text.status = 'Unhandled key: ' .. b end)
+			api.on_key(b, action or function() swi.text.set_status('Unhandled key: ' .. b) end)
 		end
 	end
 	self.warn_on_duplicates = M.warn_on_duplicates

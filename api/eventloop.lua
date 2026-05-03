@@ -1,16 +1,17 @@
+---@diagnostic disable: redefined-local
 ---@module 'swi.api.eventloop'
 
 local U = require 'swi.lib.utils'
 local tabled = U.tabled
 
 ---@private
----@class swi.eventloop.hook: swi.eventloop.subscribe.opts
----@field pattern table<string|integer,string>
----@field mode string[]
+---@class hook_cfg: hook.base
+---@field pattern {[string]:boolean}|string[]
+---@field mode {[appmode_t]:integer}|appmode_t[]
 
----@class swi.api.eventloop: swi.eventloop
+---@type swi.eventloop
 local M = {
-	---@type {[event_name_t]:{[string]:swi.eventloop.hook[]}}
+	---@type {[event_name_t]:{[string]:hook_cfg[]}}
 	_hooks = {}, ---@private
 	debug_trigger = false,
 	debug_subscribe = false,
@@ -35,14 +36,15 @@ local function mk_modes(mode)
 end
 mk_modes(modes)
 
----@param cfg swi.eventloop.subscribe.opts
----@return swi.eventloop.hook
+---@param cfg swi.eventloop.hook
+---@return hook_cfg
 local function mk_hook(cfg)
 	---@diagnostic disable-next-line: undefined-field .match field used as help for common misconfig
-	local t = tabled(cfg.pattern or cfg.match or { '^' })
+	assert(not cfg.match, 'Hook has a `match` field instead of `pattern`')
+	local t = tabled(cfg.pattern or { '^' }) ---@type string[]|{[string]:boolean}
 	local i = #t
 	while i > 0 do
-		local p = t[i] ---@type string
+		local p = t[i]
 		if p and not p:match '[*+?%%^$%[%]()]' then
 			--- make direct matches into indexes
 			if p:sub(1, 1) == '!' then
@@ -54,7 +56,7 @@ local function mk_hook(cfg)
 		end
 		i = i - 1
 	end
-	cfg.pattern = t ---@cast cfg swi.eventloop.hook
+	cfg.pattern = t ---@cast cfg hook_cfg
 	cfg.mode = mk_modes(cfg.mode)
 	return cfg
 end
@@ -88,8 +90,8 @@ function M.subscribe(hook)
 	return hook
 end
 
----@param ptn_map {[string]:swi.eventloop.hook[]}
----@return fun():(hook:swi.eventloop.hook?,ptn:string,i:integer)
+---@param ptn_map {[string]:hook_cfg[]}
+---@return fun():(hook:hook_cfg?,ptn:string,i:integer)
 local function matcher(match, ptn_map)
 	return coroutine.wrap(function()
 		if not match then
@@ -124,25 +126,23 @@ local function matcher(match, ptn_map)
 	end)
 end
 
----@alias swi.eventloop.applicator fun(h:swi.eventloop.hook,ev:event_name_t, pnt:string,i:integer)
+---@alias swi.eventloop.applicator fun(h:hook_cfg,ev:event_name_t, pnt:string,i:integer)
 
----@param f swi.eventloop.filter.opts|swi.eventloop.hook
+---@private
+---@param f swi.eventloop.filter.opts
 ---@param on_match swi.eventloop.applicator
+---@diagnostic disable-next-line: inject-field
 function M.apply_filtered(f, on_match)
-	---@type (fun(h:swi.eventloop.hook):boolean?)[]
+	---@type (fun(h:hook_cfg):boolean?)[]
 	local checks = {}
-	if f.callback then
-		checks[#checks + 1] = function(h) return f == h end
-	else
-		if f.id then checks[#checks + 1] = function(h) return f.id == h end end
-		if f.group then checks[#checks + 1] = function(h) return f.group == h.group end end
-		if f.mode and #f.mode ~= 3 then -- if there are only some modes
-			local modes = tabled(f.mode)
-			checks[#checks + 1] = function(h)
-				if not h.mode then return true end
-				for _, m in ipairs(modes) do
-					if h.mode[m] then return true end
-				end
+	if f.id then checks[#checks + 1] = function(h) return f.id == h end end
+	if f.group then checks[#checks + 1] = function(h) return f.group == h.group end end
+	if f.mode and #f.mode ~= 3 then -- if there are only some modes
+		local modes = tabled(f.mode)
+		checks[#checks + 1] = function(h)
+			if not h.mode then return true end
+			for _, m in ipairs(modes) do
+				if h.mode[m] then return true end
 			end
 		end
 	end
@@ -165,7 +165,7 @@ function M.apply_filtered(f, on_match)
 end
 
 function M.unsubscribe(f)
-	M.apply_filtered(f, function(hook, ev, ptn, i)
+	M.apply_filtered(f, function(_, ev, ptn, i)
 		local ev_hooks = M._hooks[ev]
 		local ptn_hooks = ev_hooks[ptn]
 
@@ -194,10 +194,36 @@ function M.trigger(state)
 			---@diagnostic disable-next-line: param-type-mismatch
 			swayimg.text.set_status(string.gsub(ret, '\t', '  '))
 			print('ERROR: ' .. ret)
-		elseif ret then
+		end
+
+		if hook.once or (ok and ret) then
 			M.unsubscribe { id = hook } -- unsub from all places, not just where it matched
 		end
 	end)
+end
+
+function M.takeover_subscribe(cfg)
+	---@diagnostic disable-next-line: param-type-mismatch
+	local old = M.get_subscribed(cfg)
+	if not next(old) then
+		M.subscribe(cfg)
+		return
+	end
+
+	---@diagnostic disable-next-line: param-type-mismatch
+	M.unsubscribe(cfg)
+	local cb = cfg.callback
+	cfg = U.soft_copy(cfg)
+	cfg.callback = function(ev)
+		local ret = cb(ev)
+		if cfg.once or ret then
+			for _, h in pairs(old) do
+				M.subscribe(h)
+			end
+		end
+		return ret
+	end
+	M.subscribe(cfg)
 end
 
 return M

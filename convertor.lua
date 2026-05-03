@@ -144,7 +144,6 @@ end
 -- Action mappings outside main loop
 local action_map = {
 	exit = 'swi.exit(%s)',
-	reload = '--[[removed action: reload]]',
 	skip_file = 'l.remove(l.get_current().path)',
 	info = 't.enabled = not t.enabled',
 	antialiasing = function(x)

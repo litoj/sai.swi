@@ -1,6 +1,8 @@
 ---@module 'swi.snippets'
 local M = {}
 
+local e = require 'swi.api.eventloop'
+
 function M.load_dir_if_single()
 	local function check_n_load()
 		local l = swi.imagelist
@@ -11,22 +13,31 @@ function M.load_dir_if_single()
 	if swi.initialized then
 		check_n_load()
 	else
-		swi.eventloop.subscribe { event = 'SwiEnter', callback = check_n_load }
+		e.subscribe { event = 'SwiEnter', callback = check_n_load }
 	end
+end
+
+function M.print_shell_output()
+	e.subscribe {
+		event = 'ShellCmdPost',
+		callback = function(ev)
+			if #ev.data then swi.text.set_status(ev.data) end
+		end,
+	}
 end
 
 ---@param enable boolean? true by default
 function M.print_option_changes(enable)
 	if enable == false then
-		swi.eventloop.unsubscribe { event = 'OptionSet', group = 'print_var_change' }
+		e.unsubscribe { event = 'OptionSet', group = 'print_var_change' }
 		return
 	end
 
 	local function register_printer()
 		-- register after base config has been loaded
-		swi.eventloop.subscribe { -- Print messages on option update
+		e.subscribe { -- Print messages on option update
 			event = 'OptionSet',
-			pattern = { '!swi.imagelist.size', '^[^.]+%.?[^.]*%.[^.]*$' }, -- all main opts - not the subsubtables (text etc.)
+			pattern = { '!swi.imagelist.size', '!swi.text.status', '^[^.]+%.?[^.]*%.[^.]*$' }, -- all main opts - not the subsubtables (text etc.)
 			group = 'print_var_change',
 			callback = function(ev)
 				local v = ev.data
@@ -57,12 +68,12 @@ function M.print_option_changes(enable)
 	if swi.initialized then
 		register_printer()
 	else
-		swi.eventloop.subscribe { event = 'SwiEnter', callback = register_printer }
+		e.subscribe { event = 'SwiEnter', callback = register_printer }
 	end
 end
 
 function M.resize_image_with_window()
-	swi.eventloop.subscribe {
+	e.subscribe {
 		event = 'WinResized',
 		mode = { 'viewer', 'slideshow' },
 		callback = function(ev)
@@ -115,13 +126,6 @@ function M.cycle_position()
 	api.position = M.cycle_values(modes, current)
 end
 
-function M.print_shell_output()
-	swi.eventloop.subscribe {
-		event = 'ShellCmdPost',
-		callback = function(ev) swi.text.set_status(ev.data) end,
-	}
-end
-
 function M.two_pane_mode()
 	local super = require 'swi.lib.mode_override'
 	local tp = { ---@class tp: swi.lib.mode_override
@@ -136,7 +140,7 @@ function M.two_pane_mode()
 
 	super.new(tp)
 
-	swi.eventloop.subscribe {
+	e.subscribe {
 		event = 'WinResized',
 		callback = function(e) tp.swi.gallery.thumb_size = e.data.width / 2 end,
 	}
@@ -148,6 +152,7 @@ function M.two_pane_mode()
 	g.border_size = 5
 	g.selected_scale = 1
 	g.window_color = 0xff808080
+	g.hover = true
 
 	v.map('t', function() tp.enabled = true end, 'Enable Two-pane mode')
 	tp.map('t', function() tp.enabled = false end, 'Disable Two-pane mode')

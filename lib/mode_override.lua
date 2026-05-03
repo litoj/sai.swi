@@ -121,7 +121,9 @@ end
 
 local function evloop_wrap(mo)
 	local e = swi.eventloop
-	local new, filter, old = {}, {}, {}
+	---@type {[hook_cfg]:1}
+	local new, old = {}, {}
+	local filter = {}
 	local self = {}
 
 	self.subscribe = function(h)
@@ -131,8 +133,8 @@ local function evloop_wrap(mo)
 	end
 
 	self.unsubscribe = function(f)
-		if f.id or f.callback then
-			new[f.id or f.callback] = nil
+		if f.id then
+			new[f.id] = nil
 		else
 			filter[f] = 1
 		end
@@ -164,7 +166,7 @@ local function evloop_wrap(mo)
 				end
 			else -- disable
 				for h, _ in pairs(new) do
-					e.unsubscribe(h)
+					e.unsubscribe { id = h }
 				end
 
 				for h, _ in pairs(old) do
