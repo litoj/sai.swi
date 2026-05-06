@@ -1,10 +1,10 @@
 ---@diagnostic disable: invisible
----@module 'swi.lib.mode_override'
+---@module 'swi.lib.custom_mode'
 
 local U = require 'swi.lib.utils'
 local pager = require 'swi.lib.pager'
 
----@class swi.lib.mode_override: swi.lib.bind_override
+---@class swi.lib.custom_mode: swi.lib.bind_override
 --- Wrapper for auto-changing settings when the mode is active.
 --- Supports also eventloop auto registration and deregistration +
 --- - `get_subscribed` gets just your mode changes
@@ -35,7 +35,7 @@ local checked_mode_opts = {
 	[swi.slideshow] = { mode = 'slideshow', fb = viewer_fb },
 }
 
----@param mo swi.lib.mode_override
+---@param mo swi.lib.custom_mode
 local function wrap(mo, api)
 	local cfg = checked_mode_opts[api]
 	local avail = cfg and function(idx) return cfg.fb[idx] == nil or cfg.mode == swi.mode end
@@ -110,7 +110,7 @@ local function wrap(mo, api)
 	})
 end
 
----@param mo swi.lib.mode_override
+---@param mo swi.lib.custom_mode
 local function evloop_wrap(mo)
 	local e = swi.eventloop
 	---@type {[hook_cfg]:1}
@@ -170,7 +170,9 @@ local function evloop_wrap(mo)
 	})
 end
 
----@return swi.lib.mode_override
+---@generic O: swi.lib.custom_mode
+---@param self `O`|swi.lib.custom_mode
+---@return O|swi.lib.custom_mode
 function M:new()
 	U.new_object(self, M)
 	if self._path then
@@ -179,7 +181,7 @@ function M:new()
 		self.help_pager = pager.new {
 			_path = self._path .. '.help_pager',
 			_title = name:sub(1, 1):upper() .. name:sub(2) .. ' binds:\t',
-			_position = 'topright',
+			_location = 'topright',
 		}
 	end
 	self.swi = wrap(self, swi)

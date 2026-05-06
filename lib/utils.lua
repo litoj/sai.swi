@@ -105,6 +105,7 @@ U.key_map = {
 	['.'] = 'period',
 	['['] = 'bracketleft',
 	[']'] = 'bracketright',
+	[':'] = 'Shift+colon',
 }
 for _, v in ipairs { 'Middle', 'Left', 'Right' } do
 	U.key_map[v:sub(1, 1) .. 'MB'] = 'Mouse' .. v

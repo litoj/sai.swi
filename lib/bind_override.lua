@@ -22,7 +22,8 @@ local M = {
 	_omaps = {}, ---@private
 }
 
----@return swi.lib.bind_override
+---@generic O: swi.lib.bind_override
+---@return O self
 function M:new()
 	if self._trigger == nil then self._trigger = not not self._path end
 	return backer.new(kp.new(U.new_object(self, M)))
@@ -36,14 +37,6 @@ local function rawmap(api, b, cfg)
 	end
 end
 
--- for keybind_processor
-function M:_rawmap(b, _, cfg)
-	if self._enabled then
-		self._omaps[b] = self._mode_api._mappings[b]
-		rawmap(self._mode_api, b, cfg)
-	end
-end
-
 function M:set_mode(mode)
 	if self._mode == mode then return false end
 
@@ -54,6 +47,14 @@ function M:set_mode(mode)
 	return false
 end
 
+-- for keybind_processor
+function M:_rawmap(b, _, cfg)
+	if self._enabled then
+		self._omaps[b] = self._mode_api._mappings[b] or false
+		rawmap(self._mode_api, b, cfg)
+	end
+end
+
 function M:set_enabled(val)
 	if val == self._enabled then return false end
 	self._enabled = val
@@ -61,10 +62,8 @@ function M:set_enabled(val)
 	if val then
 		---@diagnostic disable-next-line: assign-type-mismatch
 		self._mode_api = swi[self._mode or swi.mode] -- keey mode dynamic if not set by the user
-		local cur = self._mode_api._mappings
 		for b, cfg in pairs(self._mappings) do
-			self._omaps[b] = cur[b]
-			rawmap(self._mode_api, b, cfg)
+			self:_rawmap(b, cfg.cb, cfg)
 		end
 	else
 		for b, cfg in pairs(self._omaps) do

@@ -3,9 +3,9 @@
 
 local U = require 'swi.lib.utils'
 
----@class swi.api.help: swi.help, swi.lib.mode_override
+---@class swi.api.help: swi.help, swi.lib.custom_mode
 local M = {
-	super = require 'swi.lib.mode_override',
+	super = require 'swi.lib.custom_mode',
 	_path = 'swi.help',
 	_persist_mode_change = true,
 	auto_help = true,
@@ -20,7 +20,7 @@ local M = {
 M.pager = require('swi.lib.pager').new {
 	_path = 'swi.help.pager',
 	_trigger = true,
-	_position = 'topleft',
+	_location = 'topleft',
 }
 
 local modes = { 'gallery', 'viewer', 'slideshow' }

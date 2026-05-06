@@ -1,7 +1,7 @@
 ---@diagnostic disable: invisible
 ---@module 'swi.api.mode_base'
 
-local proxy = require 'swi.lib.proxy'
+local proxy = require 'swi.api.proxy'
 local e = require 'swi.api.eventloop'
 local kp = require 'swi.lib.keybind_processor'
 
@@ -35,7 +35,9 @@ function M.new(self, api_name)
 		self.super.reload()
 	end
 
-	function self:_rawmap(b, action)
+	function self:_rawmap(b, action, cfg)
+		if type(action) == 'string' then action = function() swi.exec(cfg.cb) end end
+
 		if b:match 'Mouse' or b:match 'Scroll' then
 			api.on_mouse(b, action or function() swi.text.set_status('Unhandled mouse: ' .. b) end)
 		else

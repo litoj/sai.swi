@@ -28,7 +28,7 @@ function M:new()
 		local old = self._mappings[b]
 		cfg.trace = cfg.trace or (cfg.default and 'builtin') or debug.traceback()
 		self._mappings[b] = cfg
-		self:_rawmap(b, type(cfg.cb) == 'string' and function() swi.exec(cfg.cb) end or cfg.cb, cfg)
+		self:_rawmap(b, cfg.cb, cfg)
 		return old
 	end
 

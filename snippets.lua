@@ -36,7 +36,7 @@ function M.print_option_changes(enable)
 		-- register after base config has been loaded
 		e.subscribe { -- Print messages on option update
 			event = 'OptionSet',
-			pattern = { '!swi.imagelist.size', '!swi.text.status', '^[^.]+%.?[^.]*%.[^.]*$' }, -- all main opts - not the subsubtables (text etc.)
+			pattern = { '!swi.imagelist.size', '!swi.text.status', '^' }, -- all main opts - not the subsubtables (text etc.)
 			group = 'print_var_change',
 			callback = function(ev)
 				local v = ev.data
@@ -123,9 +123,9 @@ function M.cycle_position()
 	api.position = M.cycle_values(modes, current)
 end
 
-function M.two_pane_mode()
-	local super = require 'swi.lib.mode_override'
-	local tp = { ---@class tp: swi.lib.mode_override
+function M.two_pane_mode(key)
+	local super = require 'swi.lib.custom_mode'
+	local tp = { ---@class tp: swi.lib.custom_mode
 		_mode = 'gallery',
 		_path = 'two-paned',
 		save_user_changes = true,
@@ -157,10 +157,39 @@ function M.two_pane_mode()
 	tg.window_color = 0xff808080
 	tg.hover = true
 
-	v.map('t', function() tp.enabled = true end, 'Enable Two-pane mode')
-	tp.map('t', function() tp.enabled = false end, 'Disable Two-pane mode')
+	key = key or 't'
+	v.map(key, function() tp.enabled = true end, 'Enable Two-pane mode')
+	tp.map(key, function() tp.enabled = false end, 'Disable Two-pane mode')
 
 	return tp
+end
+
+---@param key? string key to enter the mode (default: ':')
+---@param mode? appmode_t in which mode to register (default: current)
+---@param global? boolean should this mode be made global into swi.cmd (default: true)
+function M.cmd_mode(key, mode, global)
+	local cm = { ---@class cmd_mode: swi.lib.input_mode
+		_path = 'swi.cmd',
+		_prompt = 'Code: ',
+		auto_help = true,
+	}
+	cm.on_confirm = function(out)
+		if not out then return end
+
+		cm.enabled = false
+		local cb, err = loadstring(out)
+		if not cb or err then return swi.text.set_status(err) end
+		cb()
+	end
+
+	require('swi.lib.input_mode').new(cm)
+	swi[mode or swi.mode].map(key or ':', function() cm.enabled = true end)
+	-- TODO: add autocompletion and history
+
+	cm.input_mapper.map('Shift+Return', '\n')
+
+	if global ~= false then rawset(swi, 'cmd', cm) end
+	return cm
 end
 
 return M

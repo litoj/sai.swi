@@ -1,19 +1,11 @@
 ---@meta swi
 
----Field backer and api conversion provider
---- Define set_xxx(self,val,idx) to use a custom setter for var named (idx=) `xxx`
---- Define get_xxx(self,idx) to use a custom getter for var named (idx=) `xxx`
----@class proxy
----@field protected super table the api that we are replacing and redirecting calls to
----@field protected _path string object path to this new api (swi.xxx) or just a name for errors
----@field protected _trigger boolean? trigger events on setting a field (default: true)
-
 --------------------------------------------------------------------------------
 -- Main application class
 --------------------------------------------------------------------------------
 
 ---Main application class.
----@class swi: proxy
+---@class swi
 ---@field mode appmode_t Which mode is the application in
 ---@field antialiasing boolean Enable/disable antialiasing
 ---@field exif_orientation boolean Enable or disable changing orientation based on EXIF
@@ -43,6 +35,7 @@ _G.swi = {}
 --- - `%s`: all marked files or current file quoted with singlequotes
 --- - `%m`: only marked files or don't execute
 --- - `%%`: normal percentage sign (`%`)
+---@see event.ShellCmdPost
 ---@param cmd string
 ---@return string stdout
 function swi.exec(cmd) end
@@ -311,7 +304,7 @@ function swi.eventloop.takeover_subscribe(cfg) end
 
 ---Image list
 ---Changes to the contents get emitted as OptionSet(`swi.imagelist.size`)
----@class swi.imagelist: proxy
+---@class swi.imagelist
 ---@field order order_t Image list sort order
 ---@field reverse boolean Reverse the sort order
 ---@field recursive boolean Recursive directory reading
@@ -366,7 +359,7 @@ end
 --------------------------------------------------------------------------------
 
 ---Text overlay layer.
----@class swi.text: proxy
+---@class swi.text
 ---Should displaying the text layer be allowed,
 ---and how long for (after switching to a different image).
 ---Use `true` to disable timeout and permanently display, `false` to always hide, x for x seconds
@@ -453,7 +446,7 @@ do
 	---@field bottomright extended_text_template[] Text layer scheme for bottom-right corner
 
 	---Base class providing text overlay layout fields shared by all display modes.
-	---@class mode_base: keybind_processor, proxy
+	---@class mode_base: keybind_processor
 	---@field text mode_base.text access to setting the overlay fields/indexes
 	---@field mark_color integer Mark icon color in ARGB format
 	---@field pinch_factor number how aggressive should the effect be
@@ -585,7 +578,7 @@ end
 -- Slide show mode
 --------------------------------------------------------------------------------
 
----@class swi.slideshow : swi.viewer
+---@class swi.slideshow: swi.viewer
 ---@field timeout number Timeout in seconds after which the next image is opened
 swi.slideshow = {}
 
@@ -593,7 +586,7 @@ swi.slideshow = {}
 -- Gallery mode
 --------------------------------------------------------------------------------
 
----@class swi.gallery : mode_base
+---@class swi.gallery: mode_base
 ---Helper table for easier mappings for switching between images
 ---@see swi.gallery.switch_image Equivalent via passing a parameter
 ---@field go {[gdir_t]:function}
@@ -624,7 +617,7 @@ function swi.gallery.switch_image(dir) end
 function swi.gallery.get_image() end
 
 -- Paging object to manage scrollable output
----@class help_pager: proxy
+---@class help_pager
 ---@field page integer
 ---@field page_size integer Readonly - useful do advance by all visible lines instead of fixed page
 ---@field total_pages integer Readonly

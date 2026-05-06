@@ -6,11 +6,11 @@ What's up with the name? You tell me:
 - shorter and easier to type when accessing the api
 - simple way to say a lua package is made for swayimg - like `.nvim` for neovim
 - _Swayimg neoWim-like Interface_
-  - allows vim-style mappings like `<C-S-Del>`, `<C-.>`…
+  - allows vim-style mappings - `<C-S-Del>`, `<C-.>`…
   - eventloop system based on neovim lua autocommands - almost everything is listenable
-  - variables are now all 2-way accessible variables, not just setter methods
+  - all variables can now be set _and_ read - no more caching of the last set value
 - _Superb Wayland Imageviewer_
-  - because swayimg is already _the_ waylang imager and this only makes it better
+  - because swayimg is already _the_ wayland imager and this only makes it better
   - because the api is simpler and efficient, yet offers more features and practicality than the
     original
 
@@ -72,38 +72,31 @@ What's up with the name? You tell me:
     - `%s`: falls back to current file
     - `%m`: doesn't execute the command if no files were marked
   - `%`: unquoted current (like in 4.x): `v.map('', [[bash -c '$(which trash || echo rm) "%"']])`
-- custom **help mode** that lets you see all available keybindings or settings
-- **custom modes**: easily create custom modes that temporarily change the mappings, settings and
-  even hooks
-  ```lua
-  v.map('a', function() swi.antialiasing = not swi.antialiasing end)
-  v.map('s', require'swi.snippets'.cycle_scale)
-  v.map('d', function() l.remove(l.get_current().path) end)
-  -- create a custom mode override
-  local x = require('swi.lib.mode_override').new { _path = 'panner', auto_help = true }
-  -- automatically disable on mode change (otherwise stays active in viewer mode)
-  x.swi.eventloop.subscribe { event = 'ModeChangedPre', callback = function() x.enabled = false end }
-  -- use the highest precission
-  x.swi.viewer.pan.default_size = 1
-  v.map('y', function() x.enabled = not x.enabled end, 'Toggle panning keybind mode')
-  x.map('F1', function() x.help_pager.enabled = not x.help_pager.enabled end, 'Toggle this help')
-  x.map('a', v.pan.left, 'Pan left') -- add description to show in help mode properly
-  x.map('w', v.pan.up, 'Pan up')
-  x.map('s', v.pan.down, 'Pan down')
-  x.map('d', v.pan.right, 'Pan right')
-  ```
+- **custom modes**: easily make temporary changes to anything in the api
+  - all changes are active only while the custom mode is enabled - see `snippets.two_pane_mode`
+  - make variable changes and optinally allow the user to adjust the user to adjust them
+  - automatic event subscriptions and deletions
+  - define custom keybinds with automatic toggleable help page
+  - custom **help mode** that lets you see all available keybindings or settings
+  - custom **input mode** that allows you to input arbitrary text and do whatever you want with it
+    - supports multiline text and selection
+    - custom **command mode** for evaluating any lua commands
+  - custom **two-pane mode** for comparing images
 
-### New scaling modes
+### New scale settings
 
 - `keep_by_xxx`:
   - useful for comparing identical images of different sizes
   - you will stay zoomed into the same spot of the image even if the other image is half the
     resolution
-  - available metrics: …`width`/`height`/`size` - like `width`/`height`/`optimal` scaling
+  - available metrics: …`width`/`height`/`size` - like `width`/`height`/`fit&fill` scaling is
+    relative to the window proportions, this is as well, but keeps the zoom level relative to it
+    instead of having a fixed zoom to fit the whole window
 
 ### TODOs
 
 - create PR to synchronize order of declaring variables/api to align with source code
+- create custom mode to dynamically pick which elements should be in each text corner
 
 ### [Snippets](./snippets.lua)
 
@@ -118,6 +111,7 @@ Snippets include:
 - cycling fixed scaling and position modes
 - notifying on shell command output
 - pretty print tables - replace default tostring() method for better table conversion
+- two-pane and cmd modes
 
 ### ⚠️ Limitations
 

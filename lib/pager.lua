@@ -8,49 +8,51 @@ local U = require 'swi.lib.utils'
 ---@class swi.lib.pager: help_pager
 ---Activation toggle. Configure all the preceding definition fields before enabling.
 ---@field enabled boolean
----@field mode appmode_t in which mode should we set the data
----@field position block_position_t where should we output to
+---@field mode appmode_t|false in which mode should we set the data (false to use current mode)
+---@field location block_position_t where should we output to
 ---@field title string title in the non-scrollable header
 ---@field lines string[] the output to be paged
 local M = {
 	_trigger = false,
-	_hooks = {}, ---@protected
 
+	-- Live config
+	_enabled = false, ---@protected
+	---@see swi.lib.pager.mode
 	---@type appmode_t|false
 	_mode = false, ---@protected
-	---@type mode_base.text|false
-	_mode_text = false, ---@private
-	_enabled = false, ---@protected
+	---@see swi.lib.pager.location
 	---@type block_position_t
-	_position = 'topleft', ---@protected
-	---@type extended_text_template[]|false
-	_original_text = false, ---@protected
+	_location = 'topleft', ---@protected
 
+	-- Visible state
 	_title = '', ---@protected
 	---@type string[]
 	_lines = {}, ---@protected
-
 	_line = 1, ---@protected
 	_page = 1, ---@protected
 
 	_page_size = 1, ---@protected
 	_total_pages = 1, ---@protected
 
+	-- Private state
+	_hooks = {}, ---@private
+	---@type mode_base.text|false
+	_mode_text = false, ---@private
+	---@type extended_text_template[]|false
+	_original_text = false, ---@private
 	---@type string[]
-	_last_render = {}, ---@protected
-	_last_start = -1, ---@protected
-	_last_end = 0, ---@protected
+	_last_render = {}, ---@private
+	_last_start = -1, ---@private
+	_last_end = 0, ---@private
 
 	size_factor = 0.75,
 }
 
 ---@return swi.lib.pager
-function M:new()
-	if self._mode then self._mode_text = swi[self._mode].text end
-	return backer.new(U.new_object(self, M))
-end
+function M:new() return backer.new(U.new_object(self, M)) end
 
-function M:prepare_renderer()
+---@private
+function M:_prepare_renderer()
 	self._last_render = {}
 	local out = self._last_render
 	for i, v in ipairs(self._lines) do
@@ -61,7 +63,8 @@ function M:prepare_renderer()
 	self._last_end = #self._lines
 end
 
-function M:render(redraw_if_unchanged)
+---@protected
+function M:_render(redraw_if_unchanged)
 	if not self._enabled then return end
 
 	local lines = self._lines
@@ -69,7 +72,7 @@ function M:render(redraw_if_unchanged)
 	local to = math.min(#lines, from + self._page_size - 1)
 	local ls, le = self._last_start, self._last_end
 	if ls == from and le == to then
-		if redraw_if_unchanged then self._mode_text[self._position] = self._last_render end
+		if redraw_if_unchanged then self._mode_text[self._location] = self._last_render end
 		return
 	end
 
@@ -114,34 +117,16 @@ function M:render(redraw_if_unchanged)
 		out[i] = lines[i]
 	end
 
-	self._mode_text[self._position] = out
+	self._mode_text[self._location] = out
 	-- this is faster but doesn't allow the lines to contain escape sequences
-	-- self._mode_text.super.set_text(self._position, out)
-end
-
----@private
-function M:_restore_original()
-	if self._original_text then
-		self._mode_text[self._position] = self._original_text
-		self._original_text = false
-	end
-end
-
----@private
-function M:_on_dst_change()
-	if self._mode_text then
-		self._original_text = self._mode_text[self._position]
-		-- nullify the text to then set it directly without any possible side-updates from prev events
-		-- self._mode_text[self._position] = {}
-		self:render(true)
-	end
+	-- self._mode_text.super.set_text(self._location, out)
 end
 
 ---@private
 ---Update the renderer with minimum work.
 ---@param resize boolean does the screen need redrawing
 ---@param reset boolean should we redraw all data, not just the resized amount
-function M:recalibrate(resize, reset)
+function M:_recalibrate(resize, reset)
 	if resize then
 		local size = swi.text.size
 		local spacing = swi.text.line_spacing
@@ -155,9 +140,9 @@ function M:recalibrate(resize, reset)
 		self._page = math.ceil((self._line - 1) / self._page_size) + 1
 	end
 
-	if reset then self:prepare_renderer() end
+	if reset then self:_prepare_renderer() end
 
-	self:render(true)
+	self:_render(true)
 end
 
 ---Make multiple changes simultaneously and render only once at the end.
@@ -180,30 +165,22 @@ function M:bulk_change(applicator)
 	self._enabled = true
 	if set_enabled then
 		self.set_enabled = set_enabled
-		self:recalibrate(false, true)
+		self:_recalibrate(false, true)
 	else
 		self.enabled = false
 	end
 end
 
----@param position block_position_t
-function M:set_position(position)
-	self:_restore_original()
-	self._position = position
-	self:_on_dst_change()
-	return false
-end
-
 ---@param title string
 function M:set_title(title)
 	self._title = title
-	self:render()
+	self:_render()
 end
 
 ---@param lines string[]
 function M:set_lines(lines)
 	self._lines = lines
-	if self._enabled then self:recalibrate(false, true) end
+	if self._enabled then self:_recalibrate(false, true) end
 	return false
 end
 
@@ -215,36 +192,57 @@ function M:set_line(linenr)
 	--- sets max to leave max 1 line empty at the end
 	self._line = math.max(1, math.min(#self._lines - self._page_size + 2, linenr))
 	self._page = math.ceil((self._line - 1) / self._page_size) + 1
-	self:render()
-	return false
+	self:_render()
+	return true
 end
 
 ---@param pagenr integer
-function M:set_page(pagenr)
-	self:set_line((pagenr - 1) * self._page_size + 1)
-	return false
-end
+function M:set_page(pagenr) return self:set_line((pagenr - 1) * self._page_size + 1) end
+
+--- Setup handlers
 
 ---@param mode appmode_t
 function M:set_mode(mode)
-	self:_restore_original()
-	self._mode = mode
-	self._mode_text = swi[mode].text
-	self:_on_dst_change()
+	self:_on_dst_change(mode, self._location)
 	return false
+end
+
+---@param val block_position_t
+function M:set_location(val)
+	if val == self._location then return false end
+	self:_on_dst_change(self._mode, val)
+	return true
+end
+
+---@private
+---@param mode appmode_t
+---@param loc block_position_t
+function M:_on_dst_change(mode, loc)
+	if self._original_text then
+		self._mode_text[self._location] = self._original_text
+		self._original_text = false
+	end
+
+	self._mode = mode
+	self._location = loc
+
+	if self._enabled then
+		self._mode_text = swi[mode or swi.mode].text
+		self._original_text = self._mode_text[self._location]
+		self:_render(true)
+	end
 end
 
 function M:set_enabled(val)
 	if val == self._enabled then return false end
 
 	if val then
-		if not self._mode then self.mode = swi.mode end
-		self:_on_dst_change()
+		self:_recalibrate(true, true)
 		self._enabled = true
-		self:recalibrate(true, true)
+		self:_on_dst_change(self._mode, self._location)
 
 		-- Listen for WinResized and OptionSet updates to recalculate per_page and re-render pager
-		local function recal(_) self:recalibrate(true, false) end
+		local function recal(_) self:_recalibrate(true, false) end
 		self._hooks = {
 			e.subscribe {
 				event = 'WinResized',
@@ -262,9 +260,9 @@ function M:set_enabled(val)
 			e.unsubscribe { id = v }
 		end
 
-		self:_restore_original()
+		self:_on_dst_change(self._mode, self._location)
 	end
-	return false
+	return true
 end
 
 return M

@@ -48,4 +48,4 @@ end
 
 function M.set_status(self_or_text, text_or_nil) M.super.set_status(text_or_nil or self_or_text) end
 
-return require('swi.lib.proxy').new(M)
+return require('swi.api.proxy').new(M)

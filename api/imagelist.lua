@@ -78,4 +78,4 @@ function M.add(x, silent)
 	if not silent then e.trigger { event = 'OptionSet', match = 'swi.imagelist.size', data = last_lsize } end
 end
 
-return require('swi.lib.proxy').new(M)
+return require('swi.api.proxy').new(M)

@@ -1,7 +1,7 @@
 ---@diagnostic disable: invisible,inject-field
 ---@module 'swi.api.init'
 
-local proxy = require 'swi.lib.proxy'
+local proxy = require 'swi.api.proxy'
 local e = require 'swi.api.eventloop'
 
 ---@type swi
@@ -74,6 +74,7 @@ end
 ---@param v appmode_t
 function M:set_mode(v)
 	local m = self.super.get_mode()
+	---@diagnostic disable-next-line: cast-local-type
 	m = { event = 'ModeChangedPre', mode = m, match = ('%s:%s'):format(m:sub(1, 1), v:sub(1, 1)), data = v }
 	e.trigger(m)
 	self.super.set_mode(v)
