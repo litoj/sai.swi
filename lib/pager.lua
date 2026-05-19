@@ -5,17 +5,24 @@ local e = swi.eventloop
 local backer = require 'swi.lib.backer'
 local U = require 'swi.lib.utils'
 
----@class swi.lib.pager: help_pager
+---@class swi.lib.pager
 ---Activation toggle. Configure all the preceding definition fields before enabling.
+---@field page integer
+---@field page_size integer Readonly - useful to advance by all visible lines instead of fixed page
+---@field total_pages integer Readonly
+---@field line integer
+-- setup options
 ---@field enabled boolean
 ---@field mode appmode_t|false in which mode should we set the data (false to use current mode)
 ---@field location block_position_t where should we output to
 ---@field title string title in the non-scrollable header
 ---@field lines string[] the output to be paged
+---@field max_height number|integer max winheight to take up - 0-1 for percentage, >1 for line count
 local M = {
 	_trigger = false,
 
 	-- Live config
+	escaping = false, ---Should lines be checked for swi.text escape sequences or set as pure text
 	_enabled = false, ---@protected
 	---@see swi.lib.pager.mode
 	---@type appmode_t|false
@@ -30,6 +37,7 @@ local M = {
 	_lines = {}, ---@protected
 	_line = 1, ---@protected
 	_page = 1, ---@protected
+	_max_height = 1, ---@protected
 
 	_page_size = 1, ---@protected
 	_total_pages = 1, ---@protected
@@ -71,55 +79,57 @@ function M:_render(redraw_if_unchanged)
 	local from = self._line
 	local to = math.min(#lines, from + self._page_size - 1)
 	local ls, le = self._last_start, self._last_end
-	if ls == from and le == to then
-		if redraw_if_unchanged then self._mode_text[self._location] = self._last_render end
-		return
-	end
 
 	local out = self._last_render
 	out[0] = ('%s[%d/%d]'):format(self._title, self._page, self._total_pages)
-
-	if from > ls then
-		local _end = math.min(from - 1, le)
-		for i = ls, _end do
-			out[i] = nil
+	if ls ~= from or le ~= to then
+		if from > ls then
+			local _end = math.min(from - 1, le)
+			for i = ls, _end do
+				out[i] = nil
+			end
+			self._last_start = from
+			if le > from then from = le + 1 end
+		elseif ls < to then
+			for i = from, ls - 1 do
+				out[i] = lines[i]
+			end
+			self._last_start = from
+			from = le + 1
+		else
+			self._last_start = from
 		end
-		self._last_start = from
-		if le > from then from = le + 1 end
-	elseif ls < to then
-		for i = from, ls - 1 do
+
+		if to < le then
+			local start = math.max(to + 1, ls)
+			for i = start, le do
+				out[i] = nil
+			end
+			self._last_end = to
+			if ls <= to then to = ls - 1 end
+		elseif le > from then
+			for i = le + 1, to do
+				out[i] = lines[i]
+			end
+			self._last_end = to
+			to = ls - 1
+		else
+			self._last_end = to
+		end
+
+		for i = from, to do
 			out[i] = lines[i]
 		end
-		self._last_start = from
-		from = le + 1
-	else
-		self._last_start = from
+	elseif not redraw_if_unchanged then
+		return
 	end
 
-	if to < le then
-		local start = math.max(to + 1, ls)
-		for i = start, le do
-			out[i] = nil
-		end
-		self._last_end = to
-		if ls <= to then to = ls - 1 end
-	elseif le > from then
-		for i = le + 1, to do
-			out[i] = lines[i]
-		end
-		self._last_end = to
-		to = ls - 1
-	else
-		self._last_end = to
+	if self.escaping then
+		self._mode_text[self._location] = out
+	else -- this is faster but doesn't allow the lines to contain escape sequences
+		---@diagnostic disable-next-line: undefined-field
+		self._mode_text.super.set_text(self._location, out)
 	end
-
-	for i = from, to do
-		out[i] = lines[i]
-	end
-
-	self._mode_text[self._location] = out
-	-- this is faster but doesn't allow the lines to contain escape sequences
-	-- self._mode_text.super.set_text(self._location, out)
 end
 
 ---@private
@@ -132,7 +142,9 @@ function M:_recalibrate(resize, reset)
 		local spacing = swi.text.line_spacing
 		local linepx = math.floor(spacing * size) + size * M.size_factor
 		local height = swi.get_window_size().height
+		if self._max_height <= 1 then height = height * self._max_height end
 		self._page_size = math.floor(height / linepx) - 1 -- -1 for header
+		if self._max_height > 1 then self._page_size = math.min(self._page_size, self._max_height) end
 	end
 
 	if resize or reset then
@@ -174,7 +186,7 @@ end
 ---@param title string
 function M:set_title(title)
 	self._title = title
-	self:_render()
+	self:_render(true)
 end
 
 ---@param lines string[]
@@ -198,6 +210,12 @@ end
 
 ---@param pagenr integer
 function M:set_page(pagenr) return self:set_line((pagenr - 1) * self._page_size + 1) end
+
+---@param height integer
+function M:set_max_height(height)
+	self._height = height
+	self:_recalibrate(true, false)
+end
 
 --- Setup handlers
 

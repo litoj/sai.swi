@@ -83,7 +83,7 @@ function U.format_exif(img_meta, tag)
 	return tag
 end
 
----A list of translations of vim-like+key-emmited symbols back to their names
+---A map of translations of key aliases to their xkb names
 U.key_map = {
 	BS = 'BackSpace',
 	Del = 'Delete',
@@ -94,18 +94,42 @@ U.key_map = {
 	PgDown = 'Next',
 	PageUp = 'Prior',
 	PageDown = 'Next',
-	['`'] = 'grave',
-	['~'] = 'asciitilde',
-	[' '] = 'Space',
-	['-'] = 'minus',
-	['_'] = 'underscore',
-	['='] = 'equal',
-	['+'] = 'plus',
-	[','] = 'comma',
+	-- Punctuation (unshifted)
+	[' '] = 'space',
 	['.'] = 'period',
+	[','] = 'comma',
+	[';'] = 'semicolon',
+	["'"] = 'apostrophe',
+	['`'] = 'grave',
+	['/'] = 'slash',
+	['\\'] = 'backslash',
 	['['] = 'bracketleft',
 	[']'] = 'bracketright',
+	['-'] = 'minus',
+	['='] = 'equal',
+	-- Shifted punctuation (US layout)
+	['+'] = 'Shift+plus',
+	['_'] = 'Shift+underscore',
 	[':'] = 'Shift+colon',
+	['"'] = 'Shift+quotedbl',
+	['~'] = 'Shift+asciitilde',
+	['?'] = 'Shift+question',
+	['|'] = 'Shift+bar',
+	['{'] = 'Shift+braceleft',
+	['}'] = 'Shift+braceright',
+	['>'] = 'Shift+greater',
+	['<'] = 'Shift+less',
+	-- Shifted numbers (US layout)
+	['!'] = 'Shift+exclam',
+	['@'] = 'Shift+at',
+	['#'] = 'Shift+numbersign',
+	['$'] = 'Shift+dollar',
+	['%'] = 'Shift+percent',
+	['^'] = 'Shift+asciicircum',
+	['&'] = 'Shift+ampersand',
+	['*'] = 'Shift+asterisk',
+	['('] = 'Shift+parenleft',
+	[')'] = 'Shift+parenright',
 }
 for _, v in ipairs { 'Middle', 'Left', 'Right' } do
 	U.key_map[v:sub(1, 1) .. 'MB'] = 'Mouse' .. v
@@ -115,6 +139,9 @@ for _, v in ipairs { 'Left', 'Right', 'Up', 'Down' } do
 	U.key_map['SM' .. v:sub(1, 1)] = 'Scroll' .. v
 	U.key_map[v:sub(1, 1) .. 'MS'] = 'Scroll' .. v
 end
+
+---A map of key combos to their printable chars
+U.rev_key_map = U.rev_idx(U.key_map)
 
 ---Parse vim-like shortcuts into classic gui-style.
 ---@param bind string
@@ -131,8 +158,6 @@ function U.transform_key(bind)
 	end
 	return bind
 end
-
-U.rev_key_map = U.rev_idx(U.key_map)
 
 function U.short_key_name(bind)
 	bind = bind:gsub('Alt[+-]', 'A-'):gsub('Shift[+-]', 'S-'):gsub('Ctrl[+-]', 'C-')
@@ -211,15 +236,17 @@ function U.print_trace() print(U.pretty_trace('print_trace', debug.traceback()))
 function U.ordered_binds(api)
 	local binds = {}
 	for k, v in pairs(api.get_mappings()) do ---@cast v bindcfg
-		if not binds[v.cb] then
-			binds[v.cb] = {
-				bind = {},
-				info = v.desc or (type(v.cb) == 'string' and v.cb) or v.trace,
-				-- quality of the source information
-				qual = v.default and 0 or (v.desc and 1) or (type(v.cb) == 'string' and 2) or 3,
-			}
+		if v.kind ~= 'private' then
+			if not binds[v] then
+				binds[v] = {
+					bind = {},
+					info = v.desc or (type(v.cb) == 'string' and v.cb) or v.trace,
+					-- quality of the source information
+					qual = v.kind == 'default' and 0 or (v.desc and 1) or (type(v.cb) == 'string' and 2) or 3,
+				}
+			end
+			table.insert(binds[v].bind, k)
 		end
-		table.insert(binds[v.cb].bind, k)
 	end
 
 	local out = {}
@@ -244,6 +271,27 @@ function U.str_bindlist(api, fmt_str)
 		out[#out + 1] = (fmt_str):format(table.concat(k.bind, ', '), k.info:gsub('[\t\n]', ' '))
 	end
 	return out
+end
+
+---Get the current Wayland clipboard content via wl-paste.
+---@return string? text clipboard content, or nil on failure
+function U.clipboard_get()
+	local p = io.popen('wl-paste -n', 'r')
+	if not p then return end
+	local text = p:read '*a'
+	p:close()
+	return text
+end
+
+---Set the Wayland clipboard content via wl-copy.
+---@param text string text to copy to clipboard
+---@return boolean ok true on success
+function U.clipboard_set(text)
+	local p = io.popen('wl-copy', 'w')
+	if not p then return false end
+	p:write(text)
+	p:close()
+	return true
 end
 
 return U

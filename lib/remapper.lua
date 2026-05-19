@@ -1,4 +1,4 @@
----@module 'swi.lib.bind_override'
+---@module 'swi.lib.remapper'
 ---@diagnostic disable: invisible
 
 local U = require 'swi.lib.utils'
@@ -7,7 +7,7 @@ local backer = require 'swi.lib.backer'
 
 ---Keybind override: temporarily replace keybindings in current mode.
 ---Implements the same map/unmap interface as mode_base.
----@class swi.lib.bind_override: swi.lib.keybind_processor, swi.lib.backer
+---@class swi.lib.remapper: swi.lib.keybind_processor, swi.lib.backer
 ---@field mode? appmode_t in which mode should we set the bindings
 ---@field enabled? boolean
 local M = {
@@ -22,19 +22,11 @@ local M = {
 	_omaps = {}, ---@private
 }
 
----@generic O: swi.lib.bind_override
+---@generic O: swi.lib.remapper
 ---@return O self
 function M:new()
 	if self._trigger == nil then self._trigger = not not self._path end
 	return backer.new(kp.new(U.new_object(self, M)))
-end
-
-local function rawmap(api, b, cfg)
-	if cfg then
-		api.remap(b, cfg)
-	else
-		api.unmap(b)
-	end
 end
 
 function M:set_mode(mode)
@@ -47,11 +39,11 @@ function M:set_mode(mode)
 	return false
 end
 
--- for keybind_processor
-function M:_rawmap(b, _, cfg)
+---@param _ nil action cannot differ from config in remapper
+function M:_rawmap(b, cfg, _)
 	if self._enabled then
 		self._omaps[b] = self._mode_api._mappings[b] or false
-		rawmap(self._mode_api, b, cfg)
+		self._mode_api:_setmap(b, cfg)
 	end
 end
 
@@ -63,11 +55,11 @@ function M:set_enabled(val)
 		---@diagnostic disable-next-line: assign-type-mismatch
 		self._mode_api = swi[self._mode or swi.mode] -- keey mode dynamic if not set by the user
 		for b, cfg in pairs(self._mappings) do
-			self:_rawmap(b, cfg.cb, cfg)
+			self:_rawmap(b, cfg, cfg.cb)
 		end
 	else
 		for b, cfg in pairs(self._omaps) do
-			rawmap(self._mode_api, b, cfg)
+			self._mode_api:_setmap(b, cfg)
 		end
 		self._omaps = {}
 	end

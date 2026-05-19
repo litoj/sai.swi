@@ -3,6 +3,8 @@ local M = {}
 
 local e = require 'swi.api.eventloop'
 
+function M.update() swi.exec 'cd ~/.config/swayimg/swi && git pull' end
+
 function M.load_dir_if_single()
 	local function check_n_load()
 		local l = swi.imagelist
@@ -124,8 +126,8 @@ function M.cycle_position()
 end
 
 function M.two_pane_mode(key)
-	local super = require 'swi.lib.custom_mode'
-	local tp = { ---@class tp: swi.lib.custom_mode
+	local super = require 'swi.mode.custom'
+	local tp = { ---@class tp: swi.mode.custom
 		_mode = 'gallery',
 		_path = 'two-paned',
 		save_user_changes = true,
@@ -166,29 +168,26 @@ end
 
 ---@param key? string key to enter the mode (default: ':')
 ---@param mode? appmode_t in which mode to register (default: current)
----@param global? boolean should this mode be made global into swi.cmd (default: true)
-function M.cmd_mode(key, mode, global)
-	local cm = { ---@class cmd_mode: swi.lib.input_mode
-		_path = 'swi.cmd',
+function M.cmd_mode(key, mode)
+	local cm = { ---@class cmd_mode: swi.mode.input
+		super = require 'swi.mode.input',
+		_path = 'swi.mode.cmd',
 		_prompt = 'Code: ',
-		auto_help = true,
 	}
-	cm.on_confirm = function(out)
+	function cm:on_confirm(out)
 		if not out then return end
 
-		cm.enabled = false
+		self.enabled = false
 		local cb, err = loadstring(out)
 		if not cb or err then return swi.text.set_status(err) end
 		cb()
 	end
 
-	require('swi.lib.input_mode').new(cm)
-	swi[mode or swi.mode].map(key or ':', function() cm.enabled = true end)
+	cm.super.new(cm)
+
+	cm.map('Shift+Return', '\n')
+	require('swi.binds').map(mode or 'a', key or ':', function() cm.enabled = true end)
 	-- TODO: add autocompletion and history
-
-	cm.input_mapper.map('Shift+Return', '\n')
-
-	if global ~= false then rawset(swi, 'cmd', cm) end
 	return cm
 end
 

@@ -17,11 +17,11 @@ What's up with the name? You tell me:
 <details>
 <summary>
 
-## ✨ Complete list of Features
+## ✨ Complete list of Features (click to expand)
 
 - All basic features that swayimg should have by default.
 - Focus on extensibility and ease of use. (provides a convertor for old configs - 4.x)
-- Provides all the basic api features that are necessary for creating more complex behaviour.
+- **Custom modes!**
 
 </summary>
 
@@ -35,9 +35,8 @@ What's up with the name? You tell me:
   v.map('k', v.pan.up)
   v.map('Alt+k', function() v.pan.by(70,70) end)
   ```
-- **eventloop**: subscribe to any change in the api and trigger your own events for inter-module
-  messaging
-  - inspired by vim event structure and neovim for registering the hooks
+- **eventloop**: subscribe to any change in the api and trigger your own events for messaging
+  - inspired by vim event structure and neovim for registering the hooks in lua
 - text layer templates:
   - track any api variable: `g.text.topright={'Marked: {swi.imagelist.marked.size}'}`
   - pretty-print exif data: `v.text.topleft={'Exposure: {ExposureTime}'}`
@@ -72,16 +71,36 @@ What's up with the name? You tell me:
     - `%s`: falls back to current file
     - `%m`: doesn't execute the command if no files were marked
   - `%`: unquoted current (like in 4.x): `v.map('', [[bash -c '$(which trash || echo rm) "%"']])`
-- **custom modes**: easily make temporary changes to anything in the api
-  - all changes are active only while the custom mode is enabled - see `snippets.two_pane_mode`
-  - make variable changes and optinally allow the user to adjust the user to adjust them
-  - automatic event subscriptions and deletions
-  - define custom keybinds with automatic toggleable help page
-  - custom **help mode** that lets you see all available keybindings or settings
-  - custom **input mode** that allows you to input arbitrary text and do whatever you want with it
-    - supports multiline text and selection
-    - custom **command mode** for evaluating any lua commands
-  - custom **two-pane mode** for comparing images
+
+### Custom modes
+
+- easily make temporary changes to anything in the api
+- all changes are active only while the custom mode is enabled - see `snippets.two_pane_mode`
+- make variable changes and optinally allow the user to adjust the user to adjust them
+- automatic event subscriptions and deletions
+- define custom keybinds with automatic help page displaying the keybinds
+- crude implementation of **two-pane mode** for comparing images
+- custom **help mode** that lets you see all available keybindings and live-updated settings
+
+#### Input mode
+
+- allows you to input arbitrary text and do whatever you want with it
+- multiline text
+- text selection
+- support for all common gui keyboard shortcuts
+  - deletion (del prev word <kbd>Ctrl+BS</kbd>…)
+  - jumping around (prev word <kbd>Ctrl+Left</kbd>, EOF <kbd>Ctrl+End</kbd>)
+  - selection with Shift of everything for jumping (<kbd>Shift+Left</kbd>,
+    <kbd>Shift+Ctrl+Home</kbd>)
+  - clipboard support (select all <kbd>Ctrl+a</kbd>, <kbd>Ctrl+c/v/x</kbd>)
+- simple **command mode** for live-evaluating lua code
+
+#### Filter mode
+
+- live filtering
+- tab completion for image properties to filter by
+- configurable display options - what to live-update (completion, images, filter list…)
+- filtering by multiple metrics and operators
 
 ### New scale settings
 
@@ -125,10 +144,19 @@ file updates and save image state (like scale, position, etc.) before the image 
 Clone the repo into your swayimg config to `swi` _(not `swi.swi`!)_.
 
 ```sh
-git clone https://github.com/litoj/swi ~/.config/swayimg/swi
+git clone https://github.com/litoj/swi.swi ~/.config/swayimg/swi
 ```
 
 _Don't forget to add it to `.gitignore`, if you version your dotfiles_
+
+You can add a keybind to update swayimg:
+
+```lua
+v.map('Alt+F5', require('swi.snippets').update) -- for just viewer mode
+
+local map = require 'swi.binds' -- for any mode combo
+map('a', 'Alt+F5', require('swi.snippets').update)
+```
 
 ### 🏠 Keep and convert your 4.x INI config
 

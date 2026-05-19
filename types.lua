@@ -5,7 +5,7 @@
 --------------------------------------------------------------------------------
 
 ---Main application class.
----@class swi
+---@class swi:swi.api.proxy
 ---@field mode appmode_t Which mode is the application in
 ---@field antialiasing boolean Enable/disable antialiasing
 ---@field exif_orientation boolean Enable or disable changing orientation based on EXIF
@@ -304,7 +304,7 @@ function swi.eventloop.takeover_subscribe(cfg) end
 
 ---Image list
 ---Changes to the contents get emitted as OptionSet(`swi.imagelist.size`)
----@class swi.imagelist
+---@class swi.imagelist:swi.api.proxy
 ---@field order order_t Image list sort order
 ---@field reverse boolean Reverse the sort order
 ---@field recursive boolean Recursive directory reading
@@ -396,19 +396,19 @@ do
 	---@param desc string? optional description of the action
 	function keybind_processor.map(bind, action, desc) end
 
-	---@param bind string keybind to disable
-	function keybind_processor.unmap(bind) end
-
 	---@class bindcfg
 	---@field cb function|string the action that runs on the binding activation (or the shell command)
 	---@field trace string where was the binding defined
 	---@field desc? string optional description of the action
-	---@field default? boolean is it the default swayimg bind
+	---@field kind? 'default'|'private' what category does this bind belong to, unspecified is for user
 
 	---@param bind string
 	---@param bindcfg bindcfg config to set the bind to
 	---@return bindcfg? old_bind previous config set for this binding
 	function keybind_processor.remap(bind, bindcfg) end
+
+	---@param bind string keybind to disable
+	function keybind_processor.unmap(bind) end
 
 	---@alias bind_map table<string,bindcfg>
 
@@ -446,7 +446,7 @@ do
 	---@field bottomright extended_text_template[] Text layer scheme for bottom-right corner
 
 	---Base class providing text overlay layout fields shared by all display modes.
-	---@class mode_base: keybind_processor
+	---@class mode_base: keybind_processor,swi.api.proxy
 	---@field text mode_base.text access to setting the overlay fields/indexes
 	---@field mark_color integer Mark icon color in ARGB format
 	---@field pinch_factor number how aggressive should the effect be
@@ -615,16 +615,3 @@ function swi.gallery.switch_image(dir) end
 ---Get information about currently selected image.
 ---@return swayimg.entry # Currently selected image entry
 function swi.gallery.get_image() end
-
--- Paging object to manage scrollable output
----@class help_pager
----@field page integer
----@field page_size integer Readonly - useful do advance by all visible lines instead of fixed page
----@field total_pages integer Readonly
----@field line integer
-
----@class swi.help: keybind_processor
----@field enabled boolean
----@field pager help_pager
----@field tab integer which help tab are we on
-swi.help = {}

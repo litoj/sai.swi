@@ -31,7 +31,9 @@ function M.__newindex(self, idx, val)
 
 	local ot = e.trigger
 	e.trigger = spoof_trigger
-	local res = rawget(self, 'set_' .. idx)(self, val, idx)
+	local res = rawget(self, 'set_' .. idx)
+	if not res then error('tried to set ' .. self.path .. '.' .. idx) end
+	res = res(self, val, idx)
 	e.trigger = ot
 
 	if res == nil then -- set the field only if the setter allows it

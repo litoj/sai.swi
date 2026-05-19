@@ -1,10 +1,10 @@
 ---@diagnostic disable: invisible
----@module 'swi.lib.custom_mode'
+---@module 'swi.mode.custom'
 
 local U = require 'swi.lib.utils'
 local pager = require 'swi.lib.pager'
 
----@class swi.lib.custom_mode: swi.lib.bind_override
+---@class swi.mode.custom: swi.lib.remapper
 --- Wrapper for auto-changing settings when the mode is active.
 --- Supports also eventloop auto registration and deregistration +
 --- - `get_subscribed` gets just your mode changes
@@ -13,8 +13,9 @@ local pager = require 'swi.lib.pager'
 --- Changes are active only while the mode is enabled, then they're reverted.
 ---@field swi? swi
 ---@field help_pager? swi.lib.pager included to provide custom keybind help `_path` is defined
+---@field map fun(bind:string|string[],fn:fun(self:self),desc:string?)
 local M = {
-	super = require 'swi.lib.bind_override',
+	super = require 'swi.lib.remapper',
 	-- protected vars - readonly after initialization
 	_persist_mode_change = false, ---@protected if disabled mode change disables the mode
 	_help_bind_fmt = '%s\t%s', ---@protected
@@ -24,6 +25,23 @@ local M = {
 	auto_help = false, --- should help_pager be automatically enabled while mode is active
 }
 setmetatable(M, { __index = M.super })
+
+local fndbg = debug.getinfo
+
+---@param fn fun(self:self)
+function M:_rawmap(b, cfg, fn)
+	if cfg and not cfg._wrapped then
+		---@diagnostic disable-next-line: inject-field
+		cfg._wrapped = true
+		if fndbg(fn, 'u').nparams == 1 then
+			cfg.cb = function() fn(self) end
+			M.super._rawmap(self, b, cfg)
+			return
+		end
+	end
+
+	M.super._rawmap(self, b, cfg)
+end
 
 local viewer_fb = {
 	position = 'default_position',
@@ -35,7 +53,7 @@ local checked_mode_opts = {
 	[swi.slideshow] = { mode = 'slideshow', fb = viewer_fb },
 }
 
----@param mo swi.lib.custom_mode
+---@param mo swi.mode.custom
 local function wrap(mo, api)
 	local cfg = checked_mode_opts[api]
 	local avail = cfg and function(idx) return cfg.fb[idx] == nil or cfg.mode == swi.mode end
@@ -110,7 +128,7 @@ local function wrap(mo, api)
 	})
 end
 
----@param mo swi.lib.custom_mode
+---@param mo swi.mode.custom
 local function evloop_wrap(mo)
 	local e = swi.eventloop
 	---@type {[hook_cfg]:1}
@@ -170,9 +188,9 @@ local function evloop_wrap(mo)
 	})
 end
 
----@generic O: swi.lib.custom_mode
----@param self `O`|swi.lib.custom_mode
----@return O|swi.lib.custom_mode
+---@generic O: swi.mode.custom
+---@param self `O`|swi.mode.custom
+---@return O|swi.mode.custom
 function M:new()
 	U.new_object(self, M)
 	if self._path then

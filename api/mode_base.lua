@@ -35,7 +35,7 @@ function M.new(self, api_name)
 		self.super.reload()
 	end
 
-	function self:_rawmap(b, action, cfg)
+	function self:_rawmap(b, cfg, action)
 		if type(action) == 'string' then action = function() swi.exec(cfg.cb) end end
 
 		if b:match 'Mouse' or b:match 'Scroll' then
@@ -44,6 +44,7 @@ function M.new(self, api_name)
 			api.on_key(b, action or function() swi.text.set_status('Unhandled key: ' .. b) end)
 		end
 	end
+	self._rawunmap = self._rawmap
 	self.warn_on_duplicates = M.warn_on_duplicates
 	kp.new(self)
 

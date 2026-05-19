@@ -1,27 +1,55 @@
 ---@diagnostic disable: invisible
----@module 'swi.api.help'
+---@module 'swi.mode.help'
 
 local U = require 'swi.lib.utils'
+local binds = require('swi.binds').help
 
----@class swi.api.help: swi.help, swi.lib.custom_mode
+-- Paging object to manage scrollable output
+---@class help_pager
+---@class swi.mode.help: swi.mode.custom
+---@field enabled boolean
+---@field pager swi.lib.pager
+---@field tab integer which help tab are we on
 local M = {
-	super = require 'swi.lib.custom_mode',
-	_path = 'swi.help',
+	super = require 'swi.mode.custom',
+	_path = 'swi.mode.help',
 	_persist_mode_change = true,
 	auto_help = true,
 
-	_tab = 1,
+	_tab = 1, ---@protected
+	_active_binds = { '', { '' } }, ---@protected cache
 
-	_active_binds = { '', { '' } },
-	_bind_fmt = '%20s: %s',
+	bind_fmt = '%20s: %s', ---Default format for keybind list and description
 }
 
 ---@diagnostic disable-next-line: missing-fields
 M.pager = require('swi.lib.pager').new {
-	_path = 'swi.help.pager',
+	_path = M._path .. '.pager',
 	_trigger = true,
 	_location = 'topleft',
 }
+
+function M:new()
+	M.super.new(U.new_object(self, M))
+	binds(self)
+
+	self.swi.viewer.default_scale = 'keep_by_width'
+	self.swi.slideshow.default_scale = 'keep_by_width'
+	self.swi.text.enabled = true
+	local gspace = swi.gallery.thumb_size + swi.gallery.padding_size
+	self.swi.gallery.thumb_size = gspace / 3
+	self.swi.gallery.padding_size = gspace / 3
+
+	self.swi.eventloop.subscribe {
+		event = 'ModeChanged',
+		callback = function(ev)
+			self.mode = ev.mode
+			self:set_tab(self._tab) -- regenerate content in case we're on keybindings
+		end,
+	}
+
+	return self
+end
 
 local modes = { 'gallery', 'viewer', 'slideshow' }
 
@@ -30,7 +58,7 @@ local modes = { 'gallery', 'viewer', 'slideshow' }
 local function mode_bindlist(mode, fmt_str)
 	mode = mode or swi.mode
 	---@diagnostic disable-next-line: param-type-mismatch
-	return ('%s%s Binds'):format(mode:sub(1, 1):upper(), mode:sub(2)), U.str_bindlist(swi[mode], fmt_str or M._bind_fmt)
+	return ('%s%s Binds'):format(mode:sub(1, 1):upper(), mode:sub(2)), U.str_bindlist(swi[mode], fmt_str or M.bind_fmt)
 end
 
 ---@return string title
@@ -54,7 +82,7 @@ local function complete_bindlist()
 	return 'All Binds', out
 end
 
----@param target proxy API object to inspect
+---@param target swi.api.proxy API object to inspect
 ---@return table<string,any>[] fields List of settable fields with their current values
 local function discover_settable_fields(target)
 	local raw_api = target.super
@@ -88,6 +116,8 @@ local function settings_list()
 		swi.viewer,
 		swi.slideshow,
 	} do
+		---@diagnostic disable-next-line: cast-type-mismatch
+		---@cast swiapi swi.api.proxy
 		out[#out + 1] = ('%s:'):format(swiapi._path:upper())
 
 		for _, field in ipairs(discover_settable_fields(swiapi)) do
@@ -95,6 +125,7 @@ local function settings_list()
 		end
 	end
 
+	M.pager.escaping = true
 	return 'Settings', out
 end
 
@@ -102,6 +133,7 @@ local tab_generators = { function() return unpack(M._active_binds) end, settings
 function M:set_tab(idx)
 	self._tab = (idx - 1) % #tab_generators + 1
 	self.pager:bulk_change(function(pager)
+		M.pager.escaping = false
 		local name, lines = tab_generators[self._tab]()
 		pager.title = ('[Help %d/%d]: %s\t'):format(self._tab, #tab_generators, name)
 		pager.lines = lines
@@ -134,30 +166,6 @@ function M:set_enabled(val)
 	return true
 end
 
-function M:new()
-	M.super.new(U.new_object(self, M))
-
-	self.swi.viewer.default_scale = 'keep_by_width'
-	self.swi.slideshow.default_scale = 'keep_by_width'
-	self.swi.text.enabled = true
-	local gspace = swi.gallery.thumb_size + swi.gallery.padding_size
-	self.swi.gallery.thumb_size = gspace / 3
-	self.swi.gallery.padding_size = gspace / 3
-
-	self.swi.eventloop.subscribe {
-		event = 'ModeChanged',
-		callback = function(ev)
-			self.mode = ev.mode
-			self:set_tab(self._tab) -- regenerate content in case we're on keybindings
-		end,
-	}
-
-	return self
-end
-
 --- TODO: in the future: add ways to select a variable and list help and its possible values
 
-rawset(swi, 'help', M:new())
-
----@type swi.help
-return swi.help
+return M:new()

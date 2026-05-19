@@ -141,7 +141,7 @@ swayimg.on_window_resize(function()
 			end,
 		}
 
-		require('swi.binds').late_init_default()
+		require('swi.binds').default()
 	end
 end)
 
