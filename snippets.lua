@@ -5,9 +5,15 @@ local e = require 'swi.api.eventloop'
 
 function M.update()
 	swi.exec 'cd ~/.config/swayimg/swi && git pull'
-	-- cause recompilation on next start if sources have updated
+	-- recompile if sources have updated
 	local path = debug.getinfo(1, 'S').source:match '(/.*/)' .. 'exiv2_to_lua.so'
-	if os.execute(string.format('[ %s -nt %s ]', path:gsub('.so$', '.cpp'), path)) == 0 then os.remove(path) end
+	if os.execute(string.format('[ %s -nt %s ]', path:gsub('.so$', '.cpp'), path)) ~= 1 then
+		local old = package.loaded['swi.lib.exiv2']
+		if not old then return end
+		for k, v in pairs(require('swi.lib.utils').compile_and_load(path)) do -- update old instance
+			old[k] = v
+		end
+	end
 end
 
 function M.load_dir_if_single()
@@ -134,7 +140,7 @@ function M.two_pane_mode(key)
 	local super = require 'swi.mode.custom'
 	local tp = { ---@class tp: swi.mode.custom
 		_mode = 'gallery',
-		_path = 'two-paned',
+		_path = 'two_pane',
 		save_user_changes = true,
 	}
 	function tp:set_enabled(val)
@@ -151,18 +157,20 @@ function M.two_pane_mode(key)
 	super.new(tp)
 
 	tp.swi.mode = 'gallery'
-	local tg = tp.swi.gallery
-	tp.swi.eventloop.subscribe {
-		event = 'WinResized',
-		callback = function(ev) tg.thumb_size = ev.data.width / 2 end,
-	}
-	tg.padding_size = 0
-	tg.cache_limit = 0
-	tg.preload = false
-	tg.border_size = 5
-	tg.selected_scale = 1
-	tg.window_color = 0xff808080
-	tg.hover = true
+	tp.swi.gallery(function(g) ---@param g swi.gallery
+		g.padding_size = 0
+		g.cache_limit = 0
+		g.preload = false
+		g.border_size = 5
+		g.selected_scale = 1
+		g.window_color = 0xff808080
+		g.hover = true
+
+		tp.swi.eventloop.subscribe {
+			event = 'WinResized',
+			callback = function(ev) g.thumb_size = ev.data.width / 2 end,
+		}
+	end)
 
 	key = key or 't'
 	v.map(key, function() tp.enabled = true end, 'Enable Two-pane mode')
@@ -172,7 +180,7 @@ function M.two_pane_mode(key)
 end
 
 ---@param key? string key to enter the mode (default: ':')
----@param mode? appmode_t in which mode to register (default: current)
+---@param mode? appmode_t in which mode to register (default: all)
 function M.cmd_mode(key, mode)
 	local cm = { ---@class cmd_mode: swi.mode.input
 		super = require 'swi.mode.input',
@@ -180,9 +188,12 @@ function M.cmd_mode(key, mode)
 		_prompt = 'Code: ',
 	}
 	function cm:on_confirm(out)
-		if not out then return end
+		if not out then
+			self.text = ''
+			return
+		end
 
-		self.enabled = false
+		self.enabled = false -- disable first to avoid any messages overriding code work
 		local cb, err = loadstring(out)
 		if not cb or err then return swi.text.set_status(err) end
 		cb()

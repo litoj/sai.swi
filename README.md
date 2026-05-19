@@ -21,7 +21,9 @@ What's up with the name? You tell me:
 
 - All basic features that swayimg should have by default.
 - Focus on extensibility and ease of use. (provides a convertor for old configs - 4.x)
-- **Custom modes!**
+- **Custom modes!** - exemplary usage of filtering mode:
+
+https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
 
 </summary>
 
@@ -78,8 +80,16 @@ What's up with the name? You tell me:
 - make variable changes and optinally allow the user to adjust the user to adjust them
 - automatic event subscriptions and deletions
 - define custom keybinds with automatic help page displaying the keybinds
-- crude implementation of **two-pane mode** for comparing images
+
+#### Sealed modes
+
+These are modes that aren't meant to be extended or reused, they are just one singleton instance you
+can configure.
+
 - custom **help mode** that lets you see all available keybindings and live-updated settings
+  <img width="1256" height="764" alt="Image of help mode in the settings section" src="https://github.com/user-attachments/assets/1393488e-a0ba-4bd4-8f9a-26c314ecb112" />
+- **command mode** for live-evaluating lua code (example of extending **input mode**)
+- **two-pane mode** for comparing images (limited by the gallery scaling implementation)
 
 #### Input mode
 
@@ -92,14 +102,28 @@ What's up with the name? You tell me:
   - selection with Shift of everything for jumping (<kbd>Shift+Left</kbd>,
     <kbd>Shift+Ctrl+Home</kbd>)
   - clipboard support (select all <kbd>Ctrl+a</kbd>, <kbd>Ctrl+c/v/x</kbd>)
-- simple **command mode** for live-evaluating lua code
 
 #### Filter mode
 
-- live filtering
+- live filtering by exif data or any other image info
 - tab completion for image properties to filter by
 - configurable display options - what to live-update (completion, images, filter list…)
 - filtering by multiple metrics and operators
+- default config and basic usage (see <./mode/filter.lua> for more details):
+  ```lua
+  local fm = require('swi.mode.filter').new {
+  	_location = 'topleft',
+  	auto_help = true,
+  	-- Public, changeable at any time
+  	update_imagelist_on_confirm = true, ---Should imagelist be set to filtered images
+  	live_imagelist = true, ---Should imagelist be updated with filtering
+  	live_pager = true, ---Should a pager with the filtered files be displayed
+  	---Should a pager with completion for the current tag be visible
+  	---`'i'` for matching with ignored casing
+  	tag_completion = true, ---@type false|'i'|true
+  }
+  g.map('/', function() fm.enabled = true end)
+  ```
 
 ### New scale settings
 

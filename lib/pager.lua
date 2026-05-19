@@ -72,7 +72,7 @@ function M:_prepare_renderer()
 end
 
 ---@protected
-function M:_render(redraw_if_unchanged)
+function M:render(redraw_if_unchanged)
 	if not self._enabled then return end
 
 	local lines = self._lines
@@ -154,7 +154,7 @@ function M:_recalibrate(resize, reset)
 
 	if reset then self:_prepare_renderer() end
 
-	self:_render(true)
+	self:render(true)
 end
 
 ---Make multiple changes simultaneously and render only once at the end.
@@ -183,12 +183,14 @@ function M:bulk_change(applicator)
 	end
 end
 
+---@protected
 ---@param title string
 function M:set_title(title)
 	self._title = title
-	self:_render(true)
+	self:render(true)
 end
 
+---@protected
 ---@param lines string[]
 function M:set_lines(lines)
 	self._lines = lines
@@ -196,6 +198,7 @@ function M:set_lines(lines)
 	return false
 end
 
+---@protected
 ---@param linenr integer
 function M:set_line(linenr)
 	if #self._lines == 0 then return false end
@@ -204,13 +207,15 @@ function M:set_line(linenr)
 	--- sets max to leave max 1 line empty at the end
 	self._line = math.max(1, math.min(#self._lines - self._page_size + 2, linenr))
 	self._page = math.ceil((self._line - 1) / self._page_size) + 1
-	self:_render()
+	self:render()
 	return true
 end
 
+---@protected
 ---@param pagenr integer
 function M:set_page(pagenr) return self:set_line((pagenr - 1) * self._page_size + 1) end
 
+---@protected
 ---@param height integer
 function M:set_max_height(height)
 	self._height = height
@@ -219,12 +224,14 @@ end
 
 --- Setup handlers
 
+---@protected
 ---@param mode appmode_t
 function M:set_mode(mode)
 	self:_on_dst_change(mode, self._location)
 	return false
 end
 
+---@protected
 ---@param val block_position_t
 function M:set_location(val)
 	if val == self._location then return false end
@@ -247,10 +254,11 @@ function M:_on_dst_change(mode, loc)
 	if self._enabled then
 		self._mode_text = swi[mode or swi.mode].text
 		self._original_text = self._mode_text[self._location]
-		self:_render(true)
+		self:render(true)
 	end
 end
 
+---@protected
 function M:set_enabled(val)
 	if val == self._enabled then return false end
 

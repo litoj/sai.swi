@@ -37,9 +37,12 @@ function M:new()
 	self.swi.slideshow.default_scale = 'keep_by_width'
 	self.swi.text.enabled = true
 	local gspace = swi.gallery.thumb_size + swi.gallery.padding_size
-	self.swi.gallery.thumb_size = gspace / 3
-	self.swi.gallery.padding_size = gspace / 3
-
+	self.swi.gallery(function(g)
+		g.thumb_size = gspace / 3
+		g.padding_size = gspace / 3
+		g.cache_limit = 0
+		g.preload = false
+	end)
 	self.swi.eventloop.subscribe {
 		event = 'ModeChanged',
 		callback = function(ev)

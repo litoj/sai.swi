@@ -158,6 +158,7 @@ function M.input(self)
 	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
 	map('Return', function() self:confirm() end, 'Confirm input')
 	map('Escape', function() self:confirm(false) end, 'Abort input')
+	map('Ctrl+Escape', function() self.enabled = false end, 'Hide mode')
 
 	-- Make mappings invisible in help lists
 	map = M.gen_mapadd(self, { kind = 'private', _wrapped = true })
@@ -240,7 +241,7 @@ function M.filter(self)
 	map('Ctrl+k', function() self.selected_pos = self.selected_pos - 1 end, 'prev filtered image')
 	map('Tab', function()
 		local cl = self.completion.lines
-		if not cl[1] then return end
+		if not cl[1] or not self.completion.enabled then return end
 		local li = self:get_current_line_info()
 		self._visual = li.from
 		self._col = li.to

@@ -4,6 +4,9 @@
 local U = require 'swi.lib.utils'
 local pager = require 'swi.lib.pager'
 
+---@overload fun(apply:fun(self:self))
+---@class fakeapi: {[string]: fakeapi}
+
 ---@class swi.mode.custom: swi.lib.remapper
 --- Wrapper for auto-changing settings when the mode is active.
 --- Supports also eventloop auto registration and deregistration +
@@ -11,7 +14,7 @@ local pager = require 'swi.lib.pager'
 --- - `unsubscribe` temporarily disables filtered events or permanently removes mode event by id
 ---
 --- Changes are active only while the mode is enabled, then they're reverted.
----@field swi? swi
+---@field swi? swi|fakeapi
 ---@field help_pager? swi.lib.pager included to provide custom keybind help `_path` is defined
 ---@field map fun(bind:string|string[],fn:fun(self:self),desc:string?)
 local M = {
@@ -58,6 +61,7 @@ local function wrap(mo, api)
 	local cfg = checked_mode_opts[api]
 	local avail = cfg and function(idx) return cfg.fb[idx] == nil or cfg.mode == swi.mode end
 		or function() return true end
+
 	return setmetatable({ _vars = {} }, {
 		__index = function(self, idx)
 			local subapi = rawget(api, idx)
@@ -87,6 +91,8 @@ local function wrap(mo, api)
 			end
 		end,
 		__call = function(self, enable)
+			if type(enable) == 'function' then return enable(self) end
+
 			local ot = api._trigger
 			api._trigger = false
 			if enable then

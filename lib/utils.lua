@@ -51,36 +51,19 @@ function U.new_object(self, module)
 	return self
 end
 
----Nicely format the requested value to human readable rational numbers.
----@param img_meta table<string,string> the `.meta` field of the image
----@param tag string name/path of the exif value to get
---- single-word tags resolve to `Exif.Photo.<>`  or `Exif.Image.<>`
----@return string?
-function U.format_exif(img_meta, tag)
-	if not img_meta then return end
+---@param so_path string path relative to swi as pwd
+---@return table loaded_lib
+function U.compile_and_load(so_path)
+	local out = swi.exec(string.format( --
+		'g++ -O3 -shared -fPIC -o "%s" "%s" 2>&1 >/dev/null',
+		so_path,
+		so_path:gsub('so$', 'cpp')
+	))
+	if out ~= '' then swi.log('Failed to compile module: ' .. out) end
 
-	if tag and tag:find('.', 0, true) then
-		tag = img_meta[tag]
-	else
-		tag = img_meta['Exif.Photo.' .. tag] or img_meta['Exif.Image.' .. tag]
-	end
-	if not tag then return end
-
-	local a, b = tag:match '^(%-?[0-9 ]+)/([0-9][0-9 ]*)$'
-	if a then
-		a, b = a:gsub(' ', ''):gsub('^0+(.)', '%1'), b:gsub(' ', ''):gsub('^0+(.)', '%1')
-		local x, y = tonumber(a), tonumber(b)
-		local n = x / y
-		if math.floor(n) == n then -- integer, not rational number -> done
-			return '' .. n
-		elseif n < 1 and (a:match '^10*$' or b:match '^10*$') then -- decimal point offset through the other side
-			return ('1/%d'):format(y / x)
-		else
-			return '' .. n
-		end
-	end
-
-	return tag
+	local loader = package.loadlib(so_path, 'luaopen_' .. so_path:match '([^/]+)%.so$')
+	if not loader then error('Unable to load library: ' .. so_path) end
+	return loader()
 end
 
 ---A map of translations of key aliases to their xkb names
@@ -273,6 +256,52 @@ function U.str_bindlist(api, fmt_str)
 	return out
 end
 
+---Nicely format the requested value to human readable rational numbers.
+---@param img_meta table<string,string> the `.meta` field of the image
+---@param tag string name/path of the exif value to get
+--- single-word tags resolve to `Exif.Photo.<>`  or `Exif.Image.<>`
+---@return string?
+function U.format_exif(img_meta, tag)
+	if not img_meta then return end
+
+	if tag and tag:find('.', 0, true) then
+		tag = img_meta[tag]
+	else
+		tag = img_meta['Exif.Photo.' .. tag] or img_meta['Exif.Image.' .. tag]
+	end
+	if not tag then return end
+
+	local a, b = tag:match '^(%-?[0-9 ]+)/([0-9][0-9 ]*)$'
+	if a then
+		a, b = a:gsub(' ', ''):gsub('^0+(.)', '%1'), b:gsub(' ', ''):gsub('^0+(.)', '%1')
+		local x, y = tonumber(a), tonumber(b)
+		local n = x / y
+		if math.floor(n) == n then -- integer, not rational number -> done
+			return '' .. n
+		elseif n < 1 and (a:match '^10*$' or b:match '^10*$') then -- decimal point offset through the other side
+			return ('1/%d'):format(y / x)
+		else
+			return '' .. n
+		end
+	end
+
+	return tag
+end
+
+---@return string|number|nil
+function U.parse_exif_val(val)
+	if not val then return end
+	local a, b = val:match '^(%-?[0-9 ]+)/([0-9][0-9 ]*)$'
+	if a then
+		a = a:gsub(' ', ''):gsub('^0+(.)', '%1')
+		b = b:gsub(' ', ''):gsub('^0+(.)', '%1')
+		local x, y = tonumber(a), tonumber(b)
+		return x / y
+	else
+		return tonumber(val) or val
+	end
+end
+
 ---Get the current Wayland clipboard content via wl-paste.
 ---@return string? text clipboard content, or nil on failure
 function U.clipboard_get()
@@ -290,8 +319,21 @@ function U.clipboard_set(text)
 	local p = io.popen('wl-copy', 'w')
 	if not p then return false end
 	p:write(text)
-	p:close()
-	return true
+	swi.notify 'Copied text to clipboard'
+	return p:close()
+end
+
+---@return fun(timestamp_msg:string)
+function U.timer()
+	if not U.debug_perf then
+		return function() end
+	end
+
+	local time = os.clock()
+	return function(tmsg)
+		print(tmsg .. '; cpu in ms:\t' .. math.floor((os.clock() - time) * 1000))
+		time = os.clock()
+	end
 end
 
 return U
