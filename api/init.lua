@@ -35,6 +35,13 @@ function M.exit(code)
 	if not next(e.get_subscribed(ev)) then swayimg.exit(code) end
 end
 
+function M.log(msg)
+	print(msg)
+	swayimg.text.set_status(string.gsub(msg, '\t', '  '))
+end
+
+function M.notify(msg) swayimg.text.set_status(string.gsub(msg, '\t', '  ')) end
+
 -- TODO: how to make stderr appear? 2>&1 doesn't work
 function M.exec(cmd)
 	local abort
@@ -62,13 +69,16 @@ function M.exec(cmd)
 	end):gsub('%%%%', '%%')
 	if abort then return end
 
-	local p = io.popen(cmd, 'r')
-	if not p then error('invalid command: ' .. cmd) end
+	local p, err = io.popen(cmd .. '\necho $?', 'r')
+	if not p then error('Error executing command: ' .. (err or '')) end
 	local out = p:read '*a'
 	p:close()
 
+	local code = out:match '(%d+)\n$'
+	out = out:sub(1, -#code - 2)
+
 	e.trigger { event = 'ShellCmdPost', match = cmd, data = out }
-	return out
+	return out, code
 end
 
 ---@param v appmode_t

@@ -75,9 +75,9 @@ function M:new()
 		for _, b in ipairs(U.tabled(bind)) do
 			local old = self.remap(b, bindcfg)
 			if self.warn_on_duplicates and old and not old.kind then
-				print(
+				swi.log(
 					('Duplicate mapping: %s.map("%s", %s)'):format(
-						self.warn_on_duplicates and self._path,
+						self._path,
 						b,
 						pretty_trace(old.trace):match '^[^\n]+'
 					)

@@ -17,7 +17,7 @@ What's up with the name? You tell me:
 <details>
 <summary>
 
-## ✨ Complete list of Features (click to expand)
+## ✨ Complete list of Features (_click to expand_)
 
 - All basic features that swayimg should have by default.
 - Focus on extensibility and ease of use. (provides a convertor for old configs - 4.x)
@@ -67,8 +67,7 @@ What's up with the name? You tell me:
 - map **shell commands** directly with **ranger-style** file placeholders:
   - `%f`: `'`-quoted current file: `v.map('Ctrl-e', 'xdg-open %f')`
   - `%s`/`%m`: `'`-quoted marked/selected files: `v.map('A-s', 'dragon-drop -x -A %s')`
-    - useful mapping until we get an alternativ for dragging all marked files
-    - `%s`: falls back to current file
+    - `%s`: fallbacks to current file
     - `%m`: doesn't execute the command if no files were marked
   - `%`: unquoted current (like in 4.x): `v.map('', [[bash -c '$(which trash || echo rm) "%"']])`
 

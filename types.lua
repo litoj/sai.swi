@@ -38,7 +38,17 @@ _G.swi = {}
 ---@see event.ShellCmdPost
 ---@param cmd string
 ---@return string stdout
+---@return integer exitcode
 function swi.exec(cmd) end
+
+---Print a message on-screen.
+---@see swi.text.set_status
+---@param msg string
+function swi.notify(msg) end
+
+---Print a message on-screen and to the terminal
+---@param msg string
+function swi.log(msg) end
 
 ---Exit from application.
 ---NOTE: exits only if all SwiLeavePre hooks deregister!

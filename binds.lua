@@ -164,8 +164,8 @@ function M.input(self)
 
 	-- Clipboard management
 	map('Ctrl+a', function()
-		self._visual = 0
-		self.col = #self.text
+		self._visual = 1
+		self.col = #self.text + 1
 	end, 'Select all')
 	map('Ctrl+x', function()
 		local from, to = self._col, self._visual

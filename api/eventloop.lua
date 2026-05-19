@@ -190,11 +190,8 @@ function M.trigger(state)
 
 	M.apply_filtered(state, function(hook)
 		local ok, ret = xpcall(hook.callback, debug.traceback, state)
-		if not ok then
-			---@diagnostic disable-next-line: param-type-mismatch
-			swayimg.text.set_status(string.gsub(ret, '\t', '  '))
-			print('ERROR: ' .. ret)
-		end
+		---@diagnostic disable-next-line: param-type-mismatch
+		if not ok then swi.log(ret) end
 
 		if hook.once or (ok and ret) then
 			M.unsubscribe { id = hook } -- unsub from all places, not just where it matched

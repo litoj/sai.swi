@@ -3,7 +3,12 @@ local M = {}
 
 local e = require 'swi.api.eventloop'
 
-function M.update() swi.exec 'cd ~/.config/swayimg/swi && git pull' end
+function M.update()
+	swi.exec 'cd ~/.config/swayimg/swi && git pull'
+	-- cause recompilation on next start if sources have updated
+	local path = debug.getinfo(1, 'S').source:match '(/.*/)' .. 'exiv2_to_lua.so'
+	if os.execute(string.format('[ %s -nt %s ]', path:gsub('.so$', '.cpp'), path)) == 0 then os.remove(path) end
+end
 
 function M.load_dir_if_single()
 	local function check_n_load()

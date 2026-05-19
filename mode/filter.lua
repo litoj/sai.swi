@@ -3,11 +3,9 @@
 
 local U = require 'swi.lib.utils'
 local pager = require 'swi.lib.pager'
+local exiv2 = require 'swi.lib.exiv2'
 local l = swi.imagelist
 local binds = require('swi.binds').filter
-
--- TODO: completion in the bottom right
--- TODO: make filter list more configurable for general-purpose filtering
 
 ---@alias imgmeta {out:string,filtered_idx:integer,[string]:string|number}|swayimg.image
 
@@ -18,6 +16,7 @@ local binds = require('swi.binds').filter
 ---@field list_pager swi.lib.pager viewer of the filtered items
 ---@field completion swi.lib.pager
 ---@field selected_pos integer the index of the current filtered image or 0 for no match
+---@field protected _images {[string]:imgmeta}
 local M = {
 	super = require 'swi.mode.input',
 	_path = 'swi.mode.filter',
@@ -29,14 +28,12 @@ local M = {
 	reset_on_enable = true, ---Should filter text persist mode disabling
 	keep_filtered_on_confirm = true, ---Should imagelist be set to filtered images
 	live_imagelist = true, ---Should imagelist be updated with filtering
-	live_pager = true, ---Should a pager with the filtered files be displayed
+	live_pager = false, ---Should a pager with the filtered files be displayed
 	tag_completion = true, ---Should a pager with completion for the current tag be visible
 
 	-- Private config
 	---@type {[string]:imgmeta}
 	_filtered = {}, ---@protected
-	---@type {[string]:imgmeta}
-	_images = {}, ---@protected
 	---@type swayimg.entry[]|false
 	_original_list = false, ---@protected
 	---@type {[string]:true} list of tags that have been loaded and evaluated
@@ -64,6 +61,7 @@ function M:new()
 		_location = 'bottomright',
 		_max_height = 10,
 	}
+	self._images = {}
 	M.super.new(self)
 	binds(self)
 
@@ -81,6 +79,68 @@ function M:render_item(x)
 	return x:match('.*/'):gsub('([a-zA-Z])[a-z0-9]+', '%1') .. x:match '[^/]+$'
 end
 
+---@protected
+-- TODO: make filter list more configurable for general-purpose filtering
+---@return {[1]:string,[2]:fun(raw:string):boolean}?
+function M:make_filter(line)
+	line = line:match '^%s*(.-)%s*$'
+	if line == '' then return end
+
+	local tag, val, oper
+	for _, op in ipairs { '!=', '<=', '>=', '<', '>', '=', '!', ':' } do
+		tag, val = line:match('^%s*([0-9A-Za-z.]*)%s*' .. op .. '%s*(.-)%s*$')
+		if tag and #tag > 0 then
+			oper = op
+			break
+		end
+	end
+	if not oper then
+		self:complete(line)
+		return swi.text.set_status 'Missing comparison operator'
+	elseif #tag == 0 and oper ~= ':' then
+		return swi.text.set_status 'Tag can be omitted only with the ":" (code) operator'
+	elseif #val == 0 and oper ~= '!' then
+		return swi.text.set_status 'Value can be omitted only with the "!" (negation) operator'
+	end
+	self.completion.enabled = false -- already with valid tag -> no need for completion
+
+	local num_val = tonumber(val) or val
+
+	-- TODO: extract to global config
+	-- Comparison functions: each takes the raw string value and returns bool
+	---@type {[string]:(fun(val:string|integer):boolean)|fun():((fun(val:string):boolean)?)}
+	local cmp = {
+		['<'] = function(r) return r and r < num_val end,
+		['>'] = function(r) return r and r > num_val end,
+		['<='] = function(r) return r and r <= num_val end,
+		['>='] = function(r) return r and r >= num_val end,
+		['!='] = function(r) return r ~= num_val end,
+		['!'] = function(x) return not x end,
+		['='] = function()
+			val = '^' .. val .. '$'
+			return function(r) return r and tostring(r):find(val) end
+		end,
+		[':'] = function() -- run code; tag value is set as `self` variable, value defaults to imgmeta
+			local cb, err = loadstring(val:find('return', 1, true) and val or 'return ' .. val)
+			if not cb or err then return swi.text.set_status(err) end
+			if #tag == 0 then tag = 'self' end
+			return function(r)
+				_G.self = r
+				err = cb()
+				_G.self = nil
+				return err
+			end
+		end,
+	}
+
+	oper = cmp[oper]
+	oper = debug.getinfo(oper, 'u').nparams == 1 and oper or oper()
+	if oper then
+		if tag ~= 'self' then self:_load_tag(tag) end
+		return { tag, oper }
+	end
+end
+
 ---@private
 ---@param tag string
 function M:_load_tag(tag)
@@ -95,7 +155,7 @@ function M:_load_tag(tag)
 		end
 
 		if val then
-			local a, b = tag:match '^(%-?[0-9 ]+)/([0-9][0-9 ]*)$'
+			local a, b = val:match '^(%-?[0-9 ]+)/([0-9][0-9 ]*)$'
 			if a then
 				a = a:gsub(' ', ''):gsub('^0+(.)', '%1')
 				b = b:gsub(' ', ''):gsub('^0+(.)', '%1')
@@ -113,35 +173,39 @@ end
 ---Collect field names from the current image that contain `fragment`.
 ---Looks at top-level entry fields and all `.meta` keys.
 ---Results are sorted by match position (closer to start = higher priority).
----@param fragment string partial tag/field name to search for
-function M:complete(fragment)
+---@param base string partial tag/field name to search for
+function M:complete(base)
 	if not self.tag_completion then return end
-	if not fragment or fragment == '' then
-		self.completion.lines = {}
+	if not base or base == '' then
+		self.completion.enabled = false
 		return
 	end
 
-	local img = l.get_current()
+	local _, img = next(self._filtered)
 	if not img then return end
 
-	fragment = fragment:lower()
 	local hits = {} ---@type {[1]:integer,[2]:string}[]
 
 	-- Top-level entry fields (path, format, width, height, etc.)
 	for k, v in pairs(img) do
 		if type(v) ~= 'table' and type(k) == 'string' then
-			local pos = k:find(fragment, 1, true)
+			local pos = k:find(base, 1, true)
 			if pos then hits[#hits + 1] = { pos, k } end
 		end
 	end
-	---@diagnostic disable-next-line: undefined-field
-	for k, v in pairs(img.meta or {}) do
-		if type(v) ~= 'table' then
-			local pos = k:find(fragment, 1, true)
-			if pos then
-				hits[#hits + 1] = { pos, k }
-				if #hits >= self.completion.page_size then break end
-			end
+
+	local check
+	if base:find('.', 1, true) then
+		check = function(k) return k:find(base, 1, true) end
+	else
+		base = base .. '[^.]*$'
+		check = function(k) return k:find(base) end
+	end
+	for k, _ in pairs(img.meta or {}) do
+		local pos = check(k)
+		if pos then
+			hits[#hits + 1] = { pos, k }
+			if #hits >= self.completion.page_size then break end
 		end
 	end
 
@@ -155,73 +219,16 @@ function M:complete(fragment)
 	self.completion:bulk_change(function(p)
 		p.title = ('Matching tags: %d\t'):format(#out)
 		p.lines = out
+		p.enabled = self.tag_completion
 	end)
-end
-
----@return {[1]:string,[2]:fun(raw:string):boolean}?
-function M:make_filter(line)
-	line = line:match '^%s*(.-)%s*$'
-	if line == '' then return end
-
-	local tag, val, oper
-	for _, op in ipairs { '!=', '<=', '>=', '<', '>', '=', '!', ':' } do
-		tag, val = line:match('^%s*([0-9A-Za-z]*)%s*' .. op .. '%s*(.-)%s*$')
-		if tag and #tag > 0 then
-			oper = op
-			break
-		end
-	end
-	if not oper then
-		self:complete(line)
-		return swi.text.set_status 'Missing comparison operator'
-	elseif #tag == 0 and oper ~= ':' then
-		return swi.text.set_status 'Tag can be omitted only with the ":" (code) operator'
-	elseif #val == 0 and oper ~= '!' then
-		return swi.text.set_status 'Value can be omitted only with the "!" (negation) operator'
-	end
-	self.completion.lines = {}
-
-	local num_val = tonumber(val) or val
-
-	-- Comparison functions: each takes the raw string value and returns bool
-	---@type {[string]:(fun(val):boolean)|fun():((fun(val):boolean)?)}
-	local cmp = {
-		['<'] = function(r) return r < num_val end,
-		['<='] = function(r) return r <= num_val end,
-		['>'] = function(r) return r > num_val end,
-		['>='] = function(r) return r >= num_val end,
-		['!'] = function(x) return not x end,
-		['!='] = function(r) return r ~= val end,
-		['='] = function()
-			val = '^' .. val .. '$'
-			return function(r) return r:find(val) end
-		end,
-		[':'] = function()
-			local cb, err = loadstring(val:find('return', 1, true) and val or 'return ' .. val)
-			if not cb or err then return swi.text.set_status(err) end
-			if #tag == 0 then tag = 'self' end
-			return function(r)
-				_G[tag] = r
-				err = cb()
-				_G[tag] = nil
-				return err
-			end
-		end,
-	}
-
-	oper = cmp[oper]
-	oper = debug.getinfo(oper, 'u').nparams == 1 and oper or oper()
-	if oper then
-		if tag ~= 'self' then self:_load_tag(tag) end
-		return { tag, oper }
-	end
 end
 
 ---@protected
 function M:on_text_change()
+	if #self._text == 0 then return end
 	---@type {[1]:string,[2]:fun(raw:string):boolean}[]
 	local filters = {}
-	for _, li in ipairs(self:get_line_info()) do
+	for _, li in ipairs(self:get_lines_info()) do
 		if #li.line > 0 then
 			local cfg = self:make_filter(li.line)
 			if not cfg then return end
@@ -233,12 +240,14 @@ function M:on_text_change()
 	local of = self._filtered
 	local nf = {}
 	local lines = {}
+	local tag
 	local ok, err = pcall(function()
 		for _, img in ipairs(self._imagelist) do -- to keep correct order of filtered output
 			img = self._images[img.path]
 			local ok = true
 			for _, cfg in ipairs(filters) do
-				if not cfg[2](cfg[1] == 'self' and img or img[cfg[1]]) then
+				tag = cfg[1] == 'self' and img or img[cfg[1]]
+				if not cfg[2](tag) then
 					ok = false
 					break
 				end
@@ -253,7 +262,7 @@ function M:on_text_change()
 			end
 		end
 	end)
-	if not ok then return swi.text.set_status(err) end
+	if not ok then return swi.notify(('Error with tag value %q: %s'):format(tag, err)) end
 
 	self.list_pager:bulk_change(function(p)
 		p.lines = lines
@@ -277,6 +286,7 @@ function M:on_text_change()
 	self._filtered = nf
 end
 
+-- TODO: create pager wrapper that allows marking a particular line -> textbox -> use it by input mode
 ---@protected
 function M:set_selected_pos(idx)
 	if idx == nil or not self._enabled then return end -- ignore
@@ -334,15 +344,23 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 	if val then
 		-- Snapshot the full image list before filtering
 		if not next(self._images) or not self.keep_filtered_on_confirm then
-			local il = {}
-			self._images = il
+			local imap = self._images
 			self._loaded_tags = {}
-			self._imagelist = l.get()
-			for _, i in pairs(self._imagelist) do
-				il[i.path] = i
-				---@diagnostic disable-next-line: inject-field
-				i.out = self:render_item(i) -- load representations of all items
+			local ilist = l.get() ---@type imgmeta[]
+			self._imagelist = ilist
+			for i, img in ipairs(ilist) do
+				if imap[img.path] then -- update existing entries instead of reloading exif
+					img = imap[img.path]
+					img.index = i
+					ilist[i] = img
+				else
+					imap[img.path] = img
+					img.out = self:render_item(img) -- load representations of all items
+					img.meta = exiv2.get_exif(img.path) or {}
+				end
 			end
+			self._filtered = imap
+			self:on_text_change()
 		end
 
 		if self.reset_on_enable then
@@ -363,7 +381,7 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 	end
 
 	if self.live_pager or not val then self.list_pager.enabled = val end
-	if self.tag_completion or not val then self.completion.enabled = val end
+	if self.tag_completion and not val then self.completion.enabled = false end
 	M.super.set_enabled(self, val)
 
 	return false

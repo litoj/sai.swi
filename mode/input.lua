@@ -166,7 +166,7 @@ function M:delete(from, to)
 	if self._visual then self._visual = false end
 
 	local oc = self._col
-	if oc > from then self._col = oc > to and oc - (from - to + 1) or from end
+	if oc > from then self._col = oc > to and oc - to + from - 1 or from end
 
 	if self.on_text_change then self:on_text_change(self._text) end
 	self:_render()
@@ -179,7 +179,7 @@ end
 
 ---Get the content as lines with their indexes to the text.
 ---@return {line:string,from:integer,to:integer}[] list of lines and their positions
-function M:get_line_info()
+function M:get_lines_info()
 	local lines = {}
 	local i = 1
 	for l in self._text:gmatch '([^\n]*)\n?' do
