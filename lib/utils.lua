@@ -55,7 +55,7 @@ end
 ---@return table loaded_lib
 function U.compile_and_load(so_path)
 	local out = swi.exec(string.format( --
-		'g++ -O3 -shared -fPIC -o "%s" "%s" 2>&1 >/dev/null',
+		'g++ -O2 -shared -fPIC -o "%s" "%s" 2>&1 >/dev/null',
 		so_path,
 		so_path:gsub('so$', 'cpp')
 	))
@@ -325,9 +325,9 @@ end
 
 ---@return fun(timestamp_msg:string)
 function U.timer()
-	if not U.debug_perf then
-		return function() end
-	end
+	-- if not U.debug_perf then
+	-- 	return function() end
+	-- end
 
 	local time = os.clock()
 	return function(tmsg)

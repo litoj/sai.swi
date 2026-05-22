@@ -76,10 +76,11 @@ function M:new()
 			local old = self.remap(b, bindcfg)
 			if self.warn_on_duplicates and old and not old.kind then
 				swi.log(
-					('Duplicate mapping: %s.map("%s", %s)'):format(
+					('Duplicate mapping %s["%s"].\n  old: %s\n  new: %s)'):format(
 						self._path,
 						b,
-						pretty_trace(old.trace):match '^[^\n]+'
+						pretty_trace(old.trace):match '^[^\n]+',
+						pretty_trace(bindcfg.trace):match '^[^\n]+'
 					)
 				)
 			end

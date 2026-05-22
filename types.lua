@@ -615,6 +615,8 @@ swi.slideshow = {}
 ---@field pstore boolean Persistent storage for thumbnails
 ---@field embedded_thumb boolean Use embedded thumbnails
 ---@field pstore_path string Custom path to the directory for persistent thumbnail storage
+---Should thumbnails be reloaded when the smallest cached could be less than 1/2 resolution
+---@field thumb_size_diff_reload boolean
 swi.gallery = {}
 
 ---Select the next thumbnail from the gallery.

@@ -29,7 +29,6 @@ local function mk_modes(mode)
 	if not mode then return modes end
 	mode = U.tabled(mode)
 	for i, v in ipairs(mode) do
-		---@diagnostic disable-next-line: assign-type-mismatch
 		mode[v] = i
 	end
 	return mode
@@ -39,8 +38,12 @@ mk_modes(modes)
 ---@param cfg swi.eventloop.hook
 ---@return hook_cfg
 local function mk_hook(cfg)
-	---@diagnostic disable-next-line: undefined-field .match field used as help for common misconfig
-	assert(not cfg.match, 'Hook has a `match` field instead of `pattern`')
+	if cfg.match then
+		cfg.pattern = cfg.match
+		---@diagnostic disable-next-line: inject-field
+		cfg.match = nil
+	end
+
 	local t = tabled(cfg.pattern or { '^' }) ---@type string[]|{[string]:boolean}
 	local i = #t
 	while i > 0 do

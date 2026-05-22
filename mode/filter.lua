@@ -9,6 +9,7 @@ local binds = require('swi.binds').filter
 
 ---@alias imgmeta {out:string,filtered_idx:integer,[string]:string|number}|swayimg.image
 
+-- TODO: allow marking matching files instead
 ---A live-updating filter mode for image search.
 ---Each line of input is a condition: `<var><op><val>`
 ---Confirmation jumps to the first matching image.
@@ -114,10 +115,10 @@ function M:make_filter(line)
 	if line == '' then return end
 
 	local tag, val, oper
-	for _, op in ipairs { '!=', '<=', '>=', '<', '>', '=', '!', ':' } do
+	for _, op in ipairs { '!=', '<=', '>=', '<', '>', '==', '=', '!', ':' } do
 		tag, val = line:match('^%s*([0-9A-Za-z.]*)%s*' .. op .. '%s*(.-)%s*$')
 		if tag then
-			oper = op
+			oper = op == '=' and '==' or op
 			break
 		end
 	end
@@ -143,7 +144,7 @@ function M:make_filter(line)
 		['>='] = function(r) return r and r >= num_val end,
 		['!='] = function(r) return r ~= num_val end,
 		['!'] = function(x) return not x end,
-		['='] = function()
+		['=='] = function()
 			val = '^' .. val .. '$'
 			return function(r) return r and tostring(r):find(val) end
 		end,
@@ -272,6 +273,7 @@ function M:on_text_change()
 	end)
 	---@diagnostic disable-next-line: need-check-nil
 	if not ok then return swi.notify(('Error comparing %q:\n%s'):format(val, err:gsub('^.-:%d:', ''))) end
+	-- swi.notify '' -- clear previous error messages if everything went well
 	timer 'filtered'
 
 	self.list_pager:bulk_change(function(p)
@@ -281,11 +283,17 @@ function M:on_text_change()
 	timer 'result list updated'
 
 	if self.live_imagelist then
-		if not next(nf) then -- ensure there is always at least one image
-			local cur = l.get_current().path
-			nf[cur] = of[cur]
+		if not next(nf) then
+			swi.notify 'No matching images.\nSkipping imagelist update!'
+			return
 		end
 
+		-- of = {}
+		-- for k, _ in pairs(nf) do
+		-- 	of[#of + 1] = k
+		-- end
+		-- -- TODO: test properly what causes the halt with exposure>1
+		-- l.set(of)
 		for k, _ in pairs(nf) do
 			if not of[k] then l.add(k) end
 		end
@@ -340,8 +348,8 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 
 	if val then
 		-- Snapshot the full image list before filtering
-		local timer = U.timer()
 		if not next(self._images) or not self.update_imagelist_on_confirm then
+			local timer = U.timer()
 			local imap = self._images
 			local ilist = l.get() ---@type imgmeta[]
 			self._imagelist = ilist
@@ -353,13 +361,14 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 				else
 					imap[img.path] = img
 					img.out = self:render_item(img) -- load representations of all items
-					img.meta = exiv2.get_exif(img.path) or {}
 				end
 			end
+			timer 'images sorted'
+			exiv2.load_all(ilist)
+			timer 'metadata loaded'
 			self._filtered = imap
 			self:on_text_change()
 		end
-		timer 'metadata loaded'
 
 		if self.live_imagelist and #self._filtered > 0 then
 			local fl = self._filtered
