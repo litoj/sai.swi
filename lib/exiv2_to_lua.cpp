@@ -39,7 +39,7 @@ static void populate_exif_table(lua_State *L, const Exiv2::ExifData &exif_data) 
 		if (!should_include_type(it.typeId())) continue;
 
 		std::string key = it.key();
-		if (key.find_last_of(".0x") != std::string::npos) continue;
+		if (key.find(".0x") != std::string::npos) continue;
 		std::string value = it.value().toString();
 		lua_pushlstring(L, key.c_str(), key.size());
 		lua_pushlstring(L, value.c_str(), value.size());

@@ -269,7 +269,6 @@ function M:on_text_change()
 		end
 	end
 
-	local timer = U.timer()
 	local of = self._filtered
 	local nf = {}
 	local lines = {}
@@ -300,13 +299,11 @@ function M:on_text_change()
 	---@diagnostic disable-next-line: need-check-nil
 	if not ok then return swi.notify(('Error comparing %q:\n%s'):format(val, err:gsub('^.-:%d:', ''))) end
 	-- swi.notify '' -- clear previous error messages if everything went well
-	timer 'filtered'
 
 	self.list_pager:bulk_change(function(p)
 		p.lines = lines
 		p.title = ('Matching images: %d/%d\t'):format(self:get_selected_pos(), #lines)
 	end)
-	timer 'result list updated'
 
 	if self.live_imagelist then
 		if not next(nf) then
@@ -314,20 +311,17 @@ function M:on_text_change()
 			return
 		end
 
-		-- of = {}
-		-- for k, _ in pairs(nf) do
-		-- 	of[#of + 1] = k
-		-- end
-		-- -- TODO: test properly what causes the halt with exposure>1
-		-- l.set(of)
-		for _, path in pairs(ordered_filtered_paths) do
-			if not of[path] then l.add(path) end
+		if swayimg.imagelist.set then
+			-- TODO: test properly what causes the halt with exposure>1
+			l.set(ordered_filtered_paths)
+		else
+			for _, path in ipairs(ordered_filtered_paths) do
+				if not of[path] then l.add(path) end
+			end
+			for path, _ in pairs(of) do -- not efficient because all added entries will get shifted back
+				if not nf[path] then l.remove(path) end
+			end
 		end
-		timer 'new results added'
-		for path, _ in pairs(of) do -- not efficient because all added entries will get shifted back
-			if not nf[path] then l.remove(path) end
-		end
-		timer 'outdated results removed'
 	end
 
 	self._ordered_filtered_paths = ordered_filtered_paths
@@ -370,7 +364,6 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 	if val then
 		-- Snapshot the full image list before filtering
 		if not next(self._images) or not self.update_imagelist_on_confirm then
-			local timer = U.timer()
 			local imap = self._images
 			local ilist = l.get() ---@type imgmeta[]
 			self._imagelist = ilist
@@ -385,11 +378,10 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 				end
 			end
 			-- this will work only when set the entire imagelist
-			-- TODO: the set_entries must also fix the order of existing elements!!!
-			-- self.swi.imagelist.order = 'none' -- we already know the order
-			timer 'images sorted'
+			if swayimg.imagelist.set then
+				self.swi.imagelist.order = 'none' -- we already know the order
+			end
 			exiv2.load_all(ilist)
-			timer 'metadata loaded'
 			self._filtered = imap
 			self:on_text_change()
 		end

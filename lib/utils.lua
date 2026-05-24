@@ -325,9 +325,9 @@ end
 
 ---@return fun(timestamp_msg:string)
 function U.timer()
-	-- if not U.debug_perf then
-	-- 	return function() end
-	-- end
+	if not U.debug_perf then
+		return function() end
+	end
 
 	local time = os.clock()
 	return function(tmsg)
