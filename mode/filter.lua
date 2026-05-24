@@ -161,7 +161,10 @@ function M:make_filter(line)
 		['>'] = function(r) return r and r > num_val end,
 		['<='] = function(r) return r and r <= num_val end,
 		['>='] = function(r) return r and r >= num_val end,
-		['!='] = function(r) return r ~= num_val end,
+		['!='] = function()
+			val = '^' .. val .. '$'
+			return function(r) return not r or not tostring(r):find(val) end
+		end,
 		['!'] = function(x) return not x end,
 		['=='] = function()
 			val = '^' .. val .. '$'
@@ -359,9 +362,9 @@ function M:get_selected_pos() return self._images[l.get_current().path].filtered
 
 function M:set_enabled(val) -- TODO: better handling of mode switching
 	if val == self._enabled then return false end
-	M.super.set_enabled(self, val)
 
 	if val then
+		M.super.set_enabled(self, true)
 		-- Snapshot the full image list before filtering
 		if not next(self._images) or not self.update_imagelist_on_confirm then
 			local imap = self._images
@@ -386,22 +389,38 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 			self:on_text_change()
 		end
 
-		if self.live_imagelist and #self._filtered > 0 then
-			local fl = self._filtered
-			for k, _ in pairs(self._images) do
-				if not fl[k] then l.remove(k) end
+		if self.live_imagelist and #self._ordered_filtered_paths > 0 then
+			if swayimg.imagelist.set then
+				l.set(self._ordered_filtered_paths)
+			else
+				local fl = self._filtered
+				for path, _ in pairs(self._images) do
+					if not fl[path] then l.remove(path) end
+				end
 			end
 		end
 	else -- val == false
 		if self.live_imagelist and (not self.confirmed or not self.update_imagelist_on_confirm) then
-			local fl = self._filtered
-			for k, _ in pairs(self._images) do
-				if not fl[k] then l.add(k) end
+			if swayimg.imagelist.set then
+				local path_list = {}
+				for k, _ in pairs(self._images) do
+					path_list[#path_list + 1] = k
+				end
+				l.set(path_list)
+			else
+				local fl = self._filtered
+				for path, _ in pairs(self._images) do
+					if not fl[path] then l.add(path) end
+				end
 			end
 		elseif not self.live_imagelist and self.confirmed and self.update_imagelist_on_confirm then
-			local fl = self._filtered
-			for k, _ in pairs(self._images) do
-				if not fl[k] then l.remove(k) end
+			if swayimg.imagelist.set then
+				l.set(self._ordered_filtered_paths)
+			else
+				local fl = self._filtered
+				for path, _ in pairs(self._images) do
+					if not fl[path] then l.remove(path) end
+				end
 			end
 		end
 
@@ -410,6 +429,8 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 		elseif self.confirmed == false then
 			self._filtered = self._images -- text was already removed so filtered files should be too
 		end
+
+		M.super.set_enabled(self, false)
 	end
 
 	if self.live_pager or not val then self.list_pager.enabled = val end
