@@ -15,6 +15,7 @@
 ---supported by the composer.
 ---By default disabled in Sway and enabled in other compositors.
 ---@field decoration boolean
+---@field app_id string wayland application ID
 ---Create a floating window with the same coordinates and size as the currently
 ---focused window. This variable can be set only once.
 ---Sway and Hyprland compositors only.

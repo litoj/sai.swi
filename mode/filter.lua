@@ -33,10 +33,15 @@ local M = {
 	---Should a pager with completion for the current tag be visible
 	---`'i'` for matching with ignored casing
 	tag_completion = true, ---@type false|'i'|true
+	---Settings for fuzzy matching agains path when no operator is specified
+	---Represents gap tolerance in word length percentage (0=contains, 1= 'abc' -> '…a_b__c…')
+	default_filter = 0, ---@type number|false
 
 	-- Private config
 	---@type {[string]:imgmeta}
 	_filtered = {}, ---@protected
+	---@type string[]
+	_ordered_filtered_paths = {}, ---@protected
 	---@type swayimg.entry[]|false
 	_original_list = false, ---@protected
 	---@type imgmeta[]
@@ -84,31 +89,41 @@ end
 ---Completion rating function
 ---@param base string what the user typed
 ---@param tag string what are we suggesting
----@param fullname string complete path of the exif tag
----@return {[1]:integer,[2]:string}? weighed_match [1]=penalty - how accurate the match was (lower=better)
-function M:rate(base, tag, fullname)
+---@param rate_start boolean? penalize the distance to first matched char (default=true)
+---@param max_penalty integer? at what point to abort matching
+---@return integer? penalty - how accurate the match was (lower=better)
+function M:rate(base, tag, rate_start, max_penalty)
 	local bi = 1
 	local ti = 1
 	if self.tag_completion == 'i' then tag = tag:lower() end
 	local penalty = tag:find(base, 1, true)
 	if penalty then
-		penalty = penalty - #base
+		penalty = (rate_start ~= false and penalty or 0) - #base
 	else
 		penalty = 0
+		if rate_start == false then
+			ti = tag:find(base:sub(bi, bi), ti, true)
+			if not ti then return end
+			bi = bi + 1
+		end
+
+		max_penalty = max_penalty or 2147483648
 		while bi <= #base do
 			local f = tag:find(base:sub(bi, bi), ti, true)
 			if not f then return end
-			penalty = f == ti + 1 and penalty - 1 or penalty + f - ti
+			penalty = penalty + f - ti - 1
+			if penalty > max_penalty then return end
 			ti = f
 			bi = bi + 1
 		end
 	end
 
-	return { penalty, fullname }
+	return penalty
 end
 
 ---@protected
 -- TODO: make filter list more configurable for general-purpose filtering
+-- TODO: allow using filters to determine order of displayed results (probably a togle per filter)
 ---@return {[1]:string,[2]:fun(raw:string):boolean}?
 function M:make_filter(line)
 	line = line:match '^%s*(.-)%s*$'
@@ -124,7 +139,11 @@ function M:make_filter(line)
 	end
 	if not oper then
 		self:complete(line)
-		return swi.notify 'Missing comparison operator'
+		return {
+			'path',
+			self.default_filter == 0 and function(p) return p:find(line, 1, true) end --
+				or function(p) return self:rate(line, p, false, math.floor((self.default_filter - 1) * #line)) end,
+		}
 	elseif #tag == 0 and oper ~= ':' then
 		return swi.notify 'Tag can be omitted only with the ":" (code) operator'
 	elseif #val == 0 and oper ~= '!' then
@@ -208,12 +227,17 @@ function M:complete(base)
 
 	-- Top-level entry fields (path, format, width, height, etc.)
 	for k, v in pairs(img) do
-		if type(v) ~= 'table' and not self._loaded_tags[k] then hits[#hits + 1] = self:rate(base, k, k) end
+		if type(v) ~= 'table' and not self._loaded_tags[k] then
+			v = self:rate(base, k)
+			if v then hits[#hits + 1] = { v, k } end
+		end
 	end
 
 	local just_name = not base:find('.', 1, true)
-	for k, _ in pairs(img.meta or {}) do
-		hits[#hits + 1] = self:rate(base, just_name and k:match '[^.]*$' or k, k)
+	for k, v in pairs(img.meta or {}) do
+		---@diagnostic disable-next-line: cast-local-type
+		v = self:rate(base, just_name and k:match '[^.]*$' or k)
+		if v then hits[#hits + 1] = { v, k } end
 	end
 
 	table.sort(hits, function(a, b) return a[1] < b[1] or (a[1] == b[1] and a[2] < b[2]) end)
@@ -239,7 +263,7 @@ function M:on_text_change()
 	for _, li in ipairs(self:get_lines_info()) do
 		if #li.line > 0 then
 			local cfg = self:make_filter(li.line)
-			if not cfg then return end
+			if not cfg or #li.line <= 2 then return end
 
 			filters[#filters + 1] = cfg
 		end
@@ -249,6 +273,7 @@ function M:on_text_change()
 	local of = self._filtered
 	local nf = {}
 	local lines = {}
+	local ordered_filtered_paths = {}
 	local val
 	local ok, err = pcall(function()
 		for _, img in ipairs(self._imagelist) do -- to keep correct order of filtered output
@@ -265,7 +290,8 @@ function M:on_text_change()
 			if ok then
 				nf[img.path] = img
 				lines[#lines + 1] = img.out
-				img.filtered_idx = #lines
+				ordered_filtered_paths[#ordered_filtered_paths + 1] = img.path
+				img.filtered_idx = #ordered_filtered_paths
 			else
 				img.filtered_idx = 0
 			end
@@ -294,16 +320,17 @@ function M:on_text_change()
 		-- end
 		-- -- TODO: test properly what causes the halt with exposure>1
 		-- l.set(of)
-		for k, _ in pairs(nf) do
-			if not of[k] then l.add(k) end
+		for _, path in pairs(ordered_filtered_paths) do
+			if not of[path] then l.add(path) end
 		end
 		timer 'new results added'
-		for k, _ in pairs(of) do
-			if not nf[k] then l.remove(k) end
+		for path, _ in pairs(of) do -- not efficient because all added entries will get shifted back
+			if not nf[path] then l.remove(path) end
 		end
 		timer 'outdated results removed'
 	end
 
+	self._ordered_filtered_paths = ordered_filtered_paths
 	self._filtered = nf
 end
 
@@ -311,7 +338,7 @@ end
 ---@protected
 function M:set_selected_pos(idx)
 	if idx == nil or not self._enabled then return end -- ignore
-	if #self.list_pager.lines == 0 then return swi.text.set_status 'No matching images' end
+	if #self._ordered_filtered_paths == 0 then return swi.text.set_status 'No matching images' end
 
 	idx = math.max(1, math.min(#self.list_pager.lines, idx))
 	self.list_pager:bulk_change(function(p)
@@ -320,18 +347,12 @@ function M:set_selected_pos(idx)
 	end)
 
 	local old_img = self._images[l.get_current().path]
-	local new_img
-	for _, v in pairs(self._filtered) do
-		if v.filtered_idx == idx then
-			new_img = v
-			break
-		end
-	end
+	local new_img = self._images[self._ordered_filtered_paths[idx]]
 
 	if swi.mode == 'viewer' then return swi.viewer.open(new_img.path) end
 
 	local oi = self.live_imagelist and old_img.filtered_idx or old_img.index
-	local ni = self.live_imagelist and new_img.filtered_idx or new_img.index
+	local ni = self.live_imagelist and idx or new_img.index
 	local dir = oi < ni and swi.gallery.go.right or swi.gallery.go.left
 	for _ = math.abs(oi - ni), 1, -1 do
 		dir()
@@ -363,6 +384,9 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 					img.out = self:render_item(img) -- load representations of all items
 				end
 			end
+			-- this will work only when set the entire imagelist
+			-- TODO: the set_entries must also fix the order of existing elements!!!
+			-- self.swi.imagelist.order = 'none' -- we already know the order
 			timer 'images sorted'
 			exiv2.load_all(ilist)
 			timer 'metadata loaded'

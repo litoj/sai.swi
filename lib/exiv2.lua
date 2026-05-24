@@ -11,7 +11,6 @@ local so_path = debug.getinfo(1, 'S').source:match '[^@]+/' .. mod_name .. '.so'
 ---@type exiv2
 local M
 if not os.rename(so_path, so_path) then
-	error(so_path)
 	M = require('swi.lib.utils').compile_and_load(so_path) ---@type exiv2
 else
 	local fn, err = package.loadlib(so_path, 'luaopen_' .. mod_name)
