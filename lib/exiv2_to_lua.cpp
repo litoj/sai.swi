@@ -1,4 +1,5 @@
 // EXIF data extraction module for Lua using Exiv2.
+#include <exiv2/metadatum.hpp>
 #include <luajit-2.1/lua.hpp>
 
 #include <exiv2/exiv2.hpp>
@@ -8,53 +9,57 @@
 #include <thread>
 #include <vector>
 
-/**
- * Check if an EXIF value should be included based on its type.
- * This filters out complex/binary data like lens correction profiles,
- * keeping only human-readable values (strings, numbers, rationals).
- */
-constexpr static bool should_include_type(Exiv2::TypeId type) {
+constexpr static bool should_include(const Exiv2::Metadatum &item) {
 	// Explicitly exclude binary and complex types that contain non-human-readable
 	// data
-	switch (type) {
+	switch (item.typeId()) {
 		case Exiv2::undefined: // Raw binary data (e.g., maker notes, profiles)
 		case Exiv2::directory: // CIFF directory structure
 		case Exiv2::xmpText: // XMP metadata (complex XML structure)
-		case Exiv2::xmpAlt: // XMP alternative
-		case Exiv2::xmpBag: // XMP bag
-		case Exiv2::xmpSeq: // XMP sequence
-		case Exiv2::langAlt: // XMP language alternative
-		case Exiv2::tiffIfd: // TIFF IFD pointer (binary structure)
-		case Exiv2::tiffIfd8: // 64-bit TIFF IFD pointer
+		case Exiv2::xmpAlt:
+		case Exiv2::xmpBag:
+		case Exiv2::xmpSeq:
+		case Exiv2::langAlt:
+		case Exiv2::tiffIfd:
+		case Exiv2::tiffIfd8: //
 			return false;
 		default:
-			// Include all other types: strings, integers, rationals, floats
-			return true;
+			// exclude hex key names
+			return item.key().find(".0x") == std::string::npos;
 	}
 }
 
-static void populate_exif_table(lua_State *L, const Exiv2::ExifData &exif_data) {
+static void
+populate_exif_table(lua_State *L, const std::vector<std::pair<std::string, std::string>> &meta) {
 	lua_createtable(L, 0, 0);
-	for (const auto &it : exif_data) {
-		if (!should_include_type(it.typeId())) continue;
-
-		std::string key = it.key();
-		if (key.find(".0x") != std::string::npos) continue;
-		std::string value = it.value().toString();
-		lua_pushlstring(L, key.c_str(), key.size());
-		lua_pushlstring(L, value.c_str(), value.size());
+	for (const auto &[k, v] : meta) {
+		lua_pushlstring(L, k.c_str(), k.size());
+		lua_pushlstring(L, v.c_str(), v.size());
 		lua_settable(L, -3);
 	}
 }
 
-static Exiv2::ExifData load_image_exif(const std::string &path) {
+static std::vector<std::pair<std::string, std::string>> read_image_meta(const std::string &path) {
 	try {
-		Exiv2::Image::UniquePtr exif_img = Exiv2::ImageFactory::open(path);
+		Exiv2::Image::UniquePtr exiv2 = Exiv2::ImageFactory::open(path);
 
-		if (!exif_img) return {};
+		if (!exiv2) return {};
 
-		exif_img->readMetadata();
-		return exif_img->exifData();
+		exiv2->readMetadata();
+
+		std::vector<std::pair<std::string, std::string>> meta;
+		meta.reserve(exiv2->exifData().count() + exiv2->iptcData().count() + exiv2->xmpData().count());
+
+		for (const auto &it : exiv2->exifData())
+			if (should_include(it)) meta.push_back(std::make_pair(it.key(), it.value().toString()));
+
+		for (const auto &it : exiv2->iptcData())
+			if (should_include(it)) meta.push_back(std::make_pair(it.key(), it.value().toString()));
+
+		for (const auto &it : exiv2->xmpData())
+			if (should_include(it)) meta.push_back(std::make_pair(it.key(), it.value().toString()));
+
+		return meta;
 	} catch (const std::exception &) {
 		return {};
 	}
@@ -64,7 +69,7 @@ static int lua_get_meta(lua_State *L) {
 	const char *path = luaL_checkstring(L, 1);
 	if (!path) luaL_error(L, "Expected string argument for path");
 
-	populate_exif_table(L, load_image_exif(path));
+	populate_exif_table(L, read_image_meta(path));
 	return 1;
 }
 
@@ -93,7 +98,7 @@ static int lua_load_all(lua_State *L) {
 				lua_pop(L, 2);
 				mt.unlock();
 
-				auto exif_data = load_image_exif(path);
+				auto exif_data = read_image_meta(path);
 
 				mt.lock();
 				lua_rawgeti(L, -1, l_idx);

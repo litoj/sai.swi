@@ -211,6 +211,7 @@ function M:_load_tag(tag)
 end
 
 -- TODO: split into it's own module
+-- TODO: hijack cursor if it moves to a position in the corner
 ---@protected
 ---Collect field names from the current image that contain `fragment`.
 ---Looks at top-level entry fields and all `.meta` keys.
@@ -315,7 +316,6 @@ function M:on_text_change()
 		end
 
 		if swayimg.imagelist.set then
-			-- TODO: test properly what causes the halt with exposure>1
 			l.set(ordered_filtered_paths)
 		else
 			for _, path in ipairs(ordered_filtered_paths) do
@@ -384,7 +384,9 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 			if swayimg.imagelist.set then
 				self.swi.imagelist.order = 'none' -- we already know the order
 			end
+			local timer = U.timer()
 			exiv2.load_all(ilist)
+			timer 'Metadata of all images loaded'
 			self._filtered = imap
 			self:on_text_change()
 		end
@@ -400,7 +402,11 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 			end
 		end
 	else -- val == false
-		if self.live_imagelist and (not self.confirmed or not self.update_imagelist_on_confirm) then
+		if
+			self.live_imagelist
+			and (not self.confirmed or not self.update_imagelist_on_confirm)
+			and #self._ordered_filtered_paths > 0
+		then
 			if swayimg.imagelist.set then
 				local path_list = {}
 				for k, _ in pairs(self._images) do

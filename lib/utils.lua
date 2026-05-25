@@ -1,5 +1,5 @@
 ---@module 'swi.lib.utils'
-local U = {}
+local U = { debug_perf = os.getenv 'DEBUG_PERF' == '1' }
 
 ---@generic O
 ---@param loader fun():`O`
