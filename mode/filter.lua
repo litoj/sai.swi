@@ -210,8 +210,12 @@ function M:_load_tag(tag)
 	self._loaded_tags[tag] = true
 end
 
--- TODO: split into it's own module
+-- TODO: also use it to create a walkable directory tree / bookmarks etc
+-- it would be like <C-n> for list mode, then r for recursive toggle,
+-- by default in dir search, enter would add it and remove it
+
 -- TODO: hijack cursor if it moves to a position in the corner
+-- TODO: split into it's own module
 ---@protected
 ---Collect field names from the current image that contain `fragment`.
 ---Looks at top-level entry fields and all `.meta` keys.
@@ -380,7 +384,6 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 					img.out = self:render_item(img) -- load representations of all items
 				end
 			end
-			-- this will work only when set the entire imagelist
 			if swayimg.imagelist.set then
 				self.swi.imagelist.order = 'none' -- we already know the order
 			end
@@ -389,6 +392,11 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 			timer 'Metadata of all images loaded'
 			self._filtered = imap
 			self:on_text_change()
+
+			if not swi.gallery.pstore then
+				swi.gallery.pstore_path = '/tmp/swi-filter/'
+				swi.gallery.pstore = true
+			end
 		end
 
 		if self.live_imagelist and #self._ordered_filtered_paths > 0 then
@@ -433,7 +441,8 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 		if self.confirmed then
 			if not self.selected_pos then self.selected_pos = 1 end
 		elseif self.confirmed == false then
-			self._filtered = self._images -- text was already removed so filtered files should be too
+			self._filtered = {} -- text was already removed so filtered files should be too
+			self._ordered_filtered_paths = {}
 		end
 
 		M.super.set_enabled(self, false)

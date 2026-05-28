@@ -19,14 +19,14 @@ local l = swi.imagelist
 ---| 'a' # all modes
 
 ---@type {[string]:{[integer]:swi.lib.keybind_processor|keybind_processor}}
-local modemap = { [''] = { v, s }, a = { v, s, g }, g = { g }, v = { v }, s = { s } }
+M.modemap = { [''] = { v, s }, a = { v, s, g }, g = { g }, v = { v }, s = { s } }
 
 ---@param mode bindmode
 ---@param binds string|string[]
 ---@param cb string|fun()
 ---@param desc string?
 function M.map(mode, binds, cb, desc)
-	for _, m in ipairs(modemap[mode]) do
+	for _, m in ipairs(M.modemap[mode]) do
 		m.map(binds, cb, desc)
 	end
 end
@@ -35,7 +35,7 @@ function M.default()
 	local deftrace = U.pretty_trace('default', debug.traceback())
 	local function map(mode, binds, cb, desc)
 		local cfg = { cb = cb, desc = desc, default = true, trace = deftrace, _traced = true }
-		for _, m in ipairs(modemap[mode]) do
+		for _, m in ipairs(M.modemap[mode]) do
 			for _, b in ipairs(U.tabled(binds)) do
 				if not m._mappings[b] then m:_setmap(b, cfg) end
 			end

@@ -107,7 +107,7 @@ do -- Event and Hook type definitions
 	---@class event.ImgChanged: event.base
 	---@field event 'ImgChanged'
 	---@field match appmode_t
-	---@field data swayimg.entry|swayimg.image
+	---@field data swayimg.image
 
 	---Hook for ImgChanged events
 	---@class hook.ImgChanged: hook.base
@@ -118,7 +118,7 @@ do -- Event and Hook type definitions
 	---@class event.ImgChangedPre: event.base
 	---@field event 'ImgChangedPre'
 	---@field match appmode_t
-	---@field data swayimg.entry|swayimg.image
+	---@field data swayimg.image
 
 	---Hook for ImgChangedPre events
 	---@class hook.ImgChangedPre: hook.base
@@ -324,8 +324,8 @@ function swi.eventloop.takeover_subscribe(cfg) end
 swi.imagelist = {}
 
 do
-	---Get current image entry (may or may not have loaded metadata)
-	---@return swayimg.entry
+	---Get current image entry (metadata is lazy-loaded)
+	---@return swayimg.image
 	function swi.imagelist.get_current() end
 
 	---Get size of image list.
@@ -439,7 +439,7 @@ do
 	---@alias extended_text_template
 	---| text_template_t basic single-line template string
 	---| mode_base.text.dyntext event-based generator
-	---| fun(img:swayimg.image|swayimg.entry):(string|string[]?) generator for ImgChanged event
+	---| fun(img:swayimg.image):(string|string[]?) generator for ImgChanged event
 
 	---A more dynamic approach to updating the text layer.
 	--- - custom functions to generate text on image change.
@@ -626,5 +626,5 @@ swi.gallery = {}
 function swi.gallery.switch_image(dir) end
 
 ---Get information about currently selected image.
----@return swayimg.entry # Currently selected image entry
+---@return swayimg.image # Currently selected image entry
 function swi.gallery.get_image() end

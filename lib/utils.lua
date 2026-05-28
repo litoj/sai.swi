@@ -7,10 +7,10 @@ local U = { debug_perf = os.getenv 'DEBUG_PERF' == '1' }
 function U.lazy(loader)
 	return setmetatable({}, {
 		__index = function(self, idx)
-			for k, v in pairs(loader()) do
-				self[k] = v
-			end
-			return rawget(self, idx)
+			loader = loader()
+			-- load just once and replace this loader with the actual data
+			setmetatable(self, { __index = loader })
+			return loader[idx]
 		end,
 	})
 end
@@ -216,6 +216,7 @@ end
 
 function U.print_trace() print(U.pretty_trace('print_trace', debug.traceback())) end
 
+---@return {bind:string[],info:string}[] sorted list of keybinds with description of their function
 function U.ordered_binds(api)
 	local binds = {}
 	for k, v in pairs(api.get_mappings()) do ---@cast v bindcfg
@@ -247,8 +248,9 @@ function U.ordered_binds(api)
 end
 
 ---@param api swi.lib.keybind_processor
----@param fmt_str string how to separate keybind list from the action
+---@param fmt_str string? how to separate keybind list from the action
 function U.str_bindlist(api, fmt_str)
+	fmt_str = fmt_str or '%20s: %s'
 	local out = {}
 	for _, k in ipairs(U.ordered_binds(api)) do
 		out[#out + 1] = (fmt_str):format(table.concat(k.bind, ', '), k.info:gsub('[\t\n]', ' '))
@@ -288,6 +290,7 @@ function U.format_exif(img_meta, tag)
 	return tag
 end
 
+-- TODO: support date comparisons
 ---@return string|number|nil
 function U.parse_exif_val(val)
 	if not val then return end

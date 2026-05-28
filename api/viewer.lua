@@ -30,6 +30,8 @@ local function new_panner(self)
 	return pan
 end
 
+-- TODO: use USR1 to add debounce for repeated presses and viewer.open to then jump to the file
+-- directly
 local function new_go(api, api_name)
 	return setmetatable({}, {
 		__index = function(tbl, idx)

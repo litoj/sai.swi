@@ -56,6 +56,9 @@ local checked_mode_opts = {
 	[swi.slideshow] = { mode = 'slideshow', fb = viewer_fb },
 }
 
+-- TODO: make a separate global setting for custom mode name and obj to allow F1 be generic and work
+-- for truly every mode + also show only settings for that mode -> no more tabs
+-- TODO: move to lib as a separate feature
 ---@param mo swi.mode.custom
 local function wrap(mo, api)
 	local cfg = checked_mode_opts[api]

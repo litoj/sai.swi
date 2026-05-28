@@ -20,7 +20,7 @@ What's up with the name? You tell me:
 ## ✨ Complete list of Features (_click to expand_)
 
 - All basic features that swayimg should have by default.
-- Focus on extensibility and ease of use. (provides a convertor for old configs - 4.x)
+- Focus on extensibility and ease of use. (includes convertor for 4.x ini configs)
 - **Custom modes!** - exemplary usage of filtering mode:
 
 https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
@@ -39,23 +39,27 @@ https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
   ```
 - **eventloop**: subscribe to any change in the api and trigger your own events for messaging
   - inspired by vim event structure and neovim for registering the hooks in lua
+- exifdata loader:
+  - gallery image lazy-loads metadata -> just like viewer mode
+  - to load all, run `local list=l.get(); require'exiv2'.load_all(list)`
 - text layer templates:
   - track any api variable: `g.text.topright={'Marked: {swi.imagelist.marked.size}'}`
   - pretty-print exif data: `v.text.topleft={'Exposure: {ExposureTime}'}`
   - dynamic event updates - use eventloop hooks to update the text dynamically:
     ```lua
-    v.text.topleft={
-      {event='User',pattern='mymsg',function(ev)
-        if not ev then return 'Ready to receive messages' end
-        if type(ev.data) == 'table' then
-          ev.data[1] = 'Received multiline:\t'..ev.data[1]
+    v.text.topright={
+      {event='User', pattern='help', function(ev)
+        if not ev or not ev.data then return 'Ready to receive messages' end
+        if type(ev.data) == 'string' then
+          return 'Accepts multiline string:\t' .. ev.data
+        elseif type(ev.data) == 'table' then
+          table.insert(data, 1, 'Accepts lines as a table (keybind list):')
           return ev.data
-        else
-          return ev.data and ('Received multiline:\t' .. ev.data)
         end
       end}
       [100] = 'Surely the message is shorter than 100 lines and won\'t override this'
     }
+    e.trigger{event='User', match='help', data=U.str_bindlist(swi.mode.input)}
     ```
 - style-agnostic keybinds: use gui-, imv- or **vim-style** keybinds or any style that's right for
   you

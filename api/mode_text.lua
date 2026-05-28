@@ -4,7 +4,7 @@ local U = require 'swi.lib.utils'
 local e = require 'swi.api.eventloop'
 
 ---@class swi.api.mode_text.base
----@field super swayimg_appmode|swayimg.gallery
+---@field super swayimg_appmode|swayimg.viewer
 ---@field _api_name appmode_t
 
 ---@class swi.api.mode_text: swi.api.mode_text.base, mode_base.text
@@ -59,7 +59,7 @@ local function generate_exif_updater(line)
 end
 
 local function generate_var_updater(line, varpaths)
-	return { -- TODO: possible optimization by rendering only when mode and text are active + on modechange
+	return {
 		event = 'OptionSet',
 		pattern = varpaths,
 		callback = function(ev) return replace_swi_vars(line, varpaths, ev):gsub('{', '{{') or '' end,
@@ -79,7 +79,7 @@ local function render_hook(processed, i, hook, ...)
 end
 
 ---@param tracker mode_text.tracker
----@param img swayimg.image|swayimg.entry
+---@param img swayimg.image
 local function render_on_img(tracker, api, placement, img)
 	local p = tracker.processed
 	for i, line in pairs(tracker) do
@@ -87,6 +87,21 @@ local function render_on_img(tracker, api, placement, img)
 	end
 	api.set_text(placement, p)
 end
+
+local _roi = render_on_img
+e.subscribe {
+	event = 'OptionSet',
+	pattern = 'swi.text.enabled',
+	callback = function(ev)
+		render_on_img = ev.data and _roi or function() end
+		if ev.data and swi.initialized then
+			local smt = swi[swi.mode].text
+			for placement, config in pairs(smt._tracked) do
+				render_on_img(config, smt.super, placement, U.lazy(smt.super.get_image))
+			end
+		end
+	end,
+}
 
 local primed -- for temporarily blocking rendering until swi is loaded
 ---@param self swi.api.mode_text
@@ -96,7 +111,7 @@ local function initialize(self)
 
 	if not swi.initialized then -- ensure we don't try to render before app has initialized
 		if not primed then
-			primed = render_on_img
+			primed = true
 			render_on_img = function() end
 		end
 
@@ -104,7 +119,7 @@ local function initialize(self)
 			event = 'SwiEnter',
 			once = true,
 			callback = function()
-				render_on_img = primed
+				render_on_img = _roi
 				for placement, config in pairs(tracked) do
 					render_on_img(config, self.super, placement, U.lazy(self.super.get_image))
 				end

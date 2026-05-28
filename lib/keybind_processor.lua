@@ -9,6 +9,7 @@ local U = require 'swi.lib.utils'
 ---@field warn_on_duplicates boolean
 local M = {}
 
+-- TODO: make modebase translate multimaps (`cd`) correctly and use sig USR1 for fallback
 ---Must be overriden by inheriting class
 ---@protected
 ---@param bind string

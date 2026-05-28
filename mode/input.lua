@@ -38,6 +38,7 @@ local M = {
 	---@type integer|false indicates end of selection when available (1-based)
 	_visual = false, ---@protected
 
+	-- TODO: make available as U.input that users can call on-demand with custom prompt
 	-- TODO: convert to using lines and pager and create a textbox for line scrolling
 	-- Private state
 	---@see swayimg.viewer.set_text
@@ -284,7 +285,8 @@ function M:_on_dst_change(mode, loc)
 			self._raw_update ''
 		else
 			self.swi.text.enabled = nil
-			self._raw_update(self._location, swi[self._mode or swi.mode].text[self._location])
+			local smt = swi[self._mode or swi.mode].text
+			smt[self._location] = smt[self._location]
 		end
 	end
 

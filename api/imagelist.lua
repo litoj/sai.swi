@@ -55,6 +55,7 @@ function marked.get()
 	return t
 end
 
+-- TODO: allow set_current also generally for imagelist - traverse for gallery and open for viewer
 function marked.set_current(enabled, silent)
 	---@diagnostic disable-next-line: redefined-local
 	local api = swayimg[swayimg.get_mode()] ---@type swayimg.gallery
@@ -64,7 +65,7 @@ function marked.set_current(enabled, silent)
 	set_mark(img.path, enabled, silent)
 end
 
-function M.get_current() return swayimg[swayimg.get_mode()].get_image() end
+function M.get_current() return swi[swayimg.get_mode()].get_image() end
 function M.remove(x, silent)
 	local ci = M.get_current()
 	if x == ci.path then e.trigger { event = 'ImgChangedPre', data = ci } end
