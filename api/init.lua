@@ -117,7 +117,7 @@ swayimg.on_window_resize(function()
 			return
 		elseif x == false then
 			x = swi[swi.mode]
-			x.scale = x.default_scale -- fix incorrect initial size with overlay disabled
+			x.scale = x._raw_default_scale -- fix incorrect initial size with overlay disabled
 		end
 
 		x = true

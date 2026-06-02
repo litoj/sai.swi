@@ -129,15 +129,42 @@ can configure.
   g.map('/', function() fm.enabled = true end)
   ```
 
-### New scale settings
+### Custom default scaling modes
 
-- `keep_by_xxx`:
+- `keep_xxx`:
+  - keeps image view size constant (depending on chosen metric) regardless of image resolution
   - useful for comparing identical images of different sizes
   - you will stay zoomed into the same spot of the image even if the other image is half the
     resolution
-  - available metrics: …`width`/`height`/`size` - like `width`/`height`/`fit&fill` scaling is
-    relative to the window proportions, this is as well, but keeps the zoom level relative to it
-    instead of having a fixed zoom to fit the whole window
+  - `xxx` can be replaced with any of the default scaling names or `keep_size`
+- add your own:
+  ```lua
+  table.insert(
+    require('swi.api.viewer').custom_scale_handlers,
+    ---@param self swi.api.viewer
+    function(self, x)
+      if type(x) ~= 'table' or not x.width or not x.height then return end
+
+      e.subscribe {
+        event = 'ImgChanged',
+        match = 'viewer',
+        callback = function(ev)
+          if self._default_scale ~= x then return true end -- unsubscribe
+
+          local img = ev.data or error()
+          if x.width >= img.width and x.height >= img.height then return end
+
+          local xscale = x.width / img.width
+          local yscale = x.height / img.height
+          self.super.set_abs_scale(math.min(xscale, yscale))
+        end,
+      }
+
+      return 'real'
+    end
+  )
+  v.default_scale = { width = 2560, height = 1440 }
+  ```
 
 ### TODOs
 

@@ -10,7 +10,10 @@ local mode_text = require 'swi.api.mode_text'
 ---@field super swayimg.viewer
 ---@field _last {w:integer,h:integer,x:integer,y:integer}|false
 ---@field text swi.api.mode_text.base
-local M = {}
+local M = {
+	_scale = false, ---@type number|one_time_scale_t|false
+	_default_scale = 'optimal', ---@type default_scale_t
+}
 
 ---@return swi.viewer.panner
 local function new_panner(self)
@@ -44,29 +47,68 @@ local function new_go(api, api_name)
 	})
 end
 
----@param x default_scale_t|'keep_by_width'|'keep_by_height'|'keep_by_size'
-function M:set_default_scale(x)
-	if x:sub(1, 8) == 'keep_by_' then
-		if not ({ width = 1, height = 1, size = 1 })[x:sub(9)] then error('Invalid default scale: ' .. x) end
-		x = 'keep'
-		self._last = { w = 0, h = 0, x = 0, y = 0 }
+---@param factor_fn fun(last:lastimg, img:swayimg.image):number
+---@return fun(self:swi.api.viewer,x:default_scale_t):string
+local function gen_keep(factor_fn)
+	return function(self, x)
+		---@alias lastimg {w:integer,h:integer,x:integer,y:integer}
+		rawset(self, '_last', { w = 0, h = 0, x = 0, y = 0 })
 		e.subscribe {
 			event = 'ImgChangedPre',
-			mode = self.text._api_name,
-			group = '_cust_default_scale',
-			callback = function(state)
-				local i = state.data or error()
+			pattern = self.text._api_name,
+			callback = function(ev)
+				if self._default_scale ~= x then return true end
+
+				local img = ev.data or error()
 				---@diagnostic disable-next-line: assign-type-mismatch
-				self._last = self.super.get_position()
-				self._last.w = i.width
-				self._last.h = i.height
+				self._last = self.super.get_position() ---@type lastimg
+				self._last.w = img.width
+				self._last.h = img.height
 			end,
 		}
-	else
-		e.unsubscribe { group = '_cust_default_scale', match = self.text._api_name }
-		self._last = false
+		e.subscribe {
+			event = 'ImgChanged',
+			pattern = self.text._api_name,
+			callback = function(ev)
+				if self._default_scale ~= x then return true end
+
+				local last = self._last
+				if not last then return end -- adjust only when ImgChangedPre was fired
+				---@diagnostic disable-next-line: assign-type-mismatch
+				self._last = false
+
+				self.super.set_abs_scale(self.super.get_scale() * factor_fn(last, ev.data), 0, 0)
+				self.super.set_abs_position(last.x, last.y)
+			end,
+		}
+
+		return 'keep'
 	end
-	self.super.set_default_scale(x)
+end
+
+---@type {[default_scale_t|integer]:fun(self:swi.api.viewer,x:default_scale_t):string?}
+M.custom_scale_handlers = {
+	keep_width = gen_keep(function(last, img) return last.w / img.width end),
+	keep_height = gen_keep(function(last, img) return last.h / img.height end),
+	keep_size = gen_keep(function(last, img) return (last.w + last.h) / (img.width + img.height) end),
+	keep_fit = gen_keep(function(last, img) return math.min(last.w / img.width, last.h / img.height) end),
+	keep_fill = gen_keep(function(last, img) return math.max(last.w / img.width, last.h / img.height) end),
+}
+
+---@param x default_scale_t
+function M:set_default_scale(x)
+	local handled
+	if M.custom_scale_handlers[x] then handled = M.custom_scale_handlers[x](self, x) end
+	if not handled then
+		for _, f in ipairs(M.custom_scale_handlers) do
+			handled = f(self, x)
+			if handled then break end
+		end
+		if not handled then handled = x end
+	end
+
+	self._raw_default_scale = handled
+	self.super.set_default_scale(handled)
 end
 
 function M:set_scale(x)
@@ -77,9 +119,9 @@ function M:set_scale(x)
 	end
 end
 function M:get_scale()
-	local val = rawget(self, '_scale') or rawget(self, '_default_scale')
-	if type(val) == 'string' and val:sub(1, 4) == 'keep' then return self.super.get_scale() end
-	return val
+	if self._scale then return self._scale end
+	if self._raw_default_scale == 'keep' then return self.super.get_scale() end
+	return self._default_scale
 end
 
 function M:set_position(x)
@@ -101,14 +143,14 @@ end
 function M:set_preload_limit(x)
 	x = math.floor(x)
 	self.super.limit_preload(x)
-	rawset(self, '_preload_limit', x)
+	self._preload_limit = x
 	return true
 end
 
 function M:set_history_limit(x)
 	x = math.floor(x)
 	self.super.limit_history(x)
-	rawset(self, '_history_limit', x)
+	self._history_limit = x
 	return true
 end
 
@@ -118,7 +160,9 @@ function M.new(api_name)
 	local api = swayimg[api_name] ---@type swayimg.viewer
 	local self = {
 		super = api,
-		_last = false,
+
+		_history_limit = 0,
+		_preload_limit = 0,
 
 		--- https://github.com/artemsen/swayimg/blob/master/src/viewer.cpp#L29
 		_centering = true,
@@ -130,7 +174,6 @@ function M.new(api_name)
 	if api_name == 'viewer' then
 		self._default_scale = 'optimal'
 		self._window_background = 0xff000000
-		self._history_limit = 1
 		self.text = mode_text.new {
 			super = api,
 			_api_name = api_name,
@@ -153,7 +196,6 @@ function M.new(api_name)
 	else --- https://github.com/artemsen/swayimg/blob/master/src/slideshow.cpp#L17
 		self._default_scale = 'fit'
 		self._window_background = 'auto'
-		self._history_limit = 0
 		self.text = mode_text.new {
 			super = api,
 			_api_name = api_name,
@@ -163,6 +205,7 @@ function M.new(api_name)
 			_bottomright = {},
 		}
 	end
+	self._raw_default_scale = self._default_scale
 
 	---@cast self swi.api.viewer
 
@@ -171,7 +214,7 @@ function M.new(api_name)
 	self.go = new_go(api)
 	self.scale_centered = function(s, x, y)
 		api.set_abs_scale(s, x, y)
-		rawset(self, '_scale', s)
+		self._scale = s
 	end
 	self.open = function(path)
 		e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazy(api.get_image) }
@@ -180,40 +223,14 @@ function M.new(api_name)
 	end
 
 	self.export = function(path)
-		-- local ot = swi.text.status_timeout
-		local t = swayimg.text -- TODO: find a fix to get the message rendered
-		-- t.set_status_timeout(0)
-		-- t.set_status('Exporting to ' .. path)
-		-- self.reload(function()
 		api.export(path)
-		-- t.set_status_timeout(ot)
-		t.set_status 'Export done'
+		swayimg.text.set_status 'Export done'
 		e.trigger { event = 'User', match = 'ExportFinished', data = path }
-		-- end)
 	end
 
 	api.on_image_change(function()
-		local last = self._last
-		local img = last and api.get_image() or U.lazy(api.get_image)
-		e.trigger { event = 'ImgChanged', mode = api_name, match = api_name, data = img }
-
-		rawset(self, '_scale', nil)
-		if not last then return end
-		self._last = false -- to make changes only when ImgChangedPre was fired
-
-		---@diagnostic disable-next-line: undefined-field
-		local mode = self._default_scale:sub(9)
-
-		local f
-		if mode == 'width' then
-			f = last.w / img.width
-		elseif mode == 'height' then
-			f = last.h / img.height
-		elseif mode == 'size' then
-			f = (last.w + last.h) / (img.width + img.height)
-		end
-		api.set_abs_scale(api.get_scale() * f, 0, 0)
-		api.set_abs_position(last.x, last.y)
+		self._scale = false
+		e.trigger { event = 'ImgChanged', mode = api_name, match = api_name, data = U.lazy(api.get_image) }
 	end)
 
 	for k, v in pairs(M) do

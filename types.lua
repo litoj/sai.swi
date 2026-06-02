@@ -489,9 +489,11 @@ end
 ---| one_time_scale_t
 ---| "real"    # Real size (100%)
 ---| "keep"    # Keep the same scale as for previously viewed image
----| "keep_by_width"  # keep zoom level relative to image width
----| "keep_by_height" # keep zoom level relative to image height
----| "keep_by_size"   # keep zoom level relative to image overall size
+---| "keep_width"  # Keep zoom level relative to image width
+---| "keep_height" # Keep zoom level relative to image height
+---| "keep_size"   # Keep zoom level relative to average of width and height
+---| "keep_fit"    # Keep zoom level relative to
+---| "keep_fill"   # Keep zoom level relative to image height
 
 ---@class swi.viewer.panner Move around the image with ready-to-map functions
 ---@field default_size integer Default size of the step to make (in pixels)

@@ -443,6 +443,8 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 		elseif self.confirmed == false then
 			self._filtered = {} -- text was already removed so filtered files should be too
 			self._ordered_filtered_paths = {}
+			self.list_pager.lines = {}
+			self.list_pager.title = 'Matching images:\t'
 		end
 
 		M.super.set_enabled(self, false)

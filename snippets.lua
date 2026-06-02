@@ -100,7 +100,7 @@ function M.cycle_values(values, current)
 end
 
 function M.cycle_scale()
-	local api = swi[swi.mode] ---@type swi.viewer
+	local api = swi[swi.mode] ---@type swi.api.viewer
 	local modes = {
 		'optimal',
 		'width',
@@ -109,12 +109,13 @@ function M.cycle_scale()
 		'fill',
 		'real',
 		'keep',
-		'keep_by_width',
-		'keep_by_height',
-		'keep_by_size',
 	}
+	for k, _ in pairs(api.custom_scale_handlers) do
+		if type(k) == 'string' then modes[#modes + 1] = k end
+	end
 
-	local current = type(api.scale) == 'string' and api.scale or 'keep'
+	local current = api.scale
+	if type(current) ~= 'string' then current = 'keep' end
 	api.scale = M.cycle_values(modes, current)
 end
 
