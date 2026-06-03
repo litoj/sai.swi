@@ -5,7 +5,7 @@
 --------------------------------------------------------------------------------
 
 ---Main application class.
----@class swi:swi.api.proxy
+---@class swi: swi.api.proxy
 ---@field mode appmode_t Which mode is the application in
 ---@field antialiasing boolean Enable/disable antialiasing
 ---@field exif_orientation boolean Enable or disable changing orientation based on EXIF
@@ -315,7 +315,7 @@ function swi.eventloop.takeover_subscribe(cfg) end
 
 ---Image list
 ---Changes to the contents get emitted as OptionSet(`swi.imagelist.size`)
----@class swi.imagelist:swi.api.proxy
+---@class swi.imagelist: swi.api.proxy
 ---@field order order_t Image list sort order
 ---@field reverse boolean Reverse the sort order
 ---@field recursive boolean Recursive directory reading
@@ -337,14 +337,12 @@ do
 	function swi.imagelist.get() end
 
 	---Add entry to the image list.
-	---@param path string Path to add
-	---@param silent true? whether to supress emmiting size change event
-	function swi.imagelist.add(path, silent) end
+	---@param paths string|string[] Paths to add
+	function swi.imagelist.add(paths) end
 
 	---Remove entry from the image list.
-	---@param path string Path to remove
-	---@param silent true? whether to supress emmiting size change event
-	function swi.imagelist.remove(path, silent) end
+	---@param paths string|string[] Paths to remove
+	function swi.imagelist.remove(paths) end
 
 	---Helper for working with marks on images
 	---Changes to the size get emitted as OptionSet(`swi.imagelist.marked.size`)
@@ -361,8 +359,7 @@ do
 
 	---Toggle the marked state of the current entry.
 	---@param state boolean|'toggle'
-	---@param silent true? whether to supress emmiting size change event
-	function swi.imagelist.marked.set_current(state, silent) end
+	function swi.imagelist.marked.set_current(state) end
 end
 
 --------------------------------------------------------------------------------

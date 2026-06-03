@@ -15,21 +15,26 @@ local msize = 0
 local marked = M.marked
 local last_lsize = 0
 
-local function set_mark(x, enabled, silent)
+local function set_mark(x, enabled)
 	if msize ~= marked.size() then
-	elseif enabled == not mlist[x] then
-		if enabled then
-			mlist[x] = 1
-			msize = msize + 1
-		else
-			mlist[x] = nil
-			msize = msize - 1
-		end
 	else
-		return
+		local changed
+		for _, path in ipairs(type(x) == 'string' and { x } or x) do
+			if enabled == not mlist[path] then
+				if enabled then
+					mlist[path] = 1
+					msize = msize + 1
+				else
+					mlist[path] = nil
+					msize = msize - 1
+				end
+				changed = true
+			end
+		end
+		if not changed then return end
 	end
 
-	if not silent then e.trigger { event = 'OptionSet', match = 'swi.imagelist.marked.size', data = msize } end
+	e.trigger { event = 'OptionSet', match = 'swi.imagelist.marked.size', data = msize }
 end
 
 function marked.size()
@@ -56,27 +61,27 @@ function marked.get()
 end
 
 -- TODO: allow set_current also generally for imagelist - traverse for gallery and open for viewer
-function marked.set_current(enabled, silent)
+function marked.set_current(enabled)
 	---@diagnostic disable-next-line: redefined-local
 	local api = swayimg[swayimg.get_mode()] ---@type swayimg.gallery
 	local img = api.get_image()
 	if enabled == 'toggle' then enabled = not img.mark end
 	api.mark_image(enabled)
-	set_mark(img.path, enabled, silent)
+	set_mark(img.path, enabled)
 end
 
 function M.get_current() return swi[swayimg.get_mode()].get_image() end
-function M.remove(x, silent)
+function M.remove(x)
 	local ci = M.get_current()
 	if x == ci.path then e.trigger { event = 'ImgChangedPre', data = ci } end
 	api.remove(x)
 	set_mark(x, false)
-	if not silent then e.trigger { event = 'OptionSet', match = 'swi.imagelist.size', data = last_lsize } end
+	e.trigger { event = 'OptionSet', match = 'swi.imagelist.size', data = last_lsize }
 end
-function M.add(x, silent)
+function M.add(x)
 	api.add(x)
 	last_lsize = api.size()
-	if not silent then e.trigger { event = 'OptionSet', match = 'swi.imagelist.size', data = last_lsize } end
+	e.trigger { event = 'OptionSet', match = 'swi.imagelist.size', data = last_lsize }
 end
 
 return require('swi.api.proxy').new(M)

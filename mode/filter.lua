@@ -262,6 +262,14 @@ function M:complete(base)
 	end)
 end
 
+local function keys_not_in(map, minus)
+	local ret = {}
+	for path, _ in pairs(map) do
+		if not minus[path] then ret[#ret + 1] = path end
+	end
+	return ret
+end
+
 ---@protected
 function M:on_text_change()
 	if #self._text == 0 then return end
@@ -319,16 +327,8 @@ function M:on_text_change()
 			return
 		end
 
-		if swayimg.imagelist.set then
-			l.set(ordered_filtered_paths)
-		else
-			for _, path in ipairs(ordered_filtered_paths) do
-				if not of[path] then l.add(path) end
-			end
-			for path, _ in pairs(of) do -- not efficient because all added entries will get shifted back
-				if not nf[path] then l.remove(path) end
-			end
-		end
+		l.add(keys_not_in(nf, of))
+		l.remove(keys_not_in(of, nf))
 	end
 
 	self._ordered_filtered_paths = ordered_filtered_paths
@@ -400,14 +400,7 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 		end
 
 		if self.live_imagelist and #self._ordered_filtered_paths > 0 then
-			if swayimg.imagelist.set then
-				l.set(self._ordered_filtered_paths)
-			else
-				local fl = self._filtered
-				for path, _ in pairs(self._images) do
-					if not fl[path] then l.remove(path) end
-				end
-			end
+			l.remove(keys_not_in(self._images, self._filtered))
 		end
 	else -- val == false
 		if
@@ -415,27 +408,9 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 			and (not self.confirmed or not self.update_imagelist_on_confirm)
 			and #self._ordered_filtered_paths > 0
 		then
-			if swayimg.imagelist.set then
-				local path_list = {}
-				for k, _ in pairs(self._images) do
-					path_list[#path_list + 1] = k
-				end
-				l.set(path_list)
-			else
-				local fl = self._filtered
-				for path, _ in pairs(self._images) do
-					if not fl[path] then l.add(path) end
-				end
-			end
+			l.add(keys_not_in(self._images, self._filtered))
 		elseif not self.live_imagelist and self.confirmed and self.update_imagelist_on_confirm then
-			if swayimg.imagelist.set then
-				l.set(self._ordered_filtered_paths)
-			else
-				local fl = self._filtered
-				for path, _ in pairs(self._images) do
-					if not fl[path] then l.remove(path) end
-				end
-			end
+			l.remove(keys_not_in(self._images, self._filtered))
 		end
 
 		if self.confirmed then
