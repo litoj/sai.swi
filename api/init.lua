@@ -115,7 +115,7 @@ swayimg.on_window_resize(function()
 		if x == nil and not swi.overlay then
 			x = false
 			return
-		elseif x == false then
+		elseif x == false and swi.mode ~= 'gallery' then
 			x = swi[swi.mode]
 			x.scale = x._raw_default_scale -- fix incorrect initial size with overlay disabled
 		end

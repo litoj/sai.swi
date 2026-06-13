@@ -1,6 +1,7 @@
 ---@module 'swi.api.imagelist'
 
 local e = require 'swi.api.eventloop'
+local U = require 'swi.lib.utils'
 
 local api = swayimg.imagelist
 
@@ -70,7 +71,7 @@ function marked.set_current(enabled)
 	set_mark(img.path, enabled)
 end
 
-function M.get_current() return swi[swayimg.get_mode()].get_image() end
+function M.get_current() return swi[swayimg.get_mode()].get_image() or U.dummy_image end
 function M.remove(x)
 	local ci = M.get_current()
 	if x == ci.path then e.trigger { event = 'ImgChangedPre', data = ci } end

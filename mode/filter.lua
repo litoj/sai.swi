@@ -18,7 +18,7 @@ local binds = require('swi.binds').filter
 ---@field completion swi.lib.pager
 ---@field selected_pos integer the index of the current filtered image or 0 for no match
 ---@field protected _images {[string]:imgmeta}
----@field protected _loaded_tags {[string]:true} tags that have been loaded and evaluated
+---@field private _loaded_tags {[string]:boolean} list of available tags and if they've been loaded
 local M = {
 	super = require 'swi.mode.input',
 	_path = 'swi.mode.filter',
@@ -68,7 +68,7 @@ function M:new()
 		_max_height = 10,
 	}
 	self._images = {}
-	self._loaded_tags = {}
+	self._loaded_tags = { path = true, size = true, mtime = true }
 	M.super.new(self)
 	binds(self)
 
@@ -189,25 +189,28 @@ function M:make_filter(line)
 	oper = cmp[oper]
 	oper = debug.getinfo(oper, 'u').nparams == 1 and oper or oper()
 	if oper then
-		if tag ~= 'self' then self:_load_tag(tag) end
-		return { tag, oper }
+		if tag ~= 'self' then tag = self:_load_tag(tag) end
+		if tag then return { tag, oper } end
 	end
 end
 
 ---@private
 ---@param tag string
+---@return string? # actual name of the tag
 function M:_load_tag(tag)
-	if self._loaded_tags[tag] or select(2, next(self._images))[tag] ~= nil then return end
+	local tmap = self._loaded_tags
+	tag = tag:find('.', 0, true) and tag
+		or (tmap['Exif.Photo.' .. tag] ~= nil and 'Exif.Photo.' .. tag)
+		or (tmap['Exif.Image.' .. tag] ~= nil and 'Exif.Image.' .. tag)
+		or tag
+	if tmap[tag] ~= false then return tmap[tag] and tag end
 
 	for _, i in pairs(self._images) do
-		i[tag] = U.parse_exif_val(
-			tag:find('.', 0, true) and i.meta[tag] --
-				or i.meta['Exif.Photo.' .. tag]
-				or i.meta['Exif.Image.' .. tag]
-		)
+		i[tag] = U.parse_exif_val(i.meta[tag])
 	end
 
-	self._loaded_tags[tag] = true
+	tmap[tag] = true
+	return tag
 end
 
 -- TODO: also use it to create a walkable directory tree / bookmarks etc
@@ -228,24 +231,14 @@ function M:complete(base)
 		return
 	end
 
-	local _, img = next(self._filtered)
-	if not img then return end
-
 	local hits = {} ---@type {[1]:integer,[2]:string}[]
 
-	-- Top-level entry fields (path, format, width, height, etc.)
-	for k, v in pairs(img) do
-		if type(v) ~= 'table' and not self._loaded_tags[k] then
-			v = self:rate(base, k)
-			if v then hits[#hits + 1] = { v, k } end
-		end
-	end
-
 	local just_name = not base:find('.', 1, true)
-	for k, v in pairs(img.meta or {}) do
+	local rating
+	for k in pairs(self._loaded_tags) do
 		---@diagnostic disable-next-line: cast-local-type
-		v = self:rate(base, just_name and k:match '[^.]*$' or k)
-		if v then hits[#hits + 1] = { v, k } end
+		rating = self:rate(base, just_name and k:match '[^.]*$' or k)
+		if rating then hits[#hits + 1] = { rating, k } end
 	end
 
 	table.sort(hits, function(a, b) return a[1] < b[1] or (a[1] == b[1] and a[2] < b[2]) end)
@@ -371,9 +364,14 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 		M.super.set_enabled(self, true)
 		-- Snapshot the full image list before filtering
 		if not next(self._images) or not self.update_imagelist_on_confirm then
+			local timer = U.timer()
 			local imap = self._images
 			local ilist = l.get() ---@type imgmeta[]
+			timer 'Got imagelist'
+			exiv2.load_all(ilist)
+			timer 'Loaded metadata'
 			self._imagelist = ilist
+			local tmap = self._loaded_tags
 			for i, img in ipairs(ilist) do
 				if imap[img.path] then -- update existing entries instead of reloading exif
 					img = imap[img.path]
@@ -382,14 +380,12 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 				else
 					imap[img.path] = img
 					img.out = self:render_item(img) -- load representations of all items
+					for k in pairs(img.meta) do
+						tmap[k] = false
+					end
 				end
 			end
-			if swayimg.imagelist.set then
-				self.swi.imagelist.order = 'none' -- we already know the order
-			end
-			local timer = U.timer()
-			exiv2.load_all(ilist)
-			timer 'Metadata of all images loaded'
+			timer 'Available metadata gathered'
 			self._filtered = imap
 			self:on_text_change()
 

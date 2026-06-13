@@ -39,7 +39,7 @@ local function new_go(api, api_name)
 	return setmetatable({}, {
 		__index = function(tbl, idx)
 			tbl[idx] = function()
-				e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazy(api.get_image) }
+				e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazyimg(api) }
 				api.switch_image(idx)
 			end
 			return tbl[idx]
@@ -217,7 +217,7 @@ function M.new(api_name)
 		self._scale = s
 	end
 	self.open = function(path)
-		e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazy(api.get_image) }
+		e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazyimg(api) }
 		api.open(path)
 		e.trigger { event = 'OptionSet', mode = api_name, match = 'swi.imagelist.size', data = swi.imagelist.size() }
 	end
@@ -230,7 +230,7 @@ function M.new(api_name)
 
 	api.on_image_change(function()
 		self._scale = false
-		e.trigger { event = 'ImgChanged', mode = api_name, match = api_name, data = U.lazy(api.get_image) }
+		e.trigger { event = 'ImgChanged', mode = api_name, match = api_name, data = U.lazyimg(api) }
 	end)
 
 	for k, v in pairs(M) do

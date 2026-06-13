@@ -97,7 +97,7 @@ e.subscribe {
 		if ev.data and swi.initialized then
 			local smt = swi[swi.mode].text
 			for placement, config in pairs(smt._tracked) do
-				render_on_img(config, smt.super, placement, U.lazy(smt.super.get_image))
+				render_on_img(config, smt.super, placement, U.lazyimg(smt.super))
 			end
 		end
 	end,
@@ -121,7 +121,7 @@ local function initialize(self)
 			callback = function()
 				render_on_img = _roi
 				for placement, config in pairs(tracked) do
-					render_on_img(config, self.super, placement, U.lazy(self.super.get_image))
+					render_on_img(config, self.super, placement, U.lazyimg(self.super))
 				end
 			end,
 		}
@@ -190,7 +190,7 @@ function M:__newindex(placement, x)
 		new_tr.processed = processed
 		self._tracked[placement] = new_tr
 		if swayimg.get_mode() == self._api_name then
-			render_on_img(new_tr, self.super, placement, U.lazy(self.super.get_image))
+			render_on_img(new_tr, self.super, placement, U.lazyimg(self.super))
 		end
 	else
 		if self._tracked then self._tracked[placement] = nil end

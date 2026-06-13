@@ -2,6 +2,7 @@
 ---@module 'swi.api.gallery'
 
 local e = require 'swi.api.eventloop'
+local U = require 'swi.lib.utils'
 
 local api = swayimg.gallery
 
@@ -51,7 +52,12 @@ M.text = require('swi.api.mode_text').new {
 M.go = setmetatable({}, {
 	__index = function(tbl, idx)
 		tbl[idx] = function()
-			e.trigger { event = 'ImgChangedPre', mode = 'gallery', match = 'gallery', data = api.get_image() }
+			e.trigger {
+				event = 'ImgChangedPre',
+				mode = 'gallery',
+				match = 'gallery',
+				data = api.get_image() or U.dummy_image,
+			}
 			api.switch_image(idx)
 		end
 		return tbl[idx]
@@ -89,12 +95,15 @@ M.set_border_size = set_size
 -- injecting function to also affect mode_text
 local api_get_img = api.get_image
 function api.get_image()
-	return setmetatable(api_get_img(), {
-		__index = function(self, idx)
-			if idx == 'meta' then self.meta = require('swi.lib.exiv2').get_meta(self.path) end
-			return rawget(self, idx)
-		end,
-	})
+	local img = api_get_img()
+	return img
+			and setmetatable(img, {
+				__index = function(self, idx)
+					if idx == 'meta' then self.meta = require('swi.lib.exiv2').get_meta(self.path) end
+					return rawget(self, idx)
+				end,
+			})
+		or nil
 end
 
 e.subscribe { -- ad-hoc registering for when user wants to subscribe
@@ -107,7 +116,14 @@ e.subscribe { -- ad-hoc registering for when user wants to subscribe
 		if not h.mode.gallery and not h.pattern.gallery then return end
 
 		api.on_image_change(
-			function() e.trigger { event = 'ImgChanged', mode = 'gallery', match = 'gallery', data = api.get_image() } end
+			function()
+				e.trigger {
+					event = 'ImgChanged',
+					mode = 'gallery',
+					match = 'gallery',
+					data = api.get_image() or U.dummy_image,
+				}
+			end
 		)
 	end,
 }

@@ -1,16 +1,26 @@
 ---@module 'swi.lib.utils'
 local U = { debug_perf = os.getenv 'DEBUG_PERF' == '1' }
 
----@generic O
----@param loader fun():`O`
----@return O
-function U.lazy(loader)
+---@type swayimg.image
+---@diagnostic disable-next-line: missing-fields
+U.dummy_image = {
+	path = 'dummy image',
+	index = -1,
+	meta = {},
+	format = '',
+}
+
+---@param api swayimg.viewer
+---@return swayimg.image
+function U.lazyimg(api)
 	return setmetatable({}, {
 		__index = function(self, idx)
-			loader = loader()
-			-- load just once and replace this loader with the actual data
-			setmetatable(self, { __index = loader })
-			return loader[idx]
+			-- load just once and replace with the actual data
+			---@diagnostic disable-next-line: cast-local-type
+			api = api.get_image() or U.dummy_image
+			setmetatable(self, { __index = api })
+
+			return api[idx]
 		end,
 	})
 end
