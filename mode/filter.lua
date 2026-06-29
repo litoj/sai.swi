@@ -5,7 +5,7 @@ local U = require 'swi.lib.utils'
 local pager = require 'swi.lib.pager'
 local exiv2 = require 'swi.lib.exiv2'
 local l = swi.imagelist
-local binds = require('swi.binds').filter
+local binds = require('swi.binds')
 
 ---@alias imgmeta {out:string,filtered_idx:integer,[string]:string|number}|swayimg.image
 
@@ -70,7 +70,7 @@ function M:new()
 	self._images = {}
 	self._loaded_tags = { path = true, size = true, mtime = true }
 	M.super.new(self)
-	binds(self)
+	binds.filter(self)
 
 	return self
 end
@@ -93,32 +93,10 @@ end
 ---@param max_penalty integer? at what point to abort matching
 ---@return integer? penalty - how accurate the match was (lower=better)
 function M:rate(base, tag, rate_start, max_penalty)
-	local bi = 1
-	local ti = 1
 	if self.tag_completion == 'i' then tag = tag:lower() end
-	local penalty = tag:find(base, 1, true)
-	if penalty then
-		penalty = (rate_start ~= false and penalty or 0) - #base
-	else
-		penalty = 0
-		if rate_start == false then
-			ti = tag:find(base:sub(bi, bi), ti, true)
-			if not ti then return end
-			bi = bi + 1
-		end
-
-		max_penalty = max_penalty or 2147483648
-		while bi <= #base do
-			local f = tag:find(base:sub(bi, bi), ti, true)
-			if not f then return end
-			penalty = penalty + f - ti - 1
-			if penalty > max_penalty then return end
-			ti = f
-			bi = bi + 1
-		end
-	end
-
-	return penalty
+	local s, e = U.fuzzy_find(tag, base, max_penalty)
+	if not s or (rate_start and s > 1) then return end
+	return e - s
 end
 
 ---@protected
@@ -142,7 +120,7 @@ function M:make_filter(line)
 		return {
 			'path',
 			self.default_filter == 0 and function(p) return p:find(line, 1, true) end --
-				or function(p) return self:rate(line, p, false, math.floor((self.default_filter - 1) * #line)) end,
+				or function(p) return self:rate(line, p, false, self.default_filter) end,
 		}
 	elseif #tag == 0 and oper ~= ':' then
 		return swi.notify 'Tag can be omitted only with the ":" (code) operator'

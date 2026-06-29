@@ -1,4 +1,5 @@
 ---@module 'swi.lib.utils'
+---@class swi.lib.utils
 local U = { debug_perf = os.getenv 'DEBUG_PERF' == '1' }
 
 ---@type swayimg.image
@@ -347,6 +348,30 @@ function U.timer()
 		print(tmsg .. '; cpu in ms:\t' .. math.floor((os.clock() - time) * 1000))
 		time = os.clock()
 	end
+end
+
+---Detect if a string can be matched by leaving out up to `max_misses` chars.
+---@param str string tested string
+---@param match string what should it contain
+---@param max_misses integer? max characters to be skipped (0 = like :find())
+---@return integer? start
+---@return integer? end
+function U.fuzzy_find(str, match, max_misses)
+	local s, e = str:find(match, 1, true)
+	if s or max_misses == 0 then return s, e end
+
+	s = str:find(match:sub(1, 1), 1, true)
+	if not s then return end
+	local si, mi = s + 1, 2
+	max_misses = max_misses and (s + #match + max_misses) or 1024
+
+	while mi <= #match and si <= max_misses do
+		e = str:find(match:sub(mi, mi), si, true)
+		if not e then return end
+		si, mi = e + 1, mi + 1
+	end
+
+	if si <= max_misses then return s, si end
 end
 
 return U

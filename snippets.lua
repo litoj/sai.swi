@@ -180,32 +180,4 @@ function M.two_pane_mode(key)
 	return tp
 end
 
----@param key? string key to enter the mode (default: ':')
----@param mode? appmode_t in which mode to register (default: all)
-function M.cmd_mode(key, mode)
-	local cm = { ---@class cmd_mode: swi.mode.input
-		super = require 'swi.mode.input',
-		_path = 'swi.mode.cmd',
-		_prompt = 'Code: ',
-	}
-	function cm:on_confirm(out)
-		if not out then
-			self.text = ''
-			return
-		end
-
-		self.enabled = false -- disable first to avoid any messages overriding code work
-		local cb, err = loadstring(out)
-		if not cb or err then return swi.text.set_status(err) end
-		cb()
-	end
-
-	cm.super.new(cm)
-
-	cm.map('Shift+Return', '\n')
-	require('swi.binds').map(mode or 'a', key or ':', function() cm.enabled = true end)
-	-- TODO: add autocompletion and history
-	return cm
-end
-
 return M

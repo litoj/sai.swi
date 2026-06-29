@@ -235,6 +235,8 @@ end
 
 ---@param self swi.mode.filter
 function M.filter(self)
+	self.map('Shift+Return', '\n')
+
 	-- Important actions that should be displayed in help list
 	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
 	map('Ctrl+j', function() self.selected_pos = self.selected_pos + 1 end, 'next filtered image')
@@ -247,8 +249,26 @@ function M.filter(self)
 		self._col = li.to
 		self:insert(cl[1])
 	end, 'Complete tag')
+end
 
-	self.map('Shift+Return', function() self:insert '\n' end, 'Insert newline')
+---@param self swi.mode.cmd
+function M.cmd(self)
+	self.map('Shift+Return', '\n')
+
+	self.map('Up', function()
+		if self.text:find('\n', 1, true) then
+			self.line = self.line - 1
+		else
+			self:hist_prev()
+		end
+	end)
+	self.map('Down', function()
+		if self.text:find('\n', 1, true) then
+			self.line = self.line + 1
+		else
+			self:hist_next()
+		end
+	end)
 end
 
 ---@private

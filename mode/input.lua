@@ -2,7 +2,7 @@
 ---@module 'swi.mode.input'
 
 local U = require 'swi.lib.utils'
-local binds = require('swi.binds').input
+local binds = require 'swi.binds'
 
 ---A text input mode that captures key events for text entry.
 ---Configure hooks and parameters before enabling.
@@ -33,7 +33,7 @@ local M = {
 	_location = 'status', ---@protected
 
 	-- Visible state
-	_text = '', ---@private must use the setter, otherwise column is out of whack
+	_text = '', ---@protected must use the setter, otherwise column is out of whack
 	_col = 1, ---@protected 1-based
 	---@type integer|false indicates end of selection when available (1-based)
 	_visual = false, ---@protected
@@ -58,7 +58,7 @@ function M:_rawmap(b, cfg, fn)
 	if type(fn) == 'string' then
 		---@diagnostic disable-next-line: duplicate-set-field
 		cfg.cb = function() self:insert(fn) end
-		cfg.kind = 'private'
+		if not cfg.desc then cfg.kind = 'private' end
 		M.super._rawmap(self, b, cfg, cfg.cb)
 		return
 	end
@@ -86,7 +86,7 @@ function M:new()
 	for key, char in pairs(U.rev_key_map) do
 		if #char == 1 then maps[key] = { cb = char, trace = self._path, _traced = true } end
 	end
-	binds(self)
+	binds.input(self)
 
 	return self
 end
@@ -211,11 +211,15 @@ function M:get_current_line_info()
 end
 
 ---@protected
----Primitive fallback trying to guess the new cursor position after changing the text
+---Updates and renders text, moving the cursor to stay relative to text following it
 ---@param val string
 function M:set_text(val)
+	if self._col > #val or self._col > #self._text then
+		self._col = #val + 1
+	elseif select(2, val:find(self._text:sub(self._col), 1, true)) == #val then
+		self._col = #val - (#self._text - self._col)
+	end
 	self._text = val
-	if self._col > #val then self._col = #val + 1 end
 
 	if self._enabled and self.on_text_change then self:on_text_change(self._text) end
 	self:render()
