@@ -51,6 +51,11 @@ function swi.notify(msg) end
 ---@param msg string
 function swi.log(msg) end
 
+---Schedule function execution to after `ms`.
+---@param ms integer
+---@param cb fun()
+function swi.defer_fn(ms, cb) end
+
 ---Exit from application.
 ---NOTE: exits only if all SwiLeavePre hooks deregister!
 ---@param code? integer Program exit code, `0` by default
@@ -401,8 +406,8 @@ do
 	---Map a keyboard or mouse event to an action.
 	---@param bind string|string[] 1 or more mouse or keyboard events to map - `Alt+s`, etc.
 	---@param action fun()|string callback function to run or shell command to execute
-	---@param desc string? optional description of the action
-	function keybind_processor.map(bind, action, desc) end
+	---@param opts bindcfg|string? optional description or other options for the keybind
+	function keybind_processor.map(bind, action, opts) end
 
 	---@class bindcfg
 	---@field cb function|string the action that runs on the binding activation (or the shell command)

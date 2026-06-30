@@ -64,8 +64,8 @@ https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
 - style-agnostic keybinds: use gui-, imv- or **vim-style** keybinds or any style that's right for
   you
   ```lua
-  --        gui,      vim,    imv-gui,  chaos (please don't!)
-  g.map({ 'Shift+m', '<S- >', 'Alt-h',   'C-S+Alt-_' }, function()
+  --        gui,      vim,    imv-gui, multi-click
+  g.map({ 'Shift+m', '<S- >', 'Alt-h', 'C-2-LMB' }, function()
   	l.marked.set_current 'toggle'
   	g.go.left()
   end)
@@ -184,7 +184,8 @@ Snippets include:
 - cycling fixed scaling and position modes
 - notifying on shell command output
 - pretty print tables - replace default tostring() method for better table conversion
-- two-pane and cmd modes
+- command mode for live-executing lua with command history support
+- two-pane mode for viewing images side-by-side
 
 ### ⚠️ Limitations
 

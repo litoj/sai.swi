@@ -40,7 +40,7 @@ function M:new()
 	if self._mappings then
 		local trace = U.pretty_trace('keybind_processor.+new', debug.traceback())
 		for k, v in pairs(self._mappings) do
-			local newkey = U.transform_key(k)
+			local newkey = U.normalize_key(k)
 			if k ~= newkey then
 				self._mappings[k] = nil
 				self._mappings[newkey] = v
@@ -55,23 +55,22 @@ function M:new()
 	end
 
 	self.remap = function(b, cfg)
-		b = U.transform_key(b)
+		b = U.normalize_key(b)
 		local old = self._mappings[b]
 		cfg.trace = cfg.trace or cfg.kind or debug.traceback()
 		self:_setmap(b, cfg)
 		return old
 	end
 
-	self.unmap = function(b) M:_setmap(U.transform_key(b)) end
+	self.unmap = function(b) M:_setmap(U.normalize_key(b)) end
 
 	local function pretty_trace(trace) return U.pretty_trace('keybind_processor.+map', trace) end
 
-	self.map = function(bind, action, desc)
-		local bindcfg = { ---@type bindcfg
-			cb = action,
-			desc = desc,
-			trace = debug.traceback(),
-		}
+	self.map = function(bind, action, opts_or_desc)
+		local bindcfg = type(opts_or_desc) == 'table' and opts_or_desc or {} ---@type bindcfg
+		bindcfg.cb = action
+		if type(opts_or_desc) == 'string' then bindcfg.desc = opts_or_desc end
+		bindcfg.trace = debug.traceback()
 
 		for _, b in ipairs(U.tabled(bind)) do
 			local old = self.remap(b, bindcfg)

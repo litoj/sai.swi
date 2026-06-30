@@ -15,7 +15,7 @@ local M = {
 	_hist_pos = 0, ---@private position in the history list when cycling
 	_hist_matcher = '', ---@private cached user text for history cycling
 }
--- TODO: add autocompletion
+-- TODO: add autocompletion, likely just for paths and potentially variables
 
 ---@return swi.mode.cmd
 function M:new()

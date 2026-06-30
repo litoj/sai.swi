@@ -139,6 +139,32 @@ function M.default()
 	end, 'Zoom out at cursor')
 end
 
+---@private
+--- Support function for generating updater of default keybinds.
+---@param modeapi keybind_processor|swi.lib.keybind_processor
+---@param defaults? bindcfg|{}
+---@return fun(b:string|string[], action:fun(), desc:string)
+function M.gen_mapadd(modeapi, defaults)
+	local deftrace = U.pretty_trace('custom_map', debug.traceback())
+	defaults = defaults or {}
+	defaults.trace = deftrace
+	---@diagnostic disable-next-line: inject-field
+	defaults._traced = true
+
+	return function(binds, cb, desc)
+		local cfg = U.soft_copy(defaults)
+		cfg.cb = cb
+		cfg.desc = desc
+		if binds[1] then
+			for _, b in ipairs(binds) do
+				if not modeapi._mappings[b] then modeapi._mappings[b] = cfg end
+			end
+		else
+			if not modeapi._mappings[binds] then modeapi._mappings[binds] = cfg end
+		end
+	end
+end
+
 ---@param self swi.mode.help
 function M.help(self)
 	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
@@ -269,32 +295,6 @@ function M.cmd(self)
 			self:hist_next()
 		end
 	end)
-end
-
----@private
---- Support function for generating updater of default keybinds.
----@param modeapi keybind_processor|swi.lib.keybind_processor
----@param defaults? bindcfg|{}
----@return fun(b:string|string[], action:fun(), desc:string)
-function M.gen_mapadd(modeapi, defaults)
-	local deftrace = U.pretty_trace('custom_map', debug.traceback())
-	defaults = defaults or {}
-	defaults.trace = deftrace
-	---@diagnostic disable-next-line: inject-field
-	defaults._traced = true
-
-	return function(binds, cb, desc)
-		local cfg = U.soft_copy(defaults)
-		cfg.cb = cb
-		cfg.desc = desc
-		if binds[1] then
-			for _, b in ipairs(binds) do
-				if not modeapi._mappings[b] then modeapi._mappings[b] = cfg end
-			end
-		else
-			if not modeapi._mappings[binds] then modeapi._mappings[binds] = cfg end
-		end
-	end
 end
 
 return M

@@ -33,8 +33,8 @@ function M:new()
 	M.super.new(U.new_object(self, M))
 	binds(self)
 
-	self.swi.viewer.default_scale = 'keep_by_width'
-	self.swi.slideshow.default_scale = 'keep_by_width'
+	self.swi.viewer.default_scale = 'keep_width'
+	self.swi.slideshow.default_scale = 'keep_width'
 	self.swi.text.enabled = true
 	local gspace = swi.gallery.thumb_size + swi.gallery.padding_size
 	self.swi.gallery(function(g)

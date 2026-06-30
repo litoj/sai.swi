@@ -140,7 +140,7 @@ U.rev_key_map = U.rev_idx(U.key_map)
 ---Parse vim-like shortcuts into classic gui-style.
 ---@param bind string
 ---@return string
-function U.transform_key(bind)
+function U.normalize_key(bind)
 	if bind:match '^<.+>$' then bind = bind:sub(2, -2) end
 	bind = bind:gsub('[AM][+-]', 'Alt+', 1):gsub('S[+-]', 'Shift+', 1):gsub('C[+-]', 'Ctrl+', 1)
 
@@ -150,6 +150,8 @@ function U.transform_key(bind)
 		local key = bind:match '[^+-]*.$'
 		bind = bind:sub(1, -#key - 1) .. (U.key_map[key] or key)
 	end
+
+	bind = bind:gsub('Alt+(.*)Ctrl', '%1Ctrl+Alt'):gsub('Shift+(.*)Alt', '%1Alt+Shift')
 	return bind
 end
 
