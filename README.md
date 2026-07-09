@@ -20,7 +20,7 @@ What's up with the name? You tell me:
 ## ✨ Complete list of Features (_click to expand_)
 
 - All basic features that swayimg should have by default.
-- Focus on extensibility and ease of use. (includes convertor for 4.x ini configs)
+- Focus on extensibility and ease of use.
 - **Custom modes!** - exemplary usage of filtering mode:
 
 https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
@@ -211,21 +211,6 @@ v.map('Alt+F5', require('swi.snippets').update) -- for just viewer mode
 
 local map = require 'swi.binds' -- for any mode combo
 map('a', 'Alt+F5', require('swi.snippets').update)
-```
-
-### 🏠 Keep and convert your 4.x INI config
-
-```sh
-luajit ~/.config/swayimg/swi/convertor.lua > ~/.config/swayimg/init.lua
-```
-
-Now you can open them side by side to see how the structure has changed.
-
-If you want to keep using your old config, you can also load it on startup dynamically:
-
-```lua
--- ~/.config/swayimg/init.lua
-require('swi.convertor').load()
 ```
 
 ### Use the API
