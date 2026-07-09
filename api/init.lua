@@ -40,25 +40,6 @@ function M.log(msg)
 	swayimg.text.set_status(string.gsub(msg, '\t', '  '))
 end
 
-local deferred_queue
-function M.defer_fn(ms, cb)
-	if not deferred_queue then
-		deferred_queue = {}
-
-		local hook = function()
-			deferred_queue[1]()
-			table.remove(deferred_queue, 1)
-		end
-
-		swayimg.gallery.on_signal('USR2', hook)
-		swayimg.viewer.on_signal('USR2', hook)
-		swayimg.slideshow.on_signal('USR2', hook)
-	end
-
-	os.execute(string.format('sleep %f && pkill -USR1 -x swayimg &', ms / 1000))
-	deferred_queue[#deferred_queue + 1] = cb
-end
-
 function M.notify(msg) swayimg.text.set_status(string.gsub(msg, '\t', '  ')) end
 
 -- TODO: how to make stderr appear? 2>&1 doesn't work

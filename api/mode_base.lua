@@ -17,7 +17,7 @@ function M.new(self, api_name)
 	local api = self.super ---@diagnostic disable-line: undefined-field
 	---@diagnostic disable: inject-field
 	self._path = 'swi.' .. api_name
-	self.multi_click_delay = 175
+	self.multiclick_delay = 0.175
 
 	--- https://github.com/artemsen/swayimg/blob/master/src/appmode.cpp#L11
 	self._mark_color = 0xff808080
@@ -79,7 +79,7 @@ function M.new(self, api_name)
 				end
 
 				local old_cnt = cnt
-				swi.defer_fn(self.multi_click_delay, function()
+				swi.defer(self.multiclick_delay, function()
 					if cnt == old_cnt then -- user didn't click again
 						if map[cnt] then -- run the action for cnt
 							exec()
