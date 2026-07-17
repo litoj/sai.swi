@@ -51,10 +51,10 @@ function sai.notify(msg) end
 ---@param msg string
 function sai.log(msg) end
 
----Execute deferred procedure.
----@param seconds number Delay in seconds (can be fractional)
----@param fn function Function to execute
-function sai.defer(seconds, fn) end
+---Schedule function execution to after `ms`.
+---@param ms integer
+---@param cb fun()
+function sai.defer_fn(ms, cb) end
 
 ---Exit from application.
 ---NOTE: exits only if all SwiLeavePre hooks deregister!
@@ -463,7 +463,7 @@ do
 	---@field text mode_base.text access to setting the overlay fields/indexes
 	---@field mark_color integer Mark icon color in ARGB format
 	---@field pinch_factor number how aggressive should the effect be
-	---@field multiclick_delay number time for coupling mouse clicks as one mouse event (in seconds)
+	---@field multiclick_delay integer ms for coupling mouse clicks as one mouse event
 	local mode_base = {}
 
 	---Reload current view. Causes ImgChanged event.

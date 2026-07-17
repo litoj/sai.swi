@@ -42,6 +42,26 @@ end
 
 function M.notify(msg) swayimg.text.set_status(string.gsub(msg, '\t', '  ')) end
 
+local deferred_heap = require 'sai.api.deferred_heap'
+---Schedules the next callback for swayimg.defer() and reschedule itself.
+local function cb_rescheduler()
+	local next_delay = deferred_heap:time_to_next() -- what is the earliest next cb to run
+	if next_delay == nil then return end
+
+	swayimg.defer(next_delay / 1000, function()
+		deferred_heap:pop()()
+		cb_rescheduler() -- reschedule for next callback
+	end)
+end
+function M.defer_fn(ms, cb)
+	deferred_heap:push(ms, cb)
+	if #deferred_heap == 1 then
+		swayimg.defer(ms / 1000, function() deferred_heap:pop()() end)
+	else
+		cb_rescheduler()
+	end
+end
+
 -- TODO: how to make stderr appear? 2>&1 doesn't work
 function M.exec(cmd)
 	local abort
