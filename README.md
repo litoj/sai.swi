@@ -7,7 +7,7 @@ _Swayimg API Improved_
   - Provides the quality of life improvements and api aesthetics like a hairping
   - Is much more powerful and completely replaces the original api like a sword overrules a stick
 
-## Overview
+### Quick Overview
 
 - All basic features that swayimg should have by default.
   - shorter and easier to type when accessing the api
@@ -65,8 +65,8 @@ https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
 - style-agnostic keybinds: use gui-, imv- or **vim-style** keybinds or any style that's right for
   you
   ```lua
-  --        gui,      vim,    imv-gui, multi-click
-  g.map({ 'Shift+m', '<S- >', 'Alt-h', 'C-2-LMB' }, function()
+  --        gui,      vim,    imv-gui, tripple-ctrl-click
+  g.map({ 'Shift+m', '<S- >', 'Alt-h', 'C-3-LMB' }, function()
   	l.marked.set_current 'toggle'
   	g.go.left()
   end)
