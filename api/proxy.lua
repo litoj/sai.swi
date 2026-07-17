@@ -1,13 +1,13 @@
----@module 'swi.api.proxy'
+---@module 'sai.api.proxy'
 
-local e = require 'swi.api.eventloop'
+local e = require 'sai.api.eventloop'
 
 ---Api conversion provider
----@class swi.api.proxy: swi.lib.backer
+---@class sai.api.proxy: sai.lib.backer
 ---@field protected super table the api that we are replacing and redirecting calls to
 
 ---@private
----@class proxy: swi.api.proxy
+---@class proxy: sai.api.proxy
 local M = {}
 
 function M.__index(self, idx)
@@ -61,7 +61,7 @@ end
 
 ---Create a dynamic table where variable I/O can be custom-defined
 ---Practically a metatable designed for automatic passthrough to a different api.
----@generic O: swi.api.proxy
+---@generic O: sai.api.proxy
 ---@return O self
 function M:new()
 	if self._trigger == nil then self._trigger = true end

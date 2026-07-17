@@ -1,15 +1,15 @@
 ---@diagnostic disable: invisible, undefined-field
----@module 'swi.binds'
+---@module 'sai.binds'
 
-local U = require 'swi.lib.utils'
+local U = require 'sai.lib.utils'
 
 local M = {}
 
-local g = swi.gallery
-local v = swi.viewer
-local s = swi.slideshow
-local t = swi.text
-local l = swi.imagelist
+local g = sai.gallery
+local v = sai.viewer
+local s = sai.slideshow
+local t = sai.text
+local l = sai.imagelist
 
 ---@alias bindmode
 ---| 'v' # viewer mode
@@ -18,7 +18,7 @@ local l = swi.imagelist
 ---| '' # slideshow and viewer modes
 ---| 'a' # all modes
 
----@type {[string]:{[integer]:swi.lib.keybind_processor|keybind_processor}}
+---@type {[string]:{[integer]:sai.lib.keybind_processor|keybind_processor}}
 M.modemap = { [''] = { v, s }, a = { v, s, g }, g = { g }, v = { v }, s = { s } }
 
 ---@param mode bindmode
@@ -46,17 +46,17 @@ function M.default()
 	map(
 		'a',
 		{ 'F1', U.key_map['?'] },
-		function() require('swi.mode.help').enabled = not require('swi.mode.help').enabled end,
+		function() require('sai.mode.help').enabled = not require('sai.mode.help').enabled end,
 		'Toggle help'
 	)
 
 	-- Global keybinds
-	map('a', 'Return', function() swi.mode = swi.mode == 'gallery' and 'viewer' or 'gallery' end, 'Toggle viewer')
-	map('a', 'Escape', swi.exit, 'Exit application')
-	map('a', 's', function() swi.mode = swi.mode == 'slideshow' and 'viewer' or 'slideshow' end, 'Toggle slideshow')
+	map('a', 'Return', function() sai.mode = sai.mode == 'gallery' and 'viewer' or 'gallery' end, 'Toggle viewer')
+	map('a', 'Escape', sai.exit, 'Exit application')
+	map('a', 's', function() sai.mode = sai.mode == 'slideshow' and 'viewer' or 'slideshow' end, 'Toggle slideshow')
 	map('a', 'Insert', function() l.marked.set_current 'toggle' end, 'Toggle mark on current entry')
-	map('a', 'f', function() swi.fullscreen = not swi.fullscreen end, 'Toggle fullscreen')
-	map('a', 'a', function() swi.antialiasing = not swi.antialiasing end, 'Toggle antialiasing')
+	map('a', 'f', function() sai.fullscreen = not sai.fullscreen end, 'Toggle fullscreen')
+	map('a', 'a', function() sai.antialiasing = not sai.antialiasing end, 'Toggle antialiasing')
 
 	-- Gallery
 	local gmap = function(binds, cb, desc)
@@ -89,7 +89,7 @@ function M.default()
 	-- text layer
 	gmap('t', function() t.enabled = not t.enabled end, 'Toggle text')
 	-- mouse bindings as keys
-	gmap('MouseLeft', function() swi.mode = 'viewer' end, 'Switch to viewer')
+	gmap('MouseLeft', function() sai.mode = 'viewer' end, 'Switch to viewer')
 
 	-- Viewer
 	local vmap = function(binds, cb, desc)
@@ -129,19 +129,19 @@ function M.default()
 	-- Mouse zoom (centered at pointer)
 	vmap('Ctrl+ScrollUp', function()
 		local s = v.get_abs_scale() * 1.1
-		local m = swi.get_mouse_pos()
+		local m = sai.get_mouse_pos()
 		v.scale_centered(s, m.x, m.y)
 	end, 'Zoom in on cursor')
 	vmap('Ctrl+ScrollDown', function()
 		local s = v.get_abs_scale() / 1.1
-		local m = swi.get_mouse_pos()
+		local m = sai.get_mouse_pos()
 		v.scale_centered(s, m.x, m.y)
 	end, 'Zoom out at cursor')
 end
 
 ---@private
 --- Support function for generating updater of default keybinds.
----@param modeapi keybind_processor|swi.lib.keybind_processor
+---@param modeapi keybind_processor|sai.lib.keybind_processor
 ---@param defaults? bindcfg|{}
 ---@return fun(b:string|string[], action:fun(), desc:string)
 function M.gen_mapadd(modeapi, defaults)
@@ -165,7 +165,7 @@ function M.gen_mapadd(modeapi, defaults)
 	end
 end
 
----@param self swi.mode.help
+---@param self sai.mode.help
 function M.help(self)
 	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
 
@@ -178,7 +178,7 @@ function M.help(self)
 	map({ 'Escape', 'q' }, function() self.enabled = false end, 'Exit help overlay')
 end
 
----@param self swi.mode.input
+---@param self sai.mode.input
 function M.input(self)
 	-- Important actions that should be displayed in help list
 	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
@@ -259,7 +259,7 @@ function M.input(self)
 	add_move('Ctrl+Home', function() self.col = 1 end, 'text start')
 end
 
----@param self swi.mode.filter
+---@param self sai.mode.filter
 function M.filter(self)
 	self.map('Shift+Return', '\n')
 
@@ -277,7 +277,7 @@ function M.filter(self)
 	end, 'Complete tag')
 end
 
----@param self swi.mode.cmd
+---@param self sai.mode.cmd
 function M.cmd(self)
 	self.map('Shift+Return', '\n')
 

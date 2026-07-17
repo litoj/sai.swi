@@ -1,5 +1,5 @@
----@module 'swi.lib.utils'
----@class swi.lib.utils
+---@module 'sai.lib.utils'
+---@class sai.lib.utils
 local U = { debug_perf = os.getenv 'DEBUG_PERF' == '1' }
 
 ---@type swayimg.image
@@ -62,15 +62,15 @@ function U.new_object(self, module)
 	return self
 end
 
----@param so_path string path relative to swi as pwd
+---@param so_path string path relative to sai as pwd
 ---@return table loaded_lib
 function U.compile_and_load(so_path)
-	local out = swi.exec(string.format( --
+	local out = sai.exec(string.format( --
 		'g++ -O2 -shared -fPIC -o "%s" "%s" 2>&1 >/dev/null',
 		so_path,
 		so_path:gsub('so$', 'cpp')
 	))
-	if out ~= '' then swi.log('Failed to compile module: ' .. out) end
+	if out ~= '' then sai.log('Failed to compile module: ' .. out) end
 
 	local loader = package.loadlib(so_path, 'luaopen_' .. so_path:match '([^/]+)%.so$')
 	if not loader then error('Unable to load library: ' .. so_path) end
@@ -260,7 +260,7 @@ function U.ordered_binds(api)
 	return out
 end
 
----@param api swi.lib.keybind_processor
+---@param api sai.lib.keybind_processor
 ---@param fmt_str string? how to separate keybind list from the action
 function U.str_bindlist(api, fmt_str)
 	fmt_str = fmt_str or '%20s: %s'
@@ -335,7 +335,7 @@ function U.clipboard_set(text)
 	local p = io.popen('wl-copy', 'w')
 	if not p then return false end
 	p:write(text)
-	swi.notify 'Copied text to clipboard'
+	sai.notify 'Copied text to clipboard'
 	return p:close()
 end
 

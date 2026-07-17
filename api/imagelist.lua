@@ -1,18 +1,18 @@
----@module 'swi.api.imagelist'
+---@module 'sai.api.imagelist'
 
-local e = require 'swi.api.eventloop'
-local U = require 'swi.lib.utils'
+local e = require 'sai.api.eventloop'
+local U = require 'sai.lib.utils'
 
 local api = swayimg.imagelist
 
----@type swi.imagelist
+---@type sai.imagelist
 ---@diagnostic disable-next-line: missing-fields
-local M = { super = api, _path = 'swi.imagelist', marked = {} }
+local M = { super = api, _path = 'sai.imagelist', marked = {} }
 
 local mlist = {}
 local msize = 0
 
----@type swi.imagelist.marked
+---@type sai.imagelist.marked
 local marked = M.marked
 local last_lsize = 0
 
@@ -35,7 +35,7 @@ local function set_mark(x, enabled)
 		if not changed then return end
 	end
 
-	e.trigger { event = 'OptionSet', match = 'swi.imagelist.marked.size', data = msize }
+	e.trigger { event = 'OptionSet', match = 'sai.imagelist.marked.size', data = msize }
 end
 
 function marked.size()
@@ -71,18 +71,18 @@ function marked.set_current(enabled)
 	set_mark(img.path, enabled)
 end
 
-function M.get_current() return swi[swayimg.get_mode()].get_image() or U.dummy_image end
+function M.get_current() return sai[swayimg.get_mode()].get_image() or U.dummy_image end
 function M.remove(x)
 	local ci = M.get_current()
 	if x == ci.path then e.trigger { event = 'ImgChangedPre', data = ci } end
 	api.remove(x)
 	set_mark(x, false)
-	e.trigger { event = 'OptionSet', match = 'swi.imagelist.size', data = last_lsize }
+	e.trigger { event = 'OptionSet', match = 'sai.imagelist.size', data = last_lsize }
 end
 function M.add(x)
 	api.add(x)
 	last_lsize = api.size()
-	e.trigger { event = 'OptionSet', match = 'swi.imagelist.size', data = last_lsize }
+	e.trigger { event = 'OptionSet', match = 'sai.imagelist.size', data = last_lsize }
 end
 
-return require('swi.api.proxy').new(M)
+return require('sai.api.proxy').new(M)

@@ -1,12 +1,12 @@
----@module 'swi.lib.backer'
+---@module 'sai.lib.backer'
 
-local e = require 'swi.api.eventloop'
+local e = require 'sai.api.eventloop'
 
 ---Field backer
 --- Define set_xxx(self,val,idx) to use a custom setter for var named (idx=) `xxx`
 --- Define get_xxx(self,idx) to use a custom getter for var named (idx=) `xxx`
----@class swi.lib.backer
----@field protected _path string object path to this new api (swi.xxx) or just a name for errors
+---@class sai.lib.backer
+---@field protected _path string object path to this new api (sai.xxx) or just a name for errors
 ---@field protected _trigger boolean? trigger events on setting a field (default: true)
 
 local M = {}
@@ -49,7 +49,7 @@ end
 
 ---Add field backing logic to the current object; no `super` lookups
 ---Inheritors are required to copy all functions from super to self themselves!
----@generic O: swi.lib.backer
+---@generic O: sai.lib.backer
 ---@return O self
 function M:new()
 	---@diagnostic disable-next-line: inject-field

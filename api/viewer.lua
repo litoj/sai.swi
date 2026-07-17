@@ -1,21 +1,21 @@
 ---@diagnostic disable: invisible
----@module 'swi.api.viewer'
+---@module 'sai.api.viewer'
 
-local e = require 'swi.api.eventloop'
-local U = require 'swi.lib.utils'
-local mode_base = require 'swi.api.mode_base'
-local mode_text = require 'swi.api.mode_text'
+local e = require 'sai.api.eventloop'
+local U = require 'sai.lib.utils'
+local mode_base = require 'sai.api.mode_base'
+local mode_text = require 'sai.api.mode_text'
 
----@class swi.api.viewer: swi.viewer, swi.api.mode_base
+---@class sai.api.viewer: sai.viewer, sai.api.mode_base
 ---@field super swayimg.viewer
 ---@field _last {w:integer,h:integer,x:integer,y:integer}|false
----@field text swi.api.mode_text.base
+---@field text sai.api.mode_text.base
 local M = {
 	_scale = false, ---@type number|one_time_scale_t|false
 	_default_scale = 'optimal', ---@type default_scale_t
 }
 
----@return swi.viewer.panner
+---@return sai.viewer.panner
 local function new_panner(self)
 	local pan
 	pan = {
@@ -48,7 +48,7 @@ local function new_go(api, api_name)
 end
 
 ---@param factor_fn fun(last:lastimg, img:swayimg.image):number
----@return fun(self:swi.api.viewer,x:default_scale_t):string
+---@return fun(self:sai.api.viewer,x:default_scale_t):string
 local function gen_keep(factor_fn)
 	return function(self, x)
 		---@alias lastimg {w:integer,h:integer,x:integer,y:integer}
@@ -86,7 +86,7 @@ local function gen_keep(factor_fn)
 	end
 end
 
----@type {[default_scale_t|integer]:fun(self:swi.api.viewer,x:default_scale_t):string?}
+---@type {[default_scale_t|integer]:fun(self:sai.api.viewer,x:default_scale_t):string?}
 M.custom_scale_handlers = {
 	keep_width = gen_keep(function(last, img) return last.w / img.width end),
 	keep_height = gen_keep(function(last, img) return last.h / img.height end),
@@ -155,7 +155,7 @@ function M:set_history_limit(x)
 end
 
 ---@param api_name 'viewer'|'slideshow'
----@return swi.viewer|swi.slideshow
+---@return sai.viewer|sai.slideshow
 function M.new(api_name)
 	local api = swayimg[api_name] ---@type swayimg.viewer
 	local self = {
@@ -207,7 +207,7 @@ function M.new(api_name)
 	end
 	self._raw_default_scale = self._default_scale
 
-	---@cast self swi.api.viewer
+	---@cast self sai.api.viewer
 
 	self.get_abs_scale = api.get_scale
 	self.pan = new_panner(self)
@@ -219,7 +219,7 @@ function M.new(api_name)
 	self.open = function(path)
 		e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazyimg(api) }
 		api.open(path)
-		e.trigger { event = 'OptionSet', mode = api_name, match = 'swi.imagelist.size', data = swi.imagelist.size() }
+		e.trigger { event = 'OptionSet', mode = api_name, match = 'sai.imagelist.size', data = sai.imagelist.size() }
 	end
 
 	self.export = function(path)
@@ -238,7 +238,7 @@ function M.new(api_name)
 	end
 	self.new = nil
 
-	self = mode_base.new(self, api_name) ---@type swi.api.viewer
+	self = mode_base.new(self, api_name) ---@type sai.api.viewer
 
 	return self
 end

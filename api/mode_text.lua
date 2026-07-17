@@ -1,21 +1,21 @@
----@module 'swi.api.mode_text'
+---@module 'sai.api.mode_text'
 
-local U = require 'swi.lib.utils'
-local e = require 'swi.api.eventloop'
+local U = require 'sai.lib.utils'
+local e = require 'sai.api.eventloop'
 
----@class swi.api.mode_text.base
+---@class sai.api.mode_text.base
 ---@field super swayimg_appmode|swayimg.viewer
 ---@field _api_name appmode_t
 
----@class swi.api.mode_text: swi.api.mode_text.base, mode_base.text
+---@class sai.api.mode_text: sai.api.mode_text.base, mode_base.text
 ---@field _tracked {[block_position_t]:mode_text.tracker}|false
 local M = {}
 
----@param self swi.api.mode_text.base
+---@param self sai.api.mode_text.base
 ---@return mode_base.text
 function M.new(self)
 	---@diagnostic disable: inject-field
-	self._path = ('swi.%s.text'):format(self._api_name)
+	self._path = ('sai.%s.text'):format(self._api_name)
 	self._tracked = false
 	---@diagnostic disable-next-line: return-type-mismatch
 	return setmetatable(self, M)
@@ -35,15 +35,15 @@ local function replace_exif_vars(line, img)
 	return line
 end
 
-local function replace_swi_vars(line, vars, ev)
+local function replace_sai_vars(line, vars, ev)
 	if ev then
 		line = line:gsub(('{%s}'):format(ev.match), U.to_pretty_str(ev.data))
 		if not line or #vars == 1 then return line end
 	end
 
 	-- process all other variables
-	for var, path in line:gmatch '({swi%.([a-z0-9._]+)})' do
-		local val = swi
+	for var, path in line:gmatch '({sai%.([a-z0-9._]+)})' do
+		local val = sai
 		for key in path:gmatch '[^.]+' do
 			val = val[key]
 			if type(val) == 'function' then val = val() end
@@ -62,7 +62,7 @@ local function generate_var_updater(line, varpaths)
 	return {
 		event = 'OptionSet',
 		pattern = varpaths,
-		callback = function(ev) return replace_swi_vars(line, varpaths, ev):gsub('{', '{{') or '' end,
+		callback = function(ev) return replace_sai_vars(line, varpaths, ev):gsub('{', '{{') or '' end,
 	}
 end
 
@@ -91,11 +91,11 @@ end
 local _roi = render_on_img
 e.subscribe {
 	event = 'OptionSet',
-	pattern = 'swi.text.enabled',
+	pattern = 'sai.text.enabled',
 	callback = function(ev)
 		render_on_img = ev.data and _roi or function() end
-		if ev.data and swi.initialized then
-			local smt = swi[swi.mode].text
+		if ev.data and sai.initialized then
+			local smt = sai[sai.mode].text
 			for placement, config in pairs(smt._tracked) do
 				render_on_img(config, smt.super, placement, U.lazyimg(smt.super))
 			end
@@ -103,13 +103,13 @@ e.subscribe {
 	end,
 }
 
-local primed -- for temporarily blocking rendering until swi is loaded
----@param self swi.api.mode_text
+local primed -- for temporarily blocking rendering until sai is loaded
+---@param self sai.api.mode_text
 local function initialize(self)
 	local tracked = {}
 	self._tracked = tracked
 
-	if not swi.initialized then -- ensure we don't try to render before app has initialized
+	if not sai.initialized then -- ensure we don't try to render before app has initialized
 		if not primed then
 			primed = true
 			render_on_img = function() end
@@ -142,7 +142,7 @@ function M:__newindex(placement, x)
 		-- check for a custom template implementation and replace it with the correct generator
 		if type(v) == 'string' then
 			local varpaths = {}
-			for path in v:gmatch '{(swi%.[a-z0-9._]+)}' do
+			for path in v:gmatch '{(sai%.[a-z0-9._]+)}' do
 				varpaths[#varpaths + 1] = path
 			end
 

@@ -136,6 +136,6 @@ extern "C" int luaopen_lib_exiv2_to_lua(lua_State *L) {
 	return luaopen_exiv2_to_lua(L);
 }
 
-extern "C" int luaopen_swi_lib_exiv2_to_lua(lua_State *L) {
+extern "C" int luaopen_sai_lib_exiv2_to_lua(lua_State *L) {
 	return luaopen_exiv2_to_lua(L);
 }

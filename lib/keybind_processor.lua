@@ -1,7 +1,7 @@
----@module 'swi.lib.keybind_processor'
-local U = require 'swi.lib.utils'
+---@module 'sai.lib.keybind_processor'
+local U = require 'sai.lib.utils'
 
----@class swi.lib.keybind_processor: keybind_processor
+---@class sai.lib.keybind_processor: keybind_processor
 ---@field _path string path to the module for error processing
 ---@field _mappings bind_map|{[string]:{_traced:boolean}}
 ---Function to set a mapping directly without updating the active mappings.
@@ -34,7 +34,7 @@ function M:_setmap(bind, cfg)
 	end
 end
 
----@return swi.lib.keybind_processor
+---@return sai.lib.keybind_processor
 function M:new()
 	self._setmap = M._setmap
 	if self._mappings then
@@ -75,7 +75,7 @@ function M:new()
 		for _, b in ipairs(U.tabled(bind)) do
 			local old = self.remap(b, bindcfg)
 			if self.warn_on_duplicates and old and not old.kind then
-				swi.log(
+				sai.log(
 					('Duplicate mapping %s["%s"].\n  old: %s\n  new: %s)'):format(
 						self._path,
 						b,

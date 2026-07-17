@@ -1,11 +1,11 @@
 ---@diagnostic disable: invisible
----@module 'swi.lib.pager'
+---@module 'sai.lib.pager'
 
-local e = swi.eventloop
-local backer = require 'swi.lib.backer'
-local U = require 'swi.lib.utils'
+local e = sai.eventloop
+local backer = require 'sai.lib.backer'
+local U = require 'sai.lib.utils'
 
----@class swi.lib.pager
+---@class sai.lib.pager
 ---Activation toggle. Configure all the preceding definition fields before enabling.
 ---@field page integer
 ---@field page_size integer Readonly - useful to advance by all visible lines instead of fixed page
@@ -22,12 +22,12 @@ local M = {
 	_trigger = false,
 
 	-- Live config
-	escaping = false, ---Should lines be checked for swi.text escape sequences or set as pure text
+	escaping = false, ---Should lines be checked for sai.text escape sequences or set as pure text
 	_enabled = false, ---@protected
-	---@see swi.lib.pager.mode
+	---@see sai.lib.pager.mode
 	---@type appmode_t|false
 	_mode = false, ---@protected
-	---@see swi.lib.pager.location
+	---@see sai.lib.pager.location
 	---@type block_position_t
 	_location = 'topleft', ---@protected
 
@@ -56,7 +56,7 @@ local M = {
 	size_factor = 0.75,
 }
 
----@return swi.lib.pager
+---@return sai.lib.pager
 function M:new() return backer.new(U.new_object(self, M)) end
 
 ---@private
@@ -138,10 +138,10 @@ end
 ---@param reset boolean should we redraw all data, not just the resized amount
 function M:_recalibrate(resize, reset)
 	if resize then
-		local size = swi.text.size
-		local spacing = swi.text.line_spacing
+		local size = sai.text.size
+		local spacing = sai.text.line_spacing
 		local linepx = math.floor(spacing * size) + size * M.size_factor
-		local height = swi.get_window_size().height
+		local height = sai.get_window_size().height
 		if self._max_height <= 1 then height = height * self._max_height end
 		self._page_size = math.floor(height / linepx) - 1 -- -1 for header
 		if self._max_height > 1 then self._page_size = math.min(self._page_size, self._max_height) end
@@ -158,7 +158,7 @@ function M:_recalibrate(resize, reset)
 end
 
 ---Make multiple changes simultaneously and render only once at the end.
----@param applicator fun(it:swi.lib.pager)
+---@param applicator fun(it:sai.lib.pager)
 function M:bulk_change(applicator)
 	if not self._enabled then return applicator(self) end
 	---@type false|fun(self,val):boolean?
@@ -252,7 +252,7 @@ function M:_on_dst_change(mode, loc)
 	self._location = loc
 
 	if self._enabled then
-		self._mode_text = swi[mode or swi.mode].text
+		self._mode_text = sai[mode or sai.mode].text
 		self._original_text = self._mode_text[self._location]
 		self:render(true)
 	end
@@ -276,7 +276,7 @@ function M:set_enabled(val)
 			},
 			e.subscribe {
 				event = 'OptionSet',
-				pattern = { 'swi.text.size', 'swi.text.line_spacing' },
+				pattern = { 'sai.text.size', 'sai.text.line_spacing' },
 				callback = recal,
 			},
 		}

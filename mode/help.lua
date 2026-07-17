@@ -1,18 +1,18 @@
 ---@diagnostic disable: invisible
----@module 'swi.mode.help'
+---@module 'sai.mode.help'
 
-local U = require 'swi.lib.utils'
-local binds = require('swi.binds').help
+local U = require 'sai.lib.utils'
+local binds = require('sai.binds').help
 
 -- Paging object to manage scrollable output
 ---@class help_pager
----@class swi.mode.help: swi.mode.custom
+---@class sai.mode.help: sai.mode.custom
 ---@field enabled boolean
----@field pager swi.lib.pager
+---@field pager sai.lib.pager
 ---@field tab integer which help tab are we on
 local M = {
-	super = require 'swi.mode.custom',
-	_path = 'swi.mode.help',
+	super = require 'sai.mode.custom',
+	_path = 'sai.mode.help',
 	_persist_mode_change = true,
 	auto_help = true,
 
@@ -23,7 +23,7 @@ local M = {
 }
 
 ---@diagnostic disable-next-line: missing-fields
-M.pager = require('swi.lib.pager').new {
+M.pager = require('sai.lib.pager').new {
 	_path = M._path .. '.pager',
 	_trigger = true,
 	_location = 'topleft',
@@ -33,17 +33,17 @@ function M:new()
 	M.super.new(U.new_object(self, M))
 	binds(self)
 
-	self.swi.viewer.default_scale = 'keep_width'
-	self.swi.slideshow.default_scale = 'keep_width'
-	self.swi.text.enabled = true
-	local gspace = swi.gallery.thumb_size + swi.gallery.padding_size
-	self.swi.gallery(function(g)
+	self.sai.viewer.default_scale = 'keep_width'
+	self.sai.slideshow.default_scale = 'keep_width'
+	self.sai.text.enabled = true
+	local gspace = sai.gallery.thumb_size + sai.gallery.padding_size
+	self.sai.gallery(function(g)
 		g.thumb_size = gspace / 3
 		g.padding_size = gspace / 3
 		g.cache_limit = 0
 		g.preload = false
 	end)
-	self.swi.eventloop.subscribe {
+	self.sai.eventloop.subscribe {
 		event = 'ModeChanged',
 		callback = function(ev)
 			self.mode = ev.mode
@@ -59,16 +59,16 @@ local modes = { 'gallery', 'viewer', 'slideshow' }
 ---@return string title
 ---@return string[] lines
 local function mode_bindlist(mode, fmt_str)
-	mode = mode or swi.mode
+	mode = mode or sai.mode
 	---@diagnostic disable-next-line: param-type-mismatch
-	return ('%s%s Binds'):format(mode:sub(1, 1):upper(), mode:sub(2)), U.str_bindlist(swi[mode], fmt_str or M.bind_fmt)
+	return ('%s%s Binds'):format(mode:sub(1, 1):upper(), mode:sub(2)), U.str_bindlist(sai[mode], fmt_str or M.bind_fmt)
 end
 
 ---@return string title
 ---@return string[] lines
 local function complete_bindlist()
 	local mode_order = {}
-	local mode = swi.mode
+	local mode = sai.mode
 	for _, m in ipairs(modes) do -- do all other modes except the active
 		if mode ~= m then mode_order[#mode_order + 1] = m end
 	end
@@ -85,7 +85,7 @@ local function complete_bindlist()
 	return 'All Binds', out
 end
 
----@param target swi.api.proxy API object to inspect
+---@param target sai.api.proxy API object to inspect
 ---@return table<string,any>[] fields List of settable fields with their current values
 local function discover_settable_fields(target)
 	local raw_api = target.super
@@ -111,20 +111,20 @@ end
 ---@return string[]
 local function settings_list()
 	local out = {}
-	for _, swiapi in ipairs {
-		swi,
-		swi.text,
-		swi.imagelist,
-		swi.gallery,
-		swi.viewer,
-		swi.slideshow,
+	for _, saiapi in ipairs {
+		sai,
+		sai.text,
+		sai.imagelist,
+		sai.gallery,
+		sai.viewer,
+		sai.slideshow,
 	} do
 		---@diagnostic disable-next-line: cast-type-mismatch
-		---@cast swiapi swi.api.proxy
-		out[#out + 1] = ('%s:'):format(swiapi._path:upper())
+		---@cast saiapi sai.api.proxy
+		out[#out + 1] = ('%s:'):format(saiapi._path:upper())
 
-		for _, field in ipairs(discover_settable_fields(swiapi)) do
-			out[#out + 1] = ('  %s\t{%s.%s}'):format(field.name, swiapi._path, field.name)
+		for _, field in ipairs(discover_settable_fields(saiapi)) do
+			out[#out + 1] = ('  %s\t{%s.%s}'):format(field.name, saiapi._path, field.name)
 		end
 	end
 
@@ -155,13 +155,13 @@ end
 function M:set_enabled(val)
 	if val == self._enabled then return true end
 	if val then
-		local mode = swi.mode
+		local mode = sai.mode
 		self.mode = mode
 
 		self.tab = 1
 
 		--- 100px
-		if mode ~= 'gallery' then self.swi[mode].scale = 100 / swi[mode].get_image().width end
+		if mode ~= 'gallery' then self.sai[mode].scale = 100 / sai[mode].get_image().width end
 	end
 
 	self.pager.enabled = val

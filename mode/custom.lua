@@ -1,24 +1,24 @@
 ---@diagnostic disable: invisible
----@module 'swi.mode.custom'
+---@module 'sai.mode.custom'
 
-local U = require 'swi.lib.utils'
-local pager = require 'swi.lib.pager'
+local U = require 'sai.lib.utils'
+local pager = require 'sai.lib.pager'
 
 ---@overload fun(apply:fun(self:self))
 ---@class fakeapi: {[string]: fakeapi}
 
----@class swi.mode.custom: swi.lib.remapper
+---@class sai.mode.custom: sai.lib.remapper
 --- Wrapper for auto-changing settings when the mode is active.
 --- Supports also eventloop auto registration and deregistration +
 --- - `get_subscribed` gets just your mode changes
 --- - `unsubscribe` temporarily disables filtered events or permanently removes mode event by id
 ---
 --- Changes are active only while the mode is enabled, then they're reverted.
----@field swi? swi|fakeapi
----@field help_pager? swi.lib.pager included to provide custom keybind help `_path` is defined
+---@field sai? sai|fakeapi
+---@field help_pager? sai.lib.pager included to provide custom keybind help `_path` is defined
 ---@field map fun(bind:string|string[],fn:fun(self:self),desc:string?)
 local M = {
-	super = require 'swi.lib.remapper',
+	super = require 'sai.lib.remapper',
 	-- protected vars - readonly after initialization
 	_persist_mode_change = false, ---@protected if disabled mode change disables the mode
 	_help_bind_fmt = '%s\t%s', ---@protected
@@ -51,18 +51,18 @@ local viewer_fb = {
 	scale = 'default_scale',
 }
 local checked_mode_opts = {
-	-- [swi.gallery] = { mode = 'gallery', fb = {} },
-	[swi.viewer] = { mode = 'viewer', fb = viewer_fb },
-	[swi.slideshow] = { mode = 'slideshow', fb = viewer_fb },
+	-- [sai.gallery] = { mode = 'gallery', fb = {} },
+	[sai.viewer] = { mode = 'viewer', fb = viewer_fb },
+	[sai.slideshow] = { mode = 'slideshow', fb = viewer_fb },
 }
 
 -- TODO: make a separate global setting for custom mode name and obj to allow F1 be generic and work
 -- for truly every mode + also show only settings for that mode -> no more tabs
 -- TODO: move to lib as a separate feature
----@param mo swi.mode.custom
+---@param mo sai.mode.custom
 local function wrap(mo, api)
 	local cfg = checked_mode_opts[api]
-	local avail = cfg and function(idx) return cfg.fb[idx] == nil or cfg.mode == swi.mode end
+	local avail = cfg and function(idx) return cfg.fb[idx] == nil or cfg.mode == sai.mode end
 		or function() return true end
 
 	return setmetatable({ _vars = {} }, {
@@ -137,9 +137,9 @@ local function wrap(mo, api)
 	})
 end
 
----@param mo swi.mode.custom
+---@param mo sai.mode.custom
 local function evloop_wrap(mo)
-	local e = swi.eventloop
+	local e = sai.eventloop
 	---@type {[hook_cfg]:1}
 	local new, old = {}, {}
 	local filter = {}
@@ -197,13 +197,13 @@ local function evloop_wrap(mo)
 	})
 end
 
----@generic O: swi.mode.custom
----@param self `O`|swi.mode.custom
----@return O|swi.mode.custom
+---@generic O: sai.mode.custom
+---@param self `O`|sai.mode.custom
+---@return O|sai.mode.custom
 function M:new()
 	U.new_object(self, M)
 	if self._path then
-		local name = self._path:gsub('^swi%.', '')
+		local name = self._path:gsub('^sai%.', '')
 		---@diagnostic disable-next-line: missing-fields
 		self.help_pager = pager.new {
 			_path = self._path .. '.help_pager',
@@ -211,9 +211,9 @@ function M:new()
 			_location = 'topright',
 		}
 	end
-	self.swi = wrap(self, swi)
-	rawset(self.swi, 'eventloop', evloop_wrap(self))
-	self.swi.eventloop.subscribe {
+	self.sai = wrap(self, sai)
+	rawset(self.sai, 'eventloop', evloop_wrap(self))
+	self.sai.eventloop.subscribe {
 		event = { 'ModeChangedPre', 'ModeChanged' },
 		callback = function(e)
 			if e.event == 'ModeChangedPre' and self._mode == e.mode and not self._persist_mode_change then
@@ -221,8 +221,8 @@ function M:new()
 				return
 			end
 
-			local vars = rawget(self.swi, e.mode)
-			-- check if enabled because swi vars may get disabled before events -> avoid double update
+			local vars = rawget(self.sai, e.mode)
+			-- check if enabled because sai vars may get disabled before events -> avoid double update
 			if vars and self._enabled then vars(e.event == 'ModeChanged') end
 		end,
 	}
@@ -245,7 +245,7 @@ function M:set_enabled(val)
 		self.help_pager.lines = U.str_bindlist(self, self._help_bind_fmt)
 		rawset(self.help_pager, '_last_cnt', #self._mappings)
 	end
-	self.swi(val)
+	self.sai(val)
 
 	if self.auto_help then self.help_pager.enabled = val end
 

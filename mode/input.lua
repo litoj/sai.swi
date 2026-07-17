@@ -1,12 +1,12 @@
 ---@diagnostic disable: invisible
----@module 'swi.mode.input'
+---@module 'sai.mode.input'
 
-local U = require 'swi.lib.utils'
-local binds = require 'swi.binds'
+local U = require 'sai.lib.utils'
+local binds = require 'sai.binds'
 
 ---A text input mode that captures key events for text entry.
 ---Configure hooks and parameters before enabling.
----@class swi.mode.input: swi.mode.custom
+---@class sai.mode.input: sai.mode.custom
 ---@field text string state of user input
 ---@field col integer cursor position (1-based insert position)
 ---@field line integer cursor line (1-based)
@@ -15,12 +15,12 @@ local binds = require 'swi.binds'
 ---@field map fun(bind:string|string[],key_or_fn:string|fun(self:self),desc:string?)
 ---@field protected confirmed boolean? has input been confirmed or aborted, useful for disabling logic
 local M = {
-	super = require 'swi.mode.custom',
+	super = require 'sai.mode.custom',
 	_trigger = false, -- disable trigger to ensure text is visible even when set to `status`
 
 	-- Public, changeable at any time
 	---hook called on every text change
-	on_text_change = false, ---@type fun(self:swi.mode.input,text:string)|false
+	on_text_change = false, ---@type fun(self:sai.mode.input,text:string)|false
 
 	-- Configuration (set before enabling)
 	_prompt = false, ---@type string|false optional prompt prefix
@@ -77,7 +77,7 @@ for i = 0, 9 do
 	U.rev_key_map[tostring(i)] = tostring(i) -- 0-9
 end
 
----@return swi.mode.input
+---@return sai.mode.input
 function M:new()
 	U.new_object(self, M)
 	M.super.new(self)
@@ -183,7 +183,7 @@ function M:confirm(text)
 end
 
 ---This is an alias to the preferred `self:confirm(false)`
----@see swi.mode.input.confirm
+---@see sai.mode.input.confirm
 function M:abort() return self:confirm(false) end
 
 ---Get the content as lines with their indexes to the text.
@@ -205,7 +205,7 @@ function M:get_current_line_info()
 		if self._col <= l.to then return l end
 	end
 
-	swi.log '"._text" has been set directly! Please use the public field ".text"'
+	sai.log '"._text" has been set directly! Please use the public field ".text"'
 	self.col = #self._text
 	return lines[#lines]
 end
@@ -285,11 +285,11 @@ end
 function M:_on_dst_change(mode, loc)
 	if self._raw_update then
 		if self._location == 'status' then
-			self.swi.text.status_timeout = swi.text.status_timeout
+			self.sai.text.status_timeout = sai.text.status_timeout
 			self._raw_update ''
 		else
-			self.swi.text.enabled = nil
-			local smt = swi[self._mode or swi.mode].text
+			self.sai.text.enabled = nil
+			local smt = sai[self._mode or sai.mode].text
 			smt[self._location] = smt[self._location]
 		end
 	end
@@ -299,11 +299,11 @@ function M:_on_dst_change(mode, loc)
 
 	if self._enabled then
 		if self._location == 'status' then
-			self.swi.text.status_timeout = 0
+			self.sai.text.status_timeout = 0
 			self._raw_update = swayimg.text.set_status
 		else
-			self.swi.text.enabled = true
-			self._raw_update = swayimg[self._mode or swi.mode].set_text
+			self.sai.text.enabled = true
+			self._raw_update = swayimg[self._mode or sai.mode].set_text
 		end
 
 		self:render()

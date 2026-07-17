@@ -1,14 +1,14 @@
 ---@diagnostic disable: invisible,inject-field
----@module 'swi.api.init'
+---@module 'sai.api.init'
 
-local proxy = require 'swi.api.proxy'
-local e = require 'swi.api.eventloop'
+local proxy = require 'sai.api.proxy'
+local e = require 'sai.api.eventloop'
 
----@type swi
+---@type sai
 ---@diagnostic disable-next-line: missing-fields
 local M = {
 	super = swayimg,
-	_path = 'swi',
+	_path = 'sai',
 	initialized = false,
 
 	_overlay = true, -- enabled by default in sway and disabled otherwise
@@ -20,14 +20,14 @@ local M = {
 }
 
 M.eventloop = e
-M.imagelist = require 'swi.api.imagelist'
-M.text = require 'swi.api.text'
+M.imagelist = require 'sai.api.imagelist'
+M.text = require 'sai.api.text'
 do
-	local viewer_proxy = require('swi.api.viewer').new
+	local viewer_proxy = require('sai.api.viewer').new
 	M.viewer = viewer_proxy 'viewer'
 	M.slideshow = viewer_proxy 'slideshow'
 end
-M.gallery = require 'swi.api.gallery'
+M.gallery = require 'sai.api.gallery'
 
 function M.exit(code)
 	local ev = { event = 'SwiLeavePre', match = tostring(code), data = code }
@@ -98,7 +98,7 @@ end
 function M:set_apply_raw_wb(v) self.super.set_format_params('raw', { camera_wb = v }) end
 
 -- ensure even the default keymappings trigger our events by redefining the defaults
-_G.swi = proxy.new(M)
+_G.sai = proxy.new(M)
 
 local x
 swayimg.on_window_resize(function()
@@ -112,16 +112,16 @@ swayimg.on_window_resize(function()
 		end
 	else -- handle as initialization
 		-- deduplicate initial resizing
-		if x == nil and not swi.overlay then
+		if x == nil and not sai.overlay then
 			x = false
 			return
-		elseif x == false and swi.mode ~= 'gallery' then
-			x = swi[swi.mode]
+		elseif x == false and sai.mode ~= 'gallery' then
+			x = sai[sai.mode]
 			x.scale = x._raw_default_scale -- fix incorrect initial size with overlay disabled
 		end
 
 		x = true
-		swi.initialized = true
+		sai.initialized = true
 		rawset(M, '_old_winsize', swayimg.get_window_size())
 
 		-- resolve initial event
@@ -144,14 +144,14 @@ swayimg.on_window_resize(function()
 			event = 'Subscribed',
 			pattern = 'SwiEnter',
 			-- ensure all hooks expecting initialization get loaded
-			-- (especially the lazy ones not checking swi.initialized)
+			-- (especially the lazy ones not checking sai.initialized)
 			callback = function(h)
 				if h.data.pattern ~= 'true' then h.data.callback(ev) end
 				e._hooks.SwiEnter = nil
 			end,
 		}
 
-		require('swi.binds').default()
+		require('sai.binds').default()
 	end
 end)
 

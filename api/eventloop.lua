@@ -1,7 +1,7 @@
 ---@diagnostic disable: redefined-local
----@module 'swi.api.eventloop'
+---@module 'sai.api.eventloop'
 
-local U = require 'swi.lib.utils'
+local U = require 'sai.lib.utils'
 local tabled = U.tabled
 
 ---@private
@@ -9,7 +9,7 @@ local tabled = U.tabled
 ---@field pattern {[string]:boolean}|string[]
 ---@field mode {[appmode_t]:integer}|appmode_t[]
 
----@type swi.eventloop
+---@type sai.eventloop
 local M = {
 	---@type {[event_name_t]:{[string]:hook_cfg[]}}
 	_hooks = {}, ---@private
@@ -35,7 +35,7 @@ local function mk_modes(mode)
 end
 mk_modes(modes)
 
----@param cfg swi.eventloop.hook
+---@param cfg sai.eventloop.hook
 ---@return hook_cfg
 local function mk_hook(cfg)
 	if cfg.match then
@@ -129,11 +129,11 @@ local function matcher(match, ptn_map)
 	end)
 end
 
----@alias swi.eventloop.applicator fun(h:hook_cfg,ev:event_name_t, pnt:string,i:integer)
+---@alias sai.eventloop.applicator fun(h:hook_cfg,ev:event_name_t, pnt:string,i:integer)
 
 ---@private
----@param f swi.eventloop.filter.opts
----@param on_match swi.eventloop.applicator
+---@param f sai.eventloop.filter.opts
+---@param on_match sai.eventloop.applicator
 ---@diagnostic disable-next-line: inject-field
 function M.apply_filtered(f, on_match)
 	---@type (fun(h:hook_cfg):boolean?)[]
@@ -187,14 +187,14 @@ function M.get_subscribed(f)
 end
 
 function M.trigger(state)
-	---@cast state swi.eventloop.filter.opts
+	---@cast state sai.eventloop.filter.opts
 	state.mode = state.mode or swayimg.get_mode()
 	if M.debug_trigger then print_debug('trigger', state) end
 
 	M.apply_filtered(state, function(hook)
 		local ok, ret = xpcall(hook.callback, debug.traceback, state)
 		---@diagnostic disable-next-line: param-type-mismatch
-		if not ok then swi.log(ret) end
+		if not ok then sai.log(ret) end
 
 		if hook.once or (ok and ret) then
 			M.unsubscribe { id = hook } -- unsub from all places, not just where it matched

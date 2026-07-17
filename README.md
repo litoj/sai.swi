@@ -1,34 +1,35 @@
-# `swi.swi`
+# `sai.swi`
 
-What's up with the name? You tell me:
+_Swayimg API Improved_
 
-- _SWayImg_ - just like `imv` is a shorthand of `IMageViewer`
-- shorter and easier to type when accessing the api
-- simple way to say a lua package is made for swayimg - like `.nvim` for neovim
-- _Swayimg neoWim-like Interface_
+- The sai (Japanese: 釵, lit. 'hairpin'; Chinese: 鐵尺, lit. 'iron ruler'…)
+  [\[Wikipedia\]](<https://en.wikipedia.org/wiki/Sai_(weapon)>)
+  - Provides the quality of life improvements and api aesthetics like a hairping
+  - Is much more powerful and completely replaces the original api like a sword overrules a stick
+
+## Overview
+
+- All basic features that swayimg should have by default.
+  - shorter and easier to type when accessing the api
+  - `.swi` simple way to say a lua package is made for swayimg - like `.nvim` for neovim
   - allows vim-style mappings - `<C-S-Del>`, `<C-.>`…
   - eventloop system based on neovim lua autocommands - almost everything is listenable
   - all variables can now be set _and_ read - no more caching of the last set value
-- _Superb Wayland Imageviewer_
-  - because swayimg is already _the_ wayland imager and this only makes it better
-  - because the api is simpler and efficient, yet offers more features and practicality than the
-    original
+  - simpler and efficient, yet offers more features and practicality than the original
+- Focus on extensibility and ease of use.
+- **Custom modes!** - exemplary usage of filtering mode:
+
+https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
 
 <details>
 <summary>
 
 ## ✨ Complete list of Features (_click to expand_)
 
-- All basic features that swayimg should have by default.
-- Focus on extensibility and ease of use.
-- **Custom modes!** - exemplary usage of filtering mode:
-
-https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
-
 </summary>
 
-- options now accessible as variables: `swi.text.size = swi.text.size*1.1`
-- forward compatible: original api is still directly forwarded through `swi` so all additions are
+- options now accessible as variables: `sai.text.size = sai.text.size*1.1`
+- forward compatible: original api is still directly forwarded through `sai` so all additions are
   available and any setter/enabler and getter methods will automatically be accessible as variables,
   even if not documented yet.
 - common actions as directly mappable functions:
@@ -43,7 +44,7 @@ https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
   - gallery image lazy-loads metadata -> just like viewer mode
   - to load all, run `local list=l.get(); require'exiv2'.load_all(list)`
 - text layer templates:
-  - track any api variable: `g.text.topright={'Marked: {swi.imagelist.marked.size}'}`
+  - track any api variable: `g.text.topright={'Marked: {sai.imagelist.marked.size}'}`
   - pretty-print exif data: `v.text.topleft={'Exposure: {ExposureTime}'}`
   - dynamic event updates - use eventloop hooks to update the text dynamically:
     ```lua
@@ -59,7 +60,7 @@ https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
       end}
       [100] = 'Surely the message is shorter than 100 lines and won\'t override this'
     }
-    e.trigger{event='User', match='help', data=U.str_bindlist(swi.mode.input)}
+    e.trigger{event='User', match='help', data=U.str_bindlist(sai.mode.input)}
     ```
 - style-agnostic keybinds: use gui-, imv- or **vim-style** keybinds or any style that's right for
   you
@@ -115,7 +116,7 @@ can configure.
 - filtering by multiple metrics and operators
 - default config and basic usage (see <./mode/filter.lua> for more details):
   ```lua
-  local fm = require('swi.mode.filter').new {
+  local fm = require('sai.mode.filter').new {
   	_location = 'topleft',
   	auto_help = true,
   	-- Public, changeable at any time
@@ -138,10 +139,11 @@ can configure.
     resolution
   - `xxx` can be replaced with any of the default scaling names or `keep_size`
 - add your own:
+
   ```lua
   table.insert(
-    require('swi.api.viewer').custom_scale_handlers,
-    ---@param self swi.api.viewer
+    require('sai.api.viewer').custom_scale_handlers,
+    ---@param self sai.api.viewer
     function(self, x)
       if type(x) ~= 'table' or not x.width or not x.height then return end
 
@@ -196,10 +198,10 @@ file updates and save image state (like scale, position, etc.) before the image 
 
 ## 🚀 Geting Started
 
-Clone the repo into your swayimg config to `swi` _(not `swi.swi`!)_.
+Clone the repo into your swayimg config to `sai` _(not `sai.sai`!)_.
 
 ```sh
-git clone https://github.com/litoj/swi.swi ~/.config/swayimg/swi
+git clone https://github.com/litoj/sai.sai ~/.config/swayimg/sai
 ```
 
 _Don't forget to add it to `.gitignore`, if you version your dotfiles_
@@ -207,25 +209,25 @@ _Don't forget to add it to `.gitignore`, if you version your dotfiles_
 You can add a keybind to update swayimg:
 
 ```lua
-v.map('Alt+F5', require('swi.snippets').update) -- for just viewer mode
+v.map('Alt+F5', require('sai.snippets').update) -- for just viewer mode
 
-local map = require 'swi.binds' -- for any mode combo
-map('a', 'Alt+F5', require('swi.snippets').update)
+local map = require 'sai.binds' -- for any mode combo
+map('a', 'Alt+F5', require('sai.snippets').update)
 ```
 
 ### Use the API
 
 To start using the api you only need to load the main module. However, if you also want to use all
-the main APIs as globals, you can also load `swi.globals` to have easier access to them. The
+the main APIs as globals, you can also load `sai.globals` to have easier access to them. The
 structure is declared in [types.lua](./types.lua)
 
 ```lua
 -- ~/.config/swayimg/init.lua
--- makes the api accessible through the `swi` global variable
+-- makes the api accessible through the `sai` global variable
 -- you can also just save it to whatever you want
-require 'swi.api.init'
--- or through first-letter globals (except: swi.imagelist -> `l` - not `i`)
-require 'swi.api.globals'
+require 'sai.api.init'
+-- or through first-letter globals (except: sai.imagelist -> `l` - not `i`)
+require 'sai.api.globals'
 
 -- now you can use all options as variables and make intricate behaviour using eventloop hooks
 ```
@@ -233,7 +235,7 @@ require 'swi.api.globals'
 ### Better dev experience in NeoVim
 
 If you're already using _lua_ls_ you only need to include the original swayimg api definitions from
-which _swi_ reuses the types:
+which _sai_ reuses the types:
 
 ```lua
 settings.Lua.workspace.library = {'/usr/share/swayimg/swayimg.lua', '/usr/local/share/swayimg/swayimg.lua'}

@@ -1,11 +1,11 @@
----@meta swi
+---@meta sai
 
 --------------------------------------------------------------------------------
 -- Main application class
 --------------------------------------------------------------------------------
 
 ---Main application class.
----@class swi: swi.api.proxy
+---@class sai: sai.api.proxy
 ---@field mode appmode_t Which mode is the application in
 ---@field antialiasing boolean Enable/disable antialiasing
 ---@field exif_orientation boolean Enable or disable changing orientation based on EXIF
@@ -27,7 +27,7 @@
 ---@field dnd_button string
 ---@field initialized boolean Whether initialization has completed and config has been loaded
 ---@field [appmode_t] mode_base
-_G.swi = {}
+_G.sai = {}
 
 ---Execute a shell command in sync.
 ---Escape sequences:
@@ -40,39 +40,39 @@ _G.swi = {}
 ---@param cmd string
 ---@return string stdout
 ---@return integer exitcode
-function swi.exec(cmd) end
+function sai.exec(cmd) end
 
 ---Print a message on-screen.
----@see swi.text.set_status
+---@see sai.text.set_status
 ---@param msg string
-function swi.notify(msg) end
+function sai.notify(msg) end
 
 ---Print a message on-screen and to the terminal
 ---@param msg string
-function swi.log(msg) end
+function sai.log(msg) end
 
 ---Execute deferred procedure.
 ---@param seconds number Delay in seconds (can be fractional)
 ---@param fn function Function to execute
-function swi.defer(seconds, fn) end
+function sai.defer(seconds, fn) end
 
 ---Exit from application.
 ---NOTE: exits only if all SwiLeavePre hooks deregister!
 ---@param code? integer Program exit code, `0` by default
-function swi.exit(code) end
+function sai.exit(code) end
 
 ---Get mouse pointer coordinates.
 ---@return { x :integer, y: integer } # Coordinates of the mouse pointer
-function swi.get_mouse_pos() end
+function sai.get_mouse_pos() end
 
 ---Get application window size.
 ---@return { width: integer, height: integer } # Window size in pixels
-function swi.get_window_size() end
+function sai.get_window_size() end
 
 ---Set application window size.
 ---@param width integer Width of the window in pixels
 ---@param height integer Height of the window in pixels
-function swi.set_window_size(width, height) end
+function sai.set_window_size(width, height) end
 
 --------------------------
 --- Eventloop processing
@@ -88,7 +88,7 @@ function swi.set_window_size(width, height) end
 ---| 'ImgChanged' # after selected image has changed, match: mode, data: new image
 ---| 'ImgChangedPre' # just before selecting a different image, match: mode, data: old image
 ---| 'OptionSet' # after setting any option in the api, match: opt object path, data: opt value
----| 'ShellCmdPost' # after swi.exec, match: cmd, data: output
+---| 'ShellCmdPost' # after sai.exec, match: cmd, data: output
 ---| 'ModeChanged' # match: 'o:n' as in old:new, mode: new mode, data: old mode
 ---| 'ModeChangedPre' # match: 'o:n' as in old:new, mode: old mode, data: new mode
 ---| 'WinResized' # when a window is resized, data: new size
@@ -106,7 +106,7 @@ function swi.set_window_size(width, height) end
 ---or negated simple match ("!plainstr") to forbid that match
 ---@field pattern? string|string[]
 ---@field once? boolean should the hook be unsubscribed after first call
----@field callback fun(ev:swi.eventloop.event):(boolean?) return true to unsubscribe
+---@field callback fun(ev:sai.eventloop.event):(boolean?) return true to unsubscribe
 
 do -- Event and Hook type definitions
 	---@class event.ImgChanged: event.base
@@ -221,7 +221,7 @@ do -- Event and Hook type definitions
 	---@field event 'Subscribed'
 	---@field match string event being subscribed to
 	---@field mode appmode_t[] hook's mode
-	---@field data swi.eventloop.hook hook config
+	---@field data sai.eventloop.hook hook config
 
 	---Hook for Subscribed events
 	---@class hook.Subscribed: hook.base
@@ -248,7 +248,7 @@ do -- Event and Hook type definitions
 	---@field pattern? 'ExportFinished'|string[]
 	---@field callback fun(ev:event.User.ExportFinished):(boolean?)
 
-	---@alias swi.eventloop.event
+	---@alias sai.eventloop.event
 	---| event.ImgChanged
 	---| event.ImgChangedPre
 	---| event.OptionSet
@@ -263,7 +263,7 @@ do -- Event and Hook type definitions
 	---| event.User
 	---| event.User.ExportFinished
 
-	---@alias swi.eventloop.hook
+	---@alias sai.eventloop.hook
 	---| hook.base
 	---| hook.ImgChanged
 	---| hook.ImgChangedPre
@@ -282,7 +282,7 @@ end
 
 ---@alias hook_id hook.base
 
----@class swi.eventloop.filter.opts
+---@class sai.eventloop.filter.opts
 ---@field event? event_name_t|event_name_t[]
 ---@field id? hook_id
 ---@field group? string|string[]
@@ -290,81 +290,81 @@ end
 ---@field match? string|string[]
 
 ---Eventloop processor
----@class swi.eventloop
+---@class sai.eventloop
 ---@field debug_trigger boolean print all triggered events and where they were triggered from
 ---@field debug_subscribe boolean print all hook registrations and where they were triggered from
-swi.eventloop = {}
+sai.eventloop = {}
 
----@param hook swi.eventloop.hook
+---@param hook sai.eventloop.hook
 ---@return hook_id id that can be used to remove the hook
-function swi.eventloop.subscribe(hook) end
+function sai.eventloop.subscribe(hook) end
 
----@param f? swi.eventloop.filter.opts
----@return table<hook_id,swi.eventloop.hook>
-function swi.eventloop.get_subscribed(f) end
+---@param f? sai.eventloop.filter.opts
+---@return table<hook_id,sai.eventloop.hook>
+function sai.eventloop.get_subscribed(f) end
 
----@param f swi.eventloop.filter.opts
-function swi.eventloop.unsubscribe(f) end
+---@param f sai.eventloop.filter.opts
+function sai.eventloop.unsubscribe(f) end
 
----@param state swi.eventloop.event|event.base
-function swi.eventloop.trigger(state) end
+---@param state sai.eventloop.event|event.base
+function sai.eventloop.trigger(state) end
 
 ---Temporarily substitute all events matching the same conditions until self-deregistration.
 ---NOTE: can be undone only by the callback or with `once=true` - cannot use unsubscribe()
----@param cfg swi.eventloop.hook
-function swi.eventloop.takeover_subscribe(cfg) end
+---@param cfg sai.eventloop.hook
+function sai.eventloop.takeover_subscribe(cfg) end
 
 --------------------------------------------------------------------------------
 -- Image list
 --------------------------------------------------------------------------------
 
 ---Image list
----Changes to the contents get emitted as OptionSet(`swi.imagelist.size`)
----@class swi.imagelist: swi.api.proxy
+---Changes to the contents get emitted as OptionSet(`sai.imagelist.size`)
+---@class sai.imagelist: sai.api.proxy
 ---@field order order_t Image list sort order
 ---@field reverse boolean Reverse the sort order
 ---@field recursive boolean Recursive directory reading
 ---@field adjacent boolean Open adjacent files from the same directory
 ---@field fsmon boolean Allow filesystem monitoring for changes and updating images
-swi.imagelist = {}
+sai.imagelist = {}
 
 do
 	---Get current image entry (metadata is lazy-loaded)
 	---@return swayimg.image
-	function swi.imagelist.get_current() end
+	function sai.imagelist.get_current() end
 
 	---Get size of image list.
 	---@return integer # Number of entries in the image list
-	function swi.imagelist.size() end
+	function sai.imagelist.size() end
 
 	---Get list of all entries in the image list.
 	---@return swayimg.entry[] # Array with all entries
-	function swi.imagelist.get() end
+	function sai.imagelist.get() end
 
 	---Add entry to the image list.
 	---@param paths string|string[] Paths to add
-	function swi.imagelist.add(paths) end
+	function sai.imagelist.add(paths) end
 
 	---Remove entry from the image list.
 	---@param paths string|string[] Paths to remove
-	function swi.imagelist.remove(paths) end
+	function sai.imagelist.remove(paths) end
 
 	---Helper for working with marks on images
-	---Changes to the size get emitted as OptionSet(`swi.imagelist.marked.size`)
-	---@class swi.imagelist.marked
-	swi.imagelist.marked = {}
+	---Changes to the size get emitted as OptionSet(`sai.imagelist.marked.size`)
+	---@class sai.imagelist.marked
+	sai.imagelist.marked = {}
 
 	---Get number of marked images.
 	---@return integer
-	function swi.imagelist.marked.size() end
+	function sai.imagelist.marked.size() end
 
 	---Get list of all marked paths.
 	---@return string[] paths of all marked images
-	function swi.imagelist.marked.get() end
+	function sai.imagelist.marked.get() end
 
 	---Toggle the marked state of the current entry.
 	---@param state boolean|'toggle'
-	function swi.imagelist.marked.set_current(state) end
+	function sai.imagelist.marked.set_current(state) end
 end
 
 --------------------------------------------------------------------------------
@@ -372,7 +372,7 @@ end
 --------------------------------------------------------------------------------
 
 ---Text overlay layer.
----@class swi.text
+---@class sai.text
 ---Should displaying the text layer be allowed,
 ---and how long for (after switching to a different image).
 ---Use `true` to disable timeout and permanently display, `false` to always hide, x for x seconds
@@ -385,15 +385,15 @@ end
 ---@field background integer Background text color in ARGB format, e.g. `0xff00aa99`
 ---@field shadow integer Shadow text color in ARGB format, e.g. `0xff00aa99`
 ---@field status_timeout number Timeout in seconds after which the status message is hidden
-swi.text = {}
+sai.text = {}
 
 ---Get immediate visibility state of the text layer.
 ---@return boolean visible
-function swi.text.is_visible() end
+function sai.text.is_visible() end
 
----Show status message for the duration of `swi.text.status_timeout` seconds.
+---Show status message for the duration of `sai.text.status_timeout` seconds.
 ---@param status string Status text to show
-function swi.text.set_status(status) end
+function sai.text.set_status(status) end
 
 --------------------------------------------------------------------------------
 -- Base mode class
@@ -434,7 +434,7 @@ do
 	---@field group? nil This eventhook field gets set automatically for auto-deregistration
 	---Generator of the text to be displayed.
 	---NOTE: An initial call call without args is made to get the initial value of the text.
-	---@field callback fun(ev:swi.eventloop.event|nil):(string|string[]?)
+	---@field callback fun(ev:sai.eventloop.event|nil):(string|string[]?)
 
 	---Extended text layer functionality for setting dynamic text values.
 	---Multiline generators should remember the size of their previous output to reset the lines to ''
@@ -446,12 +446,12 @@ do
 	---A more dynamic approach to updating the text layer.
 	--- - custom functions to generate text on image change.
 	--- - custom hooks to update the text when an event is triggered.
-	---   - for tracking variables just template the varpath: `'Marked: {swi.imagelist.marked.size}'`
+	---   - for tracking variables just template the varpath: `'Marked: {sai.imagelist.marked.size}'`
 	---
 	---In viewer+slideshow mode you can use exif tags directly, like {ExposureTime}
 	---or specify the full exif path (without `meta.` prefix), like {Exif.Fujifilm.Rating}
 	---`utils.format_exif` then automatically formats the values.
-	---HINT: to see what tags are available: `print(swi.viewer.get_image().meta)`
+	---HINT: to see what tags are available: `print(sai.viewer.get_image().meta)`
 	---@class mode_base.text
 	---@field topleft extended_text_template[] Text layer scheme for top-left corner
 	---@field topright extended_text_template[] Text layer scheme for top-right corner
@@ -459,7 +459,7 @@ do
 	---@field bottomright extended_text_template[] Text layer scheme for bottom-right corner
 
 	---Base class providing text overlay layout fields shared by all display modes.
-	---@class mode_base: keybind_processor,swi.api.proxy
+	---@class mode_base: keybind_processor,sai.api.proxy
 	---@field text mode_base.text access to setting the overlay fields/indexes
 	---@field mark_color integer Mark icon color in ARGB format
 	---@field pinch_factor number how aggressive should the effect be
@@ -498,7 +498,7 @@ end
 ---| "keep_fit"    # Keep zoom level relative to
 ---| "keep_fill"   # Keep zoom level relative to image height
 
----@class swi.viewer.panner Move around the image with ready-to-map functions
+---@class sai.viewer.panner Move around the image with ready-to-map functions
 ---@field default_size integer Default size of the step to make (in pixels)
 ---@field by fun(x:integer,y:integer) Pan the image by x and y pixels in their directions
 ---@field left fun(p:integer?) Step left by `p` px (default: step.default_size)
@@ -506,12 +506,12 @@ end
 ---@field down fun(p:integer?) Step down by `p` px (default: step.default_size)
 ---@field up fun(p:integer?) Step up by `p` px (default: step.default_size)
 
----@class swi.viewer : mode_base
+---@class sai.viewer : mode_base
 ---Helper table for easier mappings for moving around the image
----@see swi.viewer.switch_image Equivalent via passing a parameter
----@field pan swi.viewer.panner
+---@see sai.viewer.switch_image Equivalent via passing a parameter
+---@field pan sai.viewer.panner
 ---Helper table for easier mappings for switching between images
----@see swi.viewer.switch_image Equivalent via passing a parameter
+---@see sai.viewer.switch_image Equivalent via passing a parameter
 ---@field go {[vdir_t]:function}
 ---@field default_scale default_scale_t Default scale applied to newly opened images
 ---@field scale one_time_scale_t|number Scale of the image as a preset or absolute value
@@ -528,83 +528,83 @@ end
 ---@field loop boolean Image list loop mode
 ---@field preload_limit integer Number of images to preload in a separate thread
 ---@field history_limit integer Number of previously viewed images to keep in cache
-swi.viewer = {}
+sai.viewer = {}
 
 do
 	---Add a file to the image list and select it.
 	---@param path string Path to the file
-	function swi.viewer.open(path) end
+	function sai.viewer.open(path) end
 
 	---Open the next file in the specified direction.
-	---@see swi.viewer.go equivalent using named methods for easier mapping
+	---@see sai.viewer.go equivalent using named methods for easier mapping
 	---@param dir vdir_t Next file direction
-	function swi.viewer.switch_image(dir) end
+	function sai.viewer.switch_image(dir) end
 
 	---Get information about currently displayed image.
 	---@return swayimg.image # Currently displayed image
-	function swi.viewer.get_image() end
+	function sai.viewer.get_image() end
 
 	---Set absolute image scale, scaling the change around a zoom center.
 	---@param scale number Absolute value (1.0 = 100%)
 	---@param x integer X coordinate of center point, empty for window center
 	---@param y integer Y coordinate of center point, empty for window center
-	function swi.viewer.scale_centered(scale, x, y) end
+	function sai.viewer.scale_centered(scale, x, y) end
 
 	---Get absolute image scale that the image is currently displayed at.
 	---@return number
-	function swi.viewer.get_abs_scale() end
+	function sai.viewer.get_abs_scale() end
 
 	---Reset position and scale to default values.
 	---@see swayimg.viewer.set_default_scale
 	---@see swayimg.viewer.set_default_position
-	function swi.viewer.reset() end
+	function sai.viewer.reset() end
 
 	---Show next frame from multi-frame image (animation).
 	---This function stops the animation.
 	---@return integer # Index of the currently shown frame
-	function swi.viewer.next_frame() end
+	function sai.viewer.next_frame() end
 
 	---Show previous frame from multi-frame image (animation).
 	---This function stops the animation.
 	---@return integer # Index of the currently shown frame
-	function swi.viewer.prev_frame() end
+	function sai.viewer.prev_frame() end
 
 	---Flip image vertically.
-	function swi.viewer.flip_vertical() end
+	function sai.viewer.flip_vertical() end
 
 	---Flip image horizontally.
-	function swi.viewer.flip_horizontal() end
+	function sai.viewer.flip_horizontal() end
 
 	---Rotate image.
 	---@param angle rotation_t Rotation angle
-	function swi.viewer.rotate(angle) end
+	function sai.viewer.rotate(angle) end
 
 	---Export currently displayed frame to PNG file.
 	---@see event.User.ExportFinished
 	---@param path string Path of the exported file
-	function swi.viewer.export(path) end
+	function sai.viewer.export(path) end
 
 	---Add/replace/remove meta info for currently displayed image.
 	---@param key string Meta key name
 	---@param value string Meta value, empty value to remove the record
-	function swi.viewer.set_meta(key, value) end
+	function sai.viewer.set_meta(key, value) end
 end
 
 --------------------------------------------------------------------------------
 -- Slide show mode
 --------------------------------------------------------------------------------
 
----@class swi.slideshow: swi.viewer
+---@class sai.slideshow: sai.viewer
 ---@field timeout number Timeout in seconds after which the next image is opened
-swi.slideshow = {}
+sai.slideshow = {}
 
 --------------------------------------------------------------------------------
 -- Gallery mode
 --------------------------------------------------------------------------------
 
----@class swi.gallery: mode_base
+---@class sai.gallery: mode_base
 ---Helper table for easier mappings for switching between images
----@see swi.gallery.switch_image Equivalent via passing a parameter
+---@see sai.gallery.switch_image Equivalent via passing a parameter
 ---@field go {[gdir_t]:function}
 ---@field aspect aspect_t Thumbnail aspect ratio
 ---@field thumb_size integer Thumbnail size in pixels
@@ -623,13 +623,13 @@ swi.slideshow = {}
 ---@field pstore_path string Custom path to the directory for persistent thumbnail storage
 ---Should thumbnails be reloaded when the smallest cached could be less than 1/2 resolution
 ---@field thumb_size_diff_reload boolean
-swi.gallery = {}
+sai.gallery = {}
 
 ---Select the next thumbnail from the gallery.
----@see swi.gallery.go equivalent using named methods for easier mapping
+---@see sai.gallery.go equivalent using named methods for easier mapping
 ---@param dir gdir_t Next thumbnail direction
-function swi.gallery.switch_image(dir) end
+function sai.gallery.switch_image(dir) end
 
 ---Get information about currently selected image.
 ---@return swayimg.image # Currently selected image entry
-function swi.gallery.get_image() end
+function sai.gallery.get_image() end

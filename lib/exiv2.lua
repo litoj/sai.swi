@@ -1,5 +1,5 @@
 -- Lua wrapper for exiv2_to_lua C module with auto-compilation.
----@module 'swi.lib.exiv2'
+---@module 'sai.lib.exiv2'
 
 local mod_name = 'exiv2_to_lua'
 local so_path = debug.getinfo(1, 'S').source:match '[^@]+/' .. mod_name .. '.so'
@@ -11,7 +11,7 @@ local so_path = debug.getinfo(1, 'S').source:match '[^@]+/' .. mod_name .. '.so'
 ---@type exiv2
 local M
 if not os.rename(so_path, so_path) then
-	M = require('swi.lib.utils').compile_and_load(so_path) ---@type exiv2
+	M = require('sai.lib.utils').compile_and_load(so_path) ---@type exiv2
 else
 	local fn, err = package.loadlib(so_path, 'luaopen_' .. mod_name)
 	if not fn then error(err) end

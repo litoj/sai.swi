@@ -1,17 +1,17 @@
 ---@diagnostic disable: invisible
----@module 'swi.api.gallery'
+---@module 'sai.api.gallery'
 
-local e = require 'swi.api.eventloop'
-local U = require 'swi.lib.utils'
+local e = require 'sai.api.eventloop'
+local U = require 'sai.lib.utils'
 
 local api = swayimg.gallery
 
----@class swi.api.gallery: swi.gallery, swi.api.mode_base
+---@class sai.api.gallery: sai.gallery, sai.api.mode_base
 ---@diagnostic disable-next-line: missing-fields
 local M = {
 	super = api,
 
-	-- settings that are not set directly in gallery.cpp
+	-- settings that are not set directly in gallery.cpp, but in layout.cpp, appmode.cpp and other
 	_embedded_thumb = true,
 	_thumb_size = 200,
 	_padding_size = 5,
@@ -40,7 +40,7 @@ local M = {
 	_cached_thumb_size = 200,
 }
 
-M.text = require('swi.api.mode_text').new {
+M.text = require('sai.api.mode_text').new {
 	super = api,
 	_api_name = 'gallery',
 	_topleft = { 'File:\t{name}' },
@@ -75,7 +75,7 @@ function M:set_thumb_size(x)
 	self.super.set_thumb_size(x)
 	-- reset cache if rendering would be really bad for old images
 	if self._thumb_size_diff_reload and x / 2.2 - 25 > self._cached_thumb_size then
-		if swi.mode == 'gallery' then self.super.reload() end
+		if sai.mode == 'gallery' then self.super.reload() end
 		self._cached_thumb_size = x
 	elseif x < self._cached_thumb_size then
 		self._cached_thumb_size = x
@@ -99,7 +99,7 @@ function api.get_image()
 	return img
 			and setmetatable(img, {
 				__index = function(self, idx)
-					if idx == 'meta' then self.meta = require('swi.lib.exiv2').get_meta(self.path) end
+					if idx == 'meta' then self.meta = require('sai.lib.exiv2').get_meta(self.path) end
 					return rawget(self, idx)
 				end,
 			})
@@ -128,6 +128,6 @@ e.subscribe { -- ad-hoc registering for when user wants to subscribe
 	end,
 }
 
-require('swi.api.mode_base').new(M, 'gallery')
+require('sai.api.mode_base').new(M, 'gallery')
 
 return M

@@ -1,12 +1,12 @@
----@module 'swi.mode.cmd'
+---@module 'sai.mode.cmd'
 
-local U = require 'swi.lib.utils'
-local binds = require 'swi.binds'
+local U = require 'sai.lib.utils'
+local binds = require 'sai.binds'
 
----@class swi.mode.cmd: swi.mode.input
+---@class sai.mode.cmd: sai.mode.input
 local M = {
-	super = require 'swi.mode.input',
-	_path = 'swi.mode.cmd',
+	super = require 'sai.mode.input',
+	_path = 'sai.mode.cmd',
 	_prompt = 'Code: ',
 
 	-- Private config
@@ -17,7 +17,7 @@ local M = {
 }
 -- TODO: add autocompletion, likely just for paths and potentially variables
 
----@return swi.mode.cmd
+---@return sai.mode.cmd
 function M:new()
 	U.new_object(self, M)
 	M.super.new(self)
@@ -32,7 +32,7 @@ function M:on_confirm(out)
 
 	self.enabled = false -- disable first to avoid any messages overriding code work
 	local cb, err = loadstring(out)
-	if not cb or err then return swi.text.set_status(err) end
+	if not cb or err then return sai.text.set_status(err) end
 
 	local repeated = false
 	for _, v in ipairs(self._history) do

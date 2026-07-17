@@ -1,11 +1,11 @@
 ---@diagnostic disable: invisible
----@module 'swi.mode.filter'
+---@module 'sai.mode.filter'
 
-local U = require 'swi.lib.utils'
-local pager = require 'swi.lib.pager'
-local exiv2 = require 'swi.lib.exiv2'
-local l = swi.imagelist
-local binds = require('swi.binds')
+local U = require 'sai.lib.utils'
+local pager = require 'sai.lib.pager'
+local exiv2 = require 'sai.lib.exiv2'
+local l = sai.imagelist
+local binds = require('sai.binds')
 
 ---@alias imgmeta {out:string,filtered_idx:integer,[string]:string|number}|swayimg.image
 
@@ -13,15 +13,15 @@ local binds = require('swi.binds')
 ---A live-updating filter mode for image search.
 ---Each line of input is a condition: `<var><op><val>`
 ---Confirmation jumps to the first matching image.
----@class swi.mode.filter: swi.mode.input
----@field list_pager swi.lib.pager viewer of the filtered items
----@field completion swi.lib.pager
+---@class sai.mode.filter: sai.mode.input
+---@field list_pager sai.lib.pager viewer of the filtered items
+---@field completion sai.lib.pager
 ---@field selected_pos integer the index of the current filtered image or 0 for no match
 ---@field protected _images {[string]:imgmeta}
 ---@field private _loaded_tags {[string]:boolean} list of available tags and if they've been loaded
 local M = {
-	super = require 'swi.mode.input',
-	_path = 'swi.mode.filter',
+	super = require 'sai.mode.input',
+	_path = 'sai.mode.filter',
 	_prompt = 'Filter:\r',
 	_location = 'topleft',
 	auto_help = true,
@@ -50,7 +50,7 @@ local M = {
 
 setmetatable(M, { __index = M.super })
 
----@return swi.mode.filter
+---@return sai.mode.filter
 function M:new()
 	U.new_object(self, M)
 	---@diagnostic disable-next-line: missing-fields
@@ -123,9 +123,9 @@ function M:make_filter(line)
 				or function(p) return self:rate(line, p, false, self.default_filter) end,
 		}
 	elseif #tag == 0 and oper ~= ':' then
-		return swi.notify 'Tag can be omitted only with the ":" (code) operator'
+		return sai.notify 'Tag can be omitted only with the ":" (code) operator'
 	elseif #val == 0 and oper ~= '!' then
-		return swi.notify 'Value can be omitted only with the "!" (negation) operator'
+		return sai.notify 'Value can be omitted only with the "!" (negation) operator'
 	end
 	self.completion.enabled = false -- already with valid tag -> no need for completion
 
@@ -151,8 +151,8 @@ function M:make_filter(line)
 		[':'] = function() -- run code; tag value is set as `self` variable, value defaults to imgmeta
 			local cb, err = loadstring(val:find('return', 1, true) and val or 'return ' .. val)
 			---@diagnostic disable-next-line: need-check-nil
-			if not cb or err then return swi.notify(err:gsub('^.-:%d:', 'Syntax error:')) end
-			if not cb or err then return swi.text.set_status(err) end
+			if not cb or err then return sai.notify(err:gsub('^.-:%d:', 'Syntax error:')) end
+			if not cb or err then return sai.text.set_status(err) end
 			if #tag == 0 then tag = 'self' end
 			return function(r)
 				if not r then return end
@@ -284,8 +284,8 @@ function M:on_text_change()
 		end
 	end)
 	---@diagnostic disable-next-line: need-check-nil
-	if not ok then return swi.notify(('Error comparing %q:\n%s'):format(val, err:gsub('^.-:%d:', ''))) end
-	-- swi.notify '' -- clear previous error messages if everything went well
+	if not ok then return sai.notify(('Error comparing %q:\n%s'):format(val, err:gsub('^.-:%d:', ''))) end
+	-- sai.notify '' -- clear previous error messages if everything went well
 
 	self.list_pager:bulk_change(function(p)
 		p.lines = lines
@@ -294,7 +294,7 @@ function M:on_text_change()
 
 	if self.live_imagelist then
 		if not next(nf) then
-			swi.notify 'No matching images.\nSkipping imagelist update!'
+			sai.notify 'No matching images.\nSkipping imagelist update!'
 			return
 		end
 
@@ -310,7 +310,7 @@ end
 ---@protected
 function M:set_selected_pos(idx)
 	if idx == nil or not self._enabled then return end -- ignore
-	if #self._ordered_filtered_paths == 0 then return swi.text.set_status 'No matching images' end
+	if #self._ordered_filtered_paths == 0 then return sai.text.set_status 'No matching images' end
 
 	idx = math.max(1, math.min(#self.list_pager.lines, idx))
 	self.list_pager:bulk_change(function(p)
@@ -321,11 +321,11 @@ function M:set_selected_pos(idx)
 	local old_img = self._images[l.get_current().path]
 	local new_img = self._images[self._ordered_filtered_paths[idx]]
 
-	if swi.mode == 'viewer' then return swi.viewer.open(new_img.path) end
+	if sai.mode == 'viewer' then return sai.viewer.open(new_img.path) end
 
 	local oi = self.live_imagelist and old_img.filtered_idx or old_img.index
 	local ni = self.live_imagelist and idx or new_img.index
-	local dir = oi < ni and swi.gallery.go.right or swi.gallery.go.left
+	local dir = oi < ni and sai.gallery.go.right or sai.gallery.go.left
 	for _ = math.abs(oi - ni), 1, -1 do
 		dir()
 	end
@@ -367,9 +367,9 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 			self._filtered = imap
 			self:on_text_change()
 
-			if not swi.gallery.pstore then
-				swi.gallery.pstore_path = '/tmp/swi-filter/'
-				swi.gallery.pstore = true
+			if not sai.gallery.pstore then
+				sai.gallery.pstore_path = '/tmp/sai-filter/'
+				sai.gallery.pstore = true
 			end
 		end
 

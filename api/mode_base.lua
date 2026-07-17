@@ -1,22 +1,22 @@
 ---@diagnostic disable: invisible
----@module 'swi.api.mode_base'
+---@module 'sai.api.mode_base'
 
-local proxy = require 'swi.api.proxy'
-local e = require 'swi.api.eventloop'
-local kp = require 'swi.lib.keybind_processor'
+local proxy = require 'sai.api.proxy'
+local e = require 'sai.api.eventloop'
+local kp = require 'sai.lib.keybind_processor'
 
----@class swi.api.mode_base: mode_base, swi.lib.keybind_processor
+---@class sai.api.mode_base: mode_base, sai.lib.keybind_processor
 ---@field super swayimg_appmode
 local M = { warn_on_duplicates = true }
 
----@generic O: swi.api.mode_base
+---@generic O: sai.api.mode_base
 ---@param self `O`
 ---@param api_name appmode_t
 ---@return O
 function M.new(self, api_name)
 	local api = self.super ---@diagnostic disable-line: undefined-field
 	---@diagnostic disable: inject-field
-	self._path = 'swi.' .. api_name
+	self._path = 'sai.' .. api_name
 	self.multiclick_delay = 0.175
 
 	--- https://github.com/artemsen/swayimg/blob/master/src/appmode.cpp#L11
@@ -38,7 +38,7 @@ function M.new(self, api_name)
 
 	self._multi_click_map = {}
 	function self:_rawmap(b, cfg, action)
-		if type(action) == 'string' then action = function() swi.exec(cfg.cb) end end
+		if type(action) == 'string' then action = function() sai.exec(cfg.cb) end end
 
 		if b:match 'Mouse' or b:match 'Scroll' then
 			local rep_nr
@@ -51,7 +51,7 @@ function M.new(self, api_name)
 			if not action then
 				self._multi_click_map[b][rep_nr] = nil
 				if not next(self._multi_click_map[b]) then
-					api.on_mouse(b, function() swi.text.set_status('Unhandled mouse: ' .. b) end)
+					api.on_mouse(b, function() sai.text.set_status('Unhandled mouse: ' .. b) end)
 					self._multi_click_map[b] = nil
 				end
 				return
@@ -79,7 +79,7 @@ function M.new(self, api_name)
 				end
 
 				local old_cnt = cnt
-				swi.defer(self.multiclick_delay, function()
+				sai.defer(self.multiclick_delay, function()
 					if cnt == old_cnt then -- user didn't click again
 						if map[cnt] then -- run the action for cnt
 							exec()
@@ -89,7 +89,7 @@ function M.new(self, api_name)
 				end)
 			end)
 		else
-			api.on_key(b, action or function() swi.text.set_status('Unhandled key: ' .. b) end)
+			api.on_key(b, action or function() sai.text.set_status('Unhandled key: ' .. b) end)
 		end
 	end
 	self._rawunmap = self._rawmap
