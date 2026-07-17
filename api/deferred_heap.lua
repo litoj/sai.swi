@@ -1,9 +1,9 @@
 ---@module 'sai.api.deferred_heap'
 
---- Min-heap for deferred callbacks
+--- Min-heap for keeping track of the next deferred cb to be excuted
 ---@private
 ---@class sai.api.deferred_heap
----@field private [integer] {time: integer, cb: function} min-heap storing {execution_time, callback}
+---@field private [integer] {time: integer, cb: function}
 local M = {}
 
 ---Push a callback to be executed after ms milliseconds
