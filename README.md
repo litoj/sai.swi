@@ -198,10 +198,10 @@ file updates and save image state (like scale, position, etc.) before the image 
 
 ## 🚀 Geting Started
 
-Clone the repo into your swayimg config to `sai` _(not `sai.sai`!)_.
+Clone the repo into your swayimg config to `sai` _(not `sai.swi`!)_.
 
 ```sh
-git clone https://github.com/litoj/sai.sai ~/.config/swayimg/sai
+git clone https://github.com/litoj/sai.swi ~/.config/swayimg/sai
 ```
 
 _Don't forget to add it to `.gitignore`, if you version your dotfiles_

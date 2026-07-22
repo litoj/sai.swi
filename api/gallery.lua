@@ -49,20 +49,50 @@ M.text = require('sai.api.mode_text').new {
 	_bottomright = {},
 }
 
+local function pre_change()
+	e.trigger {
+		event = 'ImgChangedPre',
+		mode = 'gallery',
+		match = 'gallery',
+		data = api.get_image() or U.dummy_image,
+	}
+end
+
 M.go = setmetatable({}, {
 	__index = function(tbl, idx)
 		tbl[idx] = function()
-			e.trigger {
-				event = 'ImgChangedPre',
-				mode = 'gallery',
-				match = 'gallery',
-				data = api.get_image() or U.dummy_image,
-			}
-			api.switch_image(idx)
+			pre_change()
+			api.select(idx)
 		end
 		return tbl[idx]
 	end,
+	__call = function(x, y)
+		pre_change()
+		if y then -- coordinates
+			api.select_at(x, y)
+		elseif type(x) == 'number' then -- direct index
+			local list = sai.imagelist.get()
+			local img = list[x]
+			if not img then
+				sai.log('No image at index ' .. x)
+				return
+			end
+			api.select_path(img.path)
+		else -- image path
+			api.select_path(x)
+			e.trigger { event = 'OptionSet', mode = 'gallery', match = 'sai.imagelist.size', data = sai.imagelist.size() }
+		end
+	end,
 })
+
+function M.get_at(x, y)
+	local old = api.get_image()
+	if not old then return end
+	api.select_at(x, y)
+	local img = M.get_image()
+	api.select_path(old.path)
+	return img
+end
 
 function M:set_cache_limit(x)
 	x = math.floor(x)
