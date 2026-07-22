@@ -512,6 +512,8 @@ end
 ---@field pan sai.viewer.panner
 ---Helper table for easier mappings for switching between images
 ---@see sai.viewer.switch_image Equivalent via passing a parameter
+---@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
+---@overload fun(index:integer) index of the image to open from the imagelist
 ---@field go {[vdir_t]:function}
 ---@field default_scale default_scale_t Default scale applied to newly opened images
 ---@field scale one_time_scale_t|number Scale of the image as a preset or absolute value
@@ -531,15 +533,6 @@ end
 sai.viewer = {}
 
 do
-	---Add a file to the image list and select it.
-	---@param path string Path to the file
-	function sai.viewer.open(path) end
-
-	---Open the next file in the specified direction.
-	---@see sai.viewer.go equivalent using named methods for easier mapping
-	---@param dir vdir_t Next file direction
-	function sai.viewer.switch_image(dir) end
-
 	---Get information about currently displayed image.
 	---@return swayimg.image # Currently displayed image
 	function sai.viewer.get_image() end
@@ -605,6 +598,9 @@ sai.slideshow = {}
 ---@class sai.gallery: mode_base
 ---Helper table for easier mappings for switching between images
 ---@see sai.gallery.switch_image Equivalent via passing a parameter
+---@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
+---@overload fun(index:integer) index of the image to open from the imagelist
+---@overload fun(x:integer,y:integer) position of the thumbnail to select (limited to visible images)
 ---@field go {[gdir_t]:function}
 ---@field aspect aspect_t Thumbnail aspect ratio
 ---@field thumb_size integer Thumbnail size in pixels
@@ -625,11 +621,12 @@ sai.slideshow = {}
 ---@field thumb_size_diff_reload boolean
 sai.gallery = {}
 
----Select the next thumbnail from the gallery.
----@see sai.gallery.go equivalent using named methods for easier mapping
----@param dir gdir_t Next thumbnail direction
-function sai.gallery.switch_image(dir) end
-
 ---Get information about currently selected image.
 ---@return swayimg.image # Currently selected image entry
 function sai.gallery.get_image() end
+
+---Get information about image displayed at given position.
+---@param x integer
+---@param y integer
+---@return swayimg.image # Currently selected image entry
+function sai.gallery.get_at(x, y) end

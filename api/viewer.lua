@@ -35,14 +35,35 @@ end
 
 -- TODO: use USR1 to add debounce for repeated presses and viewer.open to then jump to the file
 -- directly
+---@param api swayimg.viewer
 local function new_go(api, api_name)
 	return setmetatable({}, {
 		__index = function(tbl, idx)
 			tbl[idx] = function()
 				e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazyimg(api) }
-				api.switch_image(idx)
+				api.open(idx)
 			end
 			return tbl[idx]
+		end,
+		__call = function(x)
+			e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazyimg(api) }
+			if type(x) == 'number' then -- direct index
+				local list = sai.imagelist.get()
+				local img = list[x]
+				if not img then
+					sai.log('No image at index ' .. x)
+					return
+				end
+				api.open_path(img.path)
+			else -- image path
+				api.open_path(x)
+				e.trigger {
+					event = 'OptionSet',
+					mode = api_name,
+					match = 'sai.imagelist.size',
+					data = sai.imagelist.size(),
+				}
+			end
 		end,
 	})
 end
@@ -215,11 +236,6 @@ function M.new(api_name)
 	self.scale_centered = function(s, x, y)
 		api.set_abs_scale(s, x, y)
 		self._scale = s
-	end
-	self.open = function(path)
-		e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazyimg(api) }
-		api.open(path)
-		e.trigger { event = 'OptionSet', mode = api_name, match = 'sai.imagelist.size', data = sai.imagelist.size() }
 	end
 
 	self.export = function(path)
