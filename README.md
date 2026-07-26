@@ -77,6 +77,15 @@ https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
     - `%s`: fallbacks to current file
     - `%m`: doesn't execute the command if no files were marked
   - `%`: unquoted current (like in 4.x): `v.map('', [[bash -c '$(which trash || echo rm) "%"']])`
+- **IPC**: expose a Unix socket for external programs to evaluate Lua code in swayimg.
+  ```lua
+  local ipc = require 'sai.lib.ipc'
+  local server = ipc.server('/tmp/swi.sock') -- auto-enabled
+  local client = ipc.client('/tmp/swi.sock') -- auto-enabled
+  print(client:send("return sai.text.size")) --> current font size
+  client.enabled = false
+  server.enabled = false
+  ```
 
 ### Custom modes
 

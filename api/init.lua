@@ -39,7 +39,7 @@ function M.log(msg, file)
 	msg = tostring(msg)
 	print(msg)
 	if file then
-		local f = io.open(file, 'a')
+		local f = io.open(file, 'a') or error('Could not append to file: ' .. file)
 		f:write(msg)
 		f:close()
 	else
@@ -123,6 +123,11 @@ function M:set_mode(v)
 end
 
 function M:set_apply_raw_wb(v) self.super.set_format_params('raw', { camera_wb = v }) end
+
+function M:get_pid()
+	rawset(self, 'pid', require('ffi').C.getpid())
+	return self.pid
+end
 
 -- ensure even the default keymappings trigger our events by redefining the defaults
 _G.sai = proxy.new(M)

@@ -26,6 +26,7 @@
 ---Configurable only at startup.
 ---@field dnd_button string
 ---@field initialized boolean Whether initialization has completed and config has been loaded
+---@field pid integer Get the process ID of the swayimg instance (cached)
 ---@field [appmode_t] mode_base
 _G.sai = {}
 
