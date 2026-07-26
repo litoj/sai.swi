@@ -49,7 +49,8 @@ function sai.notify(msg) end
 
 ---Print a message on-screen and to the terminal
 ---@param msg string
-function sai.log(msg) end
+---@param file string? optional redirect of the message
+function sai.log(msg, file) end
 
 ---Schedule function execution to after `ms`.
 ---@param ms integer

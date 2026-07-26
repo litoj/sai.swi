@@ -45,7 +45,7 @@ local function new_go(api, api_name)
 			end
 			return tbl[idx]
 		end,
-		__call = function(x)
+		__call = function(_, x)
 			e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazyimg(api) }
 			if type(x) == 'number' then -- direct index
 				local list = sai.imagelist.get()

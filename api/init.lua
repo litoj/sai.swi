@@ -35,9 +35,16 @@ function M.exit(code)
 	if not next(e.get_subscribed(ev)) then swayimg.exit(code) end
 end
 
-function M.log(msg)
+function M.log(msg, file)
+	msg = tostring(msg)
 	print(msg)
-	swayimg.text.set_status(string.gsub(msg, '\t', '  '))
+	if file then
+		local f = io.open(file, 'a')
+		f:write(msg)
+		f:close()
+	else
+		swayimg.text.set_status(string.gsub(msg, '\t', '  '))
+	end
 end
 
 function M.notify(msg) swayimg.text.set_status(string.gsub(msg, '\t', '  ')) end

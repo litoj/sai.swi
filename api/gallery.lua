@@ -66,7 +66,7 @@ M.go = setmetatable({}, {
 		end
 		return tbl[idx]
 	end,
-	__call = function(x, y)
+	__call = function(_, x, y)
 		pre_change()
 		if y then -- coordinates
 			api.select_at(x, y)
