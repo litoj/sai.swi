@@ -31,8 +31,8 @@ function M:on_confirm(out)
 	if not out then return end
 
 	self.enabled = false -- disable first to avoid any messages overriding code work
-	local cb, err = loadstring(out)
-	if not cb or err then return sai.text.set_status(err) end
+	local cb = U.make_runnable(out)
+	if not cb then return end
 
 	local repeated = false
 	for _, v in ipairs(self._history) do
@@ -42,7 +42,7 @@ function M:on_confirm(out)
 		end
 	end
 	if not repeated then table.insert(self._history, 1, out) end
-	cb()
+	sai.notify(cb())
 end
 
 -- TODO: text change handling needs a better generic approach - user vs sys update

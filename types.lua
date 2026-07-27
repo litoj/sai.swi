@@ -43,14 +43,13 @@ _G.sai = {}
 ---@return integer exitcode
 function sai.exec(cmd) end
 
----Print a message on-screen.
----@see sai.text.set_status
+---Show status message for the duration of `sai.text.status_timeout` seconds.
 ---@param msg string
 function sai.notify(msg) end
 
----Print a message on-screen and to the terminal
+---Print a message on-screen and to the terminal.
 ---@param msg string
----@param file string? optional redirect of the message
+---@param file string? optional redirect of the message to a file (append mode)
 function sai.log(msg, file) end
 
 ---Schedule function execution to after `ms`.
@@ -392,10 +391,6 @@ sai.text = {}
 ---Get immediate visibility state of the text layer.
 ---@return boolean visible
 function sai.text.is_visible() end
-
----Show status message for the duration of `sai.text.status_timeout` seconds.
----@param status string Status text to show
-function sai.text.set_status(status) end
 
 --------------------------------------------------------------------------------
 -- Base mode class

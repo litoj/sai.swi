@@ -300,7 +300,7 @@ function M:_on_dst_change(mode, loc)
 	if self._enabled then
 		if self._location == 'status' then
 			self.sai.text.status_timeout = 0
-			self._raw_update = swayimg.text.set_status
+			self._raw_update = sai.notify
 		else
 			self.sai.text.enabled = true
 			self._raw_update = swayimg[self._mode or sai.mode].set_text

@@ -321,6 +321,7 @@ local backer_meta = {
 	end,
 }
 
+---@private
 function M:new(path)
 	if type(path) ~= 'string' or #path == 0 then error 'IPC: path is required' end
 	if #path > 107 then error('IPC: socket path too long: ' .. path) end

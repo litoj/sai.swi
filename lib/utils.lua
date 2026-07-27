@@ -376,4 +376,23 @@ function U.fuzzy_find(str, match, max_misses)
 	if si <= max_misses then return s, si end
 end
 
+---@param code string
+---@return (fun(self?:any):any)?
+function U.make_runnable(code)
+	if not code:find 'return[^\n]*$' and not code:find '[^=]=[^=][^\n]*$' then
+		code = code:gsub('([^\n]*)$', 'return %1')
+	end
+
+	local cb, err = loadstring(code)
+	---@diagnostic disable-next-line: need-check-nil
+	if not cb or err then return sai.notify(err:gsub('^.-:%d:', 'Syntax error:')) end
+	return function(self)
+		-- if self == false then return end
+		_G.self = self
+		err = cb()
+		_G.self = nil
+		return err
+	end
+end
+
 return U

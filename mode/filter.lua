@@ -5,7 +5,7 @@ local U = require 'sai.lib.utils'
 local pager = require 'sai.lib.pager'
 local exiv2 = require 'sai.lib.exiv2'
 local l = sai.imagelist
-local binds = require('sai.binds')
+local binds = require 'sai.binds'
 
 ---@alias imgmeta {out:string,filtered_idx:integer,[string]:string|number}|swayimg.image
 
@@ -149,18 +149,8 @@ function M:make_filter(line)
 			return function(r) return r and tostring(r):find(val) end
 		end,
 		[':'] = function() -- run code; tag value is set as `self` variable, value defaults to imgmeta
-			local cb, err = loadstring(val:find('return', 1, true) and val or 'return ' .. val)
-			---@diagnostic disable-next-line: need-check-nil
-			if not cb or err then return sai.notify(err:gsub('^.-:%d:', 'Syntax error:')) end
-			if not cb or err then return sai.text.set_status(err) end
 			if #tag == 0 then tag = 'self' end
-			return function(r)
-				if not r then return end
-				_G.self = r
-				err = cb()
-				_G.self = nil
-				return err
-			end
+			return U.make_runnable(val)
 		end,
 	}
 
@@ -310,7 +300,7 @@ end
 ---@protected
 function M:set_selected_pos(idx)
 	if idx == nil or not self._enabled then return end -- ignore
-	if #self._ordered_filtered_paths == 0 then return sai.text.set_status 'No matching images' end
+	if #self._ordered_filtered_paths == 0 then return sai.notify 'No matching images' end
 
 	idx = math.max(1, math.min(#self.list_pager.lines, idx))
 	self.list_pager:bulk_change(function(p)
@@ -321,7 +311,7 @@ function M:set_selected_pos(idx)
 	local old_img = self._images[l.get_current().path]
 	local new_img = self._images[self._ordered_filtered_paths[idx]]
 
-	if sai.mode == 'viewer' then return sai.viewer.open(new_img.path) end
+	if sai.mode == 'viewer' then return sai.viewer.go(new_img.path) end
 
 	local oi = self.live_imagelist and old_img.filtered_idx or old_img.index
 	local ni = self.live_imagelist and idx or new_img.index

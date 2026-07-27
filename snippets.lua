@@ -33,7 +33,7 @@ function M.print_shell_output()
 	e.subscribe {
 		event = 'ShellCmdPost',
 		callback = function(ev)
-			if #ev.data then sai.text.set_status(ev.data) end
+			if #ev.data then sai.notify(ev.data) end
 		end,
 	}
 end
@@ -49,7 +49,7 @@ function M.print_option_changes(enable)
 		-- register after base config has been loaded
 		e.subscribe { -- Print messages on option update
 			event = 'OptionSet',
-			pattern = { '!sai.imagelist.size', '!sai.text.status', '^' }, -- all main opts - not the subsubtables (text etc.)
+			pattern = { '!sai.imagelist.size', '^' }, -- all main opts - not the subsubtables (text etc.)
 			group = 'print_var_change',
 			callback = function(ev)
 				local v = ev.data
@@ -64,7 +64,7 @@ function M.print_option_changes(enable)
 				end
 
 				local name = ev.match:match '([^.]+%.[^.]+)$'
-				sai.text.set_status(
+				sai.notify(
 					('%s%s: %s'):format(
 						name:sub(1, 1):upper(),
 						name:sub(2):gsub('[_.](.)', function(x) return ' ' .. x:upper() end),

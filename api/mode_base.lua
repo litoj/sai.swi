@@ -51,7 +51,7 @@ function M.new(self, api_name)
 			if not action then
 				self._mc_map[b][rep_nr] = nil
 				if not next(self._mc_map[b]) then
-					api.on_mouse(b, function() sai.text.set_status('Unhandled mouse: ' .. b) end)
+					api.on_mouse(b, function() sai.notify('Unhandled mouse: ' .. b) end)
 					self._mc_map[b] = nil
 				end
 				return
@@ -89,7 +89,7 @@ function M.new(self, api_name)
 				end)
 			end)
 		else
-			api.on_key(b, action or function() sai.text.set_status('Unhandled key: ' .. b) end)
+			api.on_key(b, action or function() sai.notify('Unhandled key: ' .. b) end)
 		end
 	end
 	self._rawunmap = self._rawmap

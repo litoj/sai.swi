@@ -240,7 +240,7 @@ function M.new(api_name)
 
 	self.export = function(path)
 		api.export(path)
-		swayimg.text.set_status 'Export done'
+		sai.notify 'Export done'
 		e.trigger { event = 'User', match = 'ExportFinished', data = path }
 	end
 

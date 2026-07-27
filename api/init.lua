@@ -35,19 +35,18 @@ function M.exit(code)
 	if not next(e.get_subscribed(ev)) then swayimg.exit(code) end
 end
 
+function M.notify(msg) swayimg.text.status = string.gsub(tostring(msg), '\t', '  ') end
+
 function M.log(msg, file)
-	msg = tostring(msg)
-	print(msg)
 	if file then
 		local f = io.open(file, 'a') or error('Could not append to file: ' .. file)
-		f:write(msg)
+		f:write(tostring(msg))
 		f:close()
 	else
-		swayimg.text.set_status(string.gsub(msg, '\t', '  '))
+		M.notify(msg)
+		print(msg)
 	end
 end
-
-function M.notify(msg) swayimg.text.set_status(string.gsub(msg, '\t', '  ')) end
 
 local deferred_heap = require 'sai.api.deferred_heap'
 ---Schedules the next callback for swayimg.defer() and reschedule itself.
@@ -80,7 +79,7 @@ function M.exec(cmd)
 				return ("%s'%s'"):format(a, table.concat(marked, "' '"))
 			elseif type == 'm' then
 				abort = true
-				swayimg.text.set_status 'No marked files'
+				sai.notify 'No marked files'
 				return ''
 			else -- type == 's'
 				type = 'f'
