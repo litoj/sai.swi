@@ -12,7 +12,7 @@ local M = {}
 
 function M.__index(self, idx)
 	local fnname = 'get_' .. idx
-	local v = rawget(self, fnname)
+	local v = rawget(self, fnname) -- test for overrides first
 	if v then return v(self, idx) end
 
 	v = self.super[idx] -- get fn
@@ -47,10 +47,7 @@ function M.__newindex(self, idx, val)
 			val = self['_' .. idx]
 		end
 	else
-		fn = type(val) == 'boolean' and self.super['enable_' .. idx] or self.super[fnname]
-		if not fn then error('tried to assign: ' .. self._path .. '.' .. idx) end
-
-		fn(val)
+		self.super[idx] = val
 		rawset(self, '_' .. idx, val) -- set in case a getter isn't available
 	end
 

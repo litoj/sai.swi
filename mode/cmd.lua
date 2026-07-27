@@ -25,7 +25,7 @@ function M:new()
 	return self
 end
 
-function M:on_confirm(out)
+function M:on_confirm(out) -- TODO: history for >1 item doesn't work
 	self.text = ''
 	self._hist_matcher = ''
 	if not out then return end

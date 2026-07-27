@@ -98,7 +98,7 @@ local function gen_keep(factor_fn)
 				---@diagnostic disable-next-line: assign-type-mismatch
 				self._last = false
 
-				self.super.set_abs_scale(self.super.get_scale() * factor_fn(last, ev.data), 0, 0)
+				self.super.set_abs_scale(self.super.scale * factor_fn(last, ev.data), 0, 0)
 				self.super.set_abs_position(last.x, last.y)
 			end,
 		}
@@ -129,19 +129,19 @@ function M:set_default_scale(x)
 	end
 
 	self._raw_default_scale = handled
-	self.super.set_default_scale(handled)
+	self.super.default_scale = handled
 end
 
 function M:set_scale(x)
 	if type(x) == 'string' then
 		self.super.set_fix_scale(x)
 	else
-		self.super.set_abs_scale(x)
+		self.super.scale = x
 	end
 end
 function M:get_scale()
 	if self._scale then return self._scale end
-	if self._raw_default_scale == 'keep' then return self.super.get_scale() end
+	if self._raw_default_scale == 'keep' then return self.super.scale end
 	return self._default_scale
 end
 
@@ -153,6 +153,8 @@ function M:set_position(x)
 	end
 end
 
+function M:set_window_background(x) self.super.set_window_background(x) end
+
 function M:set_image_background(x)
 	if type(x) == 'table' then
 		self.super.set_image_chessboard(x.size, x[1], x[2])
@@ -161,17 +163,19 @@ function M:set_image_background(x)
 	end
 end
 
-function M:set_preload_limit(x)
+function M:set_auto_center(x) self.super.autocenter = x end
+
+function M:set_preload_size(x)
 	x = math.floor(x)
-	self.super.limit_preload(x)
-	self._preload_limit = x
+	self.super.preload = x
+	self._preload_size = x
 	return true
 end
 
-function M:set_history_limit(x)
+function M:set_history_size(x)
 	x = math.floor(x)
-	self.super.limit_history(x)
-	self._history_limit = x
+	self.super.history = x
+	self._history_size = x
 	return true
 end
 
@@ -182,11 +186,11 @@ function M.new(api_name)
 	local self = {
 		super = api,
 
-		_history_limit = 0,
-		_preload_limit = 0,
+		_history_size = 0,
+		_preload_size = 0,
 
 		--- https://github.com/artemsen/swayimg/blob/master/src/viewer.cpp#L29
-		_centering = true,
+		_auto_center = true,
 		_loop = true,
 		_default_position = 'center',
 		_image_background = { 0xff333333, 0xff4c4c4c, size = 20 }, -- chessboard
@@ -230,7 +234,7 @@ function M.new(api_name)
 
 	---@cast self sai.api.viewer
 
-	self.get_abs_scale = api.get_scale
+	self.get_abs_scale = function() return api.scale end
 	self.pan = new_panner(self)
 	self.go = new_go(api)
 	self.scale_centered = function(s, x, y)

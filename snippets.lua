@@ -158,9 +158,10 @@ function M.two_pane_mode(key)
 	super.new(tp)
 
 	tp.sai.mode = 'gallery'
+---@diagnostic disable-next-line: param-type-mismatch
 	tp.sai.gallery(function(g) ---@param g sai.gallery
 		g.padding_size = 0
-		g.cache_limit = 0
+		g.cache_size = 0
 		g.preload = false
 		g.border_size = 5
 		g.selected_scale = 1

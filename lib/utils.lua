@@ -380,7 +380,7 @@ end
 ---@return (fun(self?:any):any)?
 function U.make_runnable(code)
 	if not code:find 'return[^\n]*$' and not code:find '[^=]=[^=][^\n]*$' then
-		code = code:gsub('([^\n]*)$', 'return %1')
+		code = code:gsub('([^\n]+)$', 'return %1', 1)
 	end
 
 	local cb, err = loadstring(code)

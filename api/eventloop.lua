@@ -188,7 +188,7 @@ end
 
 function M.trigger(state)
 	---@cast state sai.eventloop.filter.opts
-	state.mode = state.mode or swayimg.get_mode()
+	state.mode = state.mode or swayimg.mode
 	if M.debug_trigger then print_debug('trigger', state) end
 
 	M.apply_filtered(state, function(hook)

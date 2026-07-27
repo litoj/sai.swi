@@ -31,7 +31,7 @@ local M = {
 	_pstore = false,
 	_pstore_path = (os.getenv 'XDG_CACHE_HOME' or (os.getenv 'HOME' .. '/.cache')) .. '/swayimg',
 	_preload = false,
-	_cache_limit = 100,
+	_cache_size = 100,
 
 	-- Custom settings
 	_thumb_size_diff_reload = false,
@@ -94,15 +94,15 @@ function M.get_at(x, y)
 	return img
 end
 
-function M:set_cache_limit(x)
+function M:set_cache_size(x)
 	x = math.floor(x)
-	self.super.limit_cache(x)
-	self._cache_limit = x
+	self.super.cache = x
+	self._cache_size = x
 	return true
 end
 function M:set_thumb_size(x)
 	x = math.floor(x)
-	self.super.set_thumb_size(x)
+	self.super.thumb_size = x
 	-- reset cache if rendering would be really bad for old images
 	if self._thumb_size_diff_reload and x / 2.2 - 25 > self._cached_thumb_size then
 		if sai.mode == 'gallery' then self.super.reload() end
@@ -113,14 +113,16 @@ function M:set_thumb_size(x)
 	self._thumb_size = x
 	return true
 end
-local function set_size(self, x, idx)
+
+local function set_int(self, x, idx)
 	x = math.floor(x)
-	self.super['set_' .. idx](x)
+	self.super[idx] = x
 	rawset(self, '_' .. idx, x)
 	return true
 end
-M.set_padding_size = set_size
-M.set_border_size = set_size
+
+M.set_padding_size = set_int
+M.set_border_size = set_int
 
 -- injecting function to also affect mode_text
 local api_get_img = api.get_image

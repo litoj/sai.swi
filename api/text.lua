@@ -21,29 +21,31 @@ local M = {
 	_shadow = 0xd0000000,
 }
 
-M.is_visible = swayimg.text.visible
+function M.is_visible() return swayimg.text.visible end
 
 function M:set_enabled(val)
 	if val == true then
-		self.super.show()
-		self.super.set_timeout(0)
+		self.super.visible = true
+		self.super.timeout = 0
 	elseif val == false then
-		self.super.hide()
+		self.super.visible = false
 	else
-		self.super.set_timeout(val)
+		self.super.timeout = true
 	end
 end
 
 -- transform scale factor into a pixel value
-function M:set_line_spacing(val) self.super.set_spacing(math.floor((val - 1) * self._size)) end
+function M:set_line_spacing(val) self.super.spacing = math.floor((val - 1) * self._size) end
 
 function M:set_size(val)
-	self.super.set_size(val)
+	self.super.size = val
 
 	-- update line spacing
 	self._size = val
 	self:set_line_spacing(self._line_spacing)
 	return true
 end
+
+function M:set_foreground(val) self.super.color = val end
 
 return require('sai.api.proxy').new(M)

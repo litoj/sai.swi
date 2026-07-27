@@ -189,7 +189,7 @@ function M:__newindex(placement, x)
 
 		new_tr.processed = processed
 		self._tracked[placement] = new_tr
-		if swayimg.get_mode() == self._api_name then
+		if swayimg.mode == self._api_name then
 			render_on_img(new_tr, self.super, placement, U.lazyimg(self.super))
 		end
 	else

@@ -4,7 +4,7 @@
 local U = require 'sai.lib.utils'
 local pager = require 'sai.lib.pager'
 
----@overload fun(apply:fun(self:self))
+---@overload fun(apply:fun(self:fakeapi))
 ---@class fakeapi: {[string]: fakeapi}
 
 ---@class sai.mode.custom: sai.lib.remapper

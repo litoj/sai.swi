@@ -37,10 +37,11 @@ function M:new()
 	self.sai.slideshow.default_scale = 'keep_width'
 	self.sai.text.enabled = true
 	local gspace = sai.gallery.thumb_size + sai.gallery.padding_size
-	self.sai.gallery(function(g)
+	---@diagnostic disable-next-line: param-type-mismatch
+	self.sai.gallery(function(g) ---@param g sai.gallery
 		g.thumb_size = gspace / 3
 		g.padding_size = gspace / 3
-		g.cache_limit = 0
+		g.cache_size = 0
 		g.preload = false
 	end)
 	self.sai.eventloop.subscribe {

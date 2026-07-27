@@ -88,6 +88,7 @@ function sai.set_window_size(width, height) end
 ---@alias event_name_t
 ---| 'ImgChanged' # after selected image has changed, match: mode, data: new image
 ---| 'ImgChangedPre' # just before selecting a different image, match: mode, data: old image
+---| 'Redraw' # whenever the window is redrawn - after ImgChanged and at other times
 ---| 'OptionSet' # after setting any option in the api, match: opt object path, data: opt value
 ---| 'ShellCmdPost' # after sai.exec, match: cmd, data: output
 ---| 'ModeChanged' # match: 'o:n' as in old:new, mode: new mode, data: old mode
@@ -505,10 +506,8 @@ end
 
 ---@class sai.viewer : mode_base
 ---Helper table for easier mappings for moving around the image
----@see sai.viewer.switch_image Equivalent via passing a parameter
 ---@field pan sai.viewer.panner
 ---Helper table for easier mappings for switching between images
----@see sai.viewer.switch_image Equivalent via passing a parameter
 ---@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
 ---@overload fun(index:integer) index of the image to open from the imagelist
 ---@field go {[vdir_t]:function}
@@ -519,14 +518,15 @@ end
 ---This is the viewport approach!
 ---Example: ←↑ corner of the image is outside the window -> `x,y<0`
 ---@field position fixed_position_t|{x:integer,y:integer}
----@field centering boolean should image be automatically centered when smaller than window size
+---@field auto_center boolean Should image be automatically centered when smaller than window size
 ---@field animation boolean State of the image (GIF) animation
+---@field frame integer Currently displayed frame number. (stops animation)
 ---@field window_background integer|bkgmode_t Window background: solid ARGB color or fill mode
 ---Background color or pattern for transparent images (ARGB)
 ---@field image_background integer|checkerboard
 ---@field loop boolean Image list loop mode
----@field preload_limit integer Number of images to preload in a separate thread
----@field history_limit integer Number of previously viewed images to keep in cache
+---@field preload_size integer Number of images to preload in a separate thread
+---@field history_size integer Number of previously viewed images to keep in cache
 sai.viewer = {}
 
 do
@@ -548,16 +548,6 @@ do
 	---@see swayimg.viewer.set_default_scale
 	---@see swayimg.viewer.set_default_position
 	function sai.viewer.reset() end
-
-	---Show next frame from multi-frame image (animation).
-	---This function stops the animation.
-	---@return integer # Index of the currently shown frame
-	function sai.viewer.next_frame() end
-
-	---Show previous frame from multi-frame image (animation).
-	---This function stops the animation.
-	---@return integer # Index of the currently shown frame
-	function sai.viewer.prev_frame() end
 
 	---Flip image vertically.
 	function sai.viewer.flip_vertical() end
@@ -594,7 +584,6 @@ sai.slideshow = {}
 
 ---@class sai.gallery: mode_base
 ---Helper table for easier mappings for switching between images
----@see sai.gallery.switch_image Equivalent via passing a parameter
 ---@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
 ---@overload fun(index:integer) index of the image to open from the imagelist
 ---@overload fun(x:integer,y:integer) position of the thumbnail to select (limited to visible images)
@@ -610,8 +599,8 @@ sai.slideshow = {}
 ---@field window_color integer Window background color in ARGB format
 ---@field preload boolean Preload invisible thumbnails
 ---@field hover boolean Update image selection with mouse movement
----@field cache_limit integer Max number of thumbnails stored in memory cache
----@field pstore boolean Persistent storage for thumbnails
+---@field cache_size integer Max number of thumbnails stored in memory cache
+---@field pstore boolean Toggle for persistent storage for thumbnails
 ---@field embedded_thumb boolean Use embedded thumbnails
 ---@field pstore_path string Custom path to the directory for persistent thumbnail storage
 ---Should thumbnails be reloaded when the smallest cached could be less than 1/2 resolution

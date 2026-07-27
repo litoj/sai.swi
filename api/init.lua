@@ -79,7 +79,7 @@ function M.exec(cmd)
 				return ("%s'%s'"):format(a, table.concat(marked, "' '"))
 			elseif type == 'm' then
 				abort = true
-				sai.notify 'No marked files'
+				M.notify 'No marked files'
 				return ''
 			else -- type == 's'
 				type = 'f'
@@ -109,11 +109,11 @@ end
 
 ---@param v appmode_t
 function M:set_mode(v)
-	local m = self.super.get_mode()
+	local m = self.super.mode
 	---@diagnostic disable-next-line: cast-local-type
 	m = { event = 'ModeChangedPre', mode = m, match = ('%s:%s'):format(m:sub(1, 1), v:sub(1, 1)), data = v }
 	e.trigger(m)
-	self.super.set_mode(v)
+	self.super.mode = v
 	m.event = 'ModeChanged'
 	m.data = m.mode
 	m.mode = v
@@ -185,5 +185,13 @@ swayimg.on_window_resize(function()
 		require('sai.binds').default()
 	end
 end)
+
+e.subscribe {
+	event = 'Subscribed',
+	match = 'Redraw',
+	callback = function()
+		swayimg.on_redrawn(function() e.trigger { event = 'Redraw' } end)
+	end,
+}
 
 return M
