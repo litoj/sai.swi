@@ -188,7 +188,7 @@ function U.tbl_to_str(t, indent)
 
 		if type(k) == 'table' then k = '[]' end
 
-		s[#s + 1] = type(k) == 'string' and ('%s=%s'):format(k, tostring(v)) or tostring(v)
+		s[#s + 1] = (type(k) == 'string' and '%s=%s' or '[%s]=%s'):format(tostring(k), tostring(v))
 		space = space - #s[#s]
 	end
 	if space <= 0 then

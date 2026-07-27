@@ -86,21 +86,25 @@ local function complete_bindlist()
 	return 'All Binds', out
 end
 
----@param target sai.api.proxy API object to inspect
+---@param wrapper sai.api.proxy API object to inspect
 ---@return table<string,any>[] fields List of settable fields with their current values
-local function discover_settable_fields(target)
-	local raw_api = target.super
+local function discover_settable_fields(wrapper)
+	local backed
+	for k, v in pairs(wrapper.super) do
+		if type(k) == 'userdata' then
+			backed = v
+			break
+		end
+	end
 	local fields = {}
 
-	for field, value in pairs(target) do
-		if field:sub(1, 1) == '_' then
-			local field_name = field:sub(2)
-			local setter_name = 'set_' .. field_name
-			local enabler_name = 'enable_' .. field_name
+	for backer, value in pairs(wrapper) do
+		if backer:sub(1, 1) == '_' then
+			local field = backer:sub(2)
 
 			-- Check if backing field has an official setter, enabler, or override
-			if rawget(target, '_' .. setter_name) or raw_api[setter_name] or raw_api[enabler_name] then
-				fields[#fields + 1] = { name = field_name, value = value }
+			if rawget(wrapper, 'set' .. backer) or backed[field] then
+				fields[#fields + 1] = { name = field, value = value }
 			end
 		end
 	end
@@ -112,7 +116,7 @@ end
 ---@return string[]
 local function settings_list()
 	local out = {}
-	for _, saiapi in ipairs {
+	for _, wrapper in ipairs {
 		sai,
 		sai.text,
 		sai.imagelist,
@@ -120,12 +124,10 @@ local function settings_list()
 		sai.viewer,
 		sai.slideshow,
 	} do
-		---@diagnostic disable-next-line: cast-type-mismatch
-		---@cast saiapi sai.api.proxy
-		out[#out + 1] = ('%s:'):format(saiapi._path:upper())
+		out[#out + 1] = ('%s:'):format(wrapper._path:upper())
 
-		for _, field in ipairs(discover_settable_fields(saiapi)) do
-			out[#out + 1] = ('  %s\t{%s.%s}'):format(field.name, saiapi._path, field.name)
+		for _, field in ipairs(discover_settable_fields(wrapper)) do
+			out[#out + 1] = ('  %s\t{%s.%s}'):format(field.name, wrapper._path, field.name)
 		end
 	end
 

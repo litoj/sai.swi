@@ -285,7 +285,7 @@ end
 function M:_on_dst_change(mode, loc)
 	if self._raw_update then
 		if self._location == 'status' then
-			self.sai.text.status_timeout = sai.text.status_timeout
+			self.sai.text.status_timeout = nil
 			self._raw_update ''
 		else
 			self.sai.text.enabled = nil

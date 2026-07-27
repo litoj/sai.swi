@@ -96,8 +96,6 @@ local function wrap(mo, api)
 		__call = function(self, enable)
 			if type(enable) == 'function' then return enable(self) end
 
-			local ot = api._trigger
-			api._trigger = false
 			if enable then
 				for k, v in pairs(self._vars) do
 					if avail(k) then
@@ -127,7 +125,6 @@ local function wrap(mo, api)
 					end
 				end
 			end
-			api._trigger = ot
 
 			-- cascade updates
 			for k, v in pairs(self) do

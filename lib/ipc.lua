@@ -205,6 +205,29 @@ function server.hook(self, enable)
 	end
 end
 
+--- Handle a connection. `io` is a bidirectional channel:
+--- `io()` reads and returns the next client message (nil on disconnect).
+--- `io(result)` sends a result, then reads and returns the next message.
+--- `io(nil, err)` sends an error, then reads and returns the next message.
+--- Override to implement custom protocols.
+---@param io fun(result?: string, err?: string): string?
+function server.handle(io)
+	local code = io()
+	while code do
+		local fn, err = load(code)
+		if not fn then
+			code = io(nil, err)
+		else
+			local ok, ret = pcall(fn)
+			if ok then
+				code = io(tostring(ret))
+			else
+				code = io(nil, ret)
+			end
+		end
+	end
+end
+
 function server:receive()
 	while true do
 		local fd = ffi.C.accept4(self._fd, nil, nil, 0)
@@ -215,35 +238,21 @@ function server:receive()
 
 		set_timeouts(fd, self._timeout)
 
-		while true do
-			local len_data = recv_all(fd, 4)
-			if not len_data then break end
-
-			local msg_len = unpack_u32_le(len_data)
-			if msg_len > self._max_msg_size then break end
-
-			local code = recv_all(fd, msg_len)
-			if not code then break end
-
-			local status, result
-			local fn, err = load(code)
-			if not fn then
-				status = 1
-				result = err
-			else
-				local ok, ret = pcall(fn)
-				if ok then
-					status = 0
-					result = tostring(ret)
-				else
-					status = 2
-					result = ret
-				end
+		local function io(result, err)
+			if result ~= nil or err ~= nil then
+				local st = result and 0 or 1
+				local s = result or err
+				if not send_all(fd, string.char(st) .. pack_u32_le(#s) .. s) then return nil end
 			end
 
-			local resp = string.char(status) .. pack_u32_le(#result) .. result
-			if not send_all(fd, resp) then break end
+			local h = recv_all(fd, 4)
+			if not h then return nil end
+			local n = unpack_u32_le(h)
+			if n > self._max_msg_size then return nil end
+			return recv_all(fd, n)
 		end
+
+		pcall(self.handle, io)
 
 		ffi.C.close(fd)
 	end

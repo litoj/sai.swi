@@ -59,6 +59,7 @@ function M:hist_next()
 		if self._history[i]:find(self._hist_matcher, 1, true) then
 			self._hist_pos = i
 			self.text = self._history[i]
+			return
 		end
 	end
 	self._hist_pos = 0
@@ -69,6 +70,7 @@ function M:hist_prev()
 		if self._history[i]:find(self._hist_matcher, 1, true) then
 			self._hist_pos = i
 			self.text = self._history[i]
+			return
 		end
 	end
 end

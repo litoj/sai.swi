@@ -41,28 +41,22 @@ function M.__newindex(self, idx, val)
 		fn = fn(self, val, idx)
 		if fn == nil then
 			rawset(self, '_' .. idx, val)
-			---@diagnostic disable-next-line: cast-local-type
-			fn = true
 		elseif fn then
 			val = self['_' .. idx]
+		else
+			return
 		end
 	else
 		self.super[idx] = val
 		rawset(self, '_' .. idx, val) -- set in case a getter isn't available
 	end
-
-	if fn and self._trigger then
-		e.trigger { event = 'OptionSet', match = ('%s.%s'):format(self._path, idx), data = val, old_data = old }
-	end
+	e.trigger { event = 'OptionSet', match = ('%s.%s'):format(self._path, idx), data = val, old_data = old }
 end
 
 ---Create a dynamic table where variable I/O can be custom-defined
 ---Practically a metatable designed for automatic passthrough to a different api.
 ---@generic O: sai.api.proxy
 ---@return O self
-function M:new()
-	if self._trigger == nil then self._trigger = true end
-	return setmetatable(self, M)
-end
+function M:new() return setmetatable(self, M) end
 
 return M

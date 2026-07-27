@@ -89,20 +89,6 @@ local function render_on_img(tracker, api, placement, img)
 end
 
 local _roi = render_on_img
-e.subscribe {
-	event = 'OptionSet',
-	pattern = 'sai.text.enabled',
-	callback = function(ev)
-		render_on_img = ev.data and _roi or function() end
-		if ev.data and sai.initialized then
-			local smt = sai[sai.mode].text
-			for placement, config in pairs(smt._tracked) do
-				render_on_img(config, smt.super, placement, U.lazyimg(smt.super))
-			end
-		end
-	end,
-}
-
 local primed -- for temporarily blocking rendering until sai is loaded
 ---@param self sai.api.mode_text
 local function initialize(self)
@@ -189,9 +175,7 @@ function M:__newindex(placement, x)
 
 		new_tr.processed = processed
 		self._tracked[placement] = new_tr
-		if swayimg.mode == self._api_name then
-			render_on_img(new_tr, self.super, placement, U.lazyimg(self.super))
-		end
+		if swayimg.mode == self._api_name then render_on_img(new_tr, self.super, placement, U.lazyimg(self.super)) end
 	else
 		if self._tracked then self._tracked[placement] = nil end
 		self.super.set_text(placement, x)
