@@ -38,6 +38,32 @@ local function set_mark(x, enabled)
 	e.trigger { event = 'OptionSet', match = 'sai.imagelist.marked.size', data = msize }
 end
 
+function M.size() return api.size end
+function M.remove(x)
+	local ci = M.get_current()
+	if x == ci.path then e.trigger { event = 'ImgChangedPre', data = ci } end
+	api.remove(x)
+	set_mark(x, false)
+	e.trigger { event = 'OptionSet', match = 'sai.imagelist.size', data = last_lsize }
+end
+function M.clear()
+	api.clear()
+
+	mlist = {}
+	msize = 0
+	e.trigger { event = 'OptionSet', match = 'sai.imagelist.marked.size', data = msize }
+
+	last_lsize = 0
+	e.trigger { event = 'OptionSet', match = 'sai.imagelist.size', data = last_lsize }
+end
+function M.add(x)
+	api.add(x)
+	last_lsize = api.size
+	e.trigger { event = 'OptionSet', match = 'sai.imagelist.size', data = last_lsize }
+end
+
+function M.get_current() return sai[swayimg.mode].get_image() or U.dummy_image end
+
 function marked.size()
 	local lsize = api.size
 	if lsize ~= last_lsize then
@@ -53,6 +79,16 @@ function marked.size()
 	return msize
 end
 
+-- TODO: allow set_current also generally for imagelist - traverse for gallery and open for viewer
+function marked.set_current(enabled)
+	---@diagnostic disable-next-line: redefined-local
+	local api = swayimg[swayimg.mode] ---@type swayimg.gallery
+	local img = api.get_image() or error 'no active image to mark'
+	if enabled == 'toggle' then enabled = not img.mark end
+	api.mark_image(enabled)
+	set_mark(img.path, enabled)
+end
+
 function marked.get()
 	local t = {}
 	for p, _ in pairs(mlist) do
@@ -60,30 +96,5 @@ function marked.get()
 	end
 	return t
 end
-
--- TODO: allow set_current also generally for imagelist - traverse for gallery and open for viewer
-function marked.set_current(enabled)
-	---@diagnostic disable-next-line: redefined-local
-	local api = swayimg[swayimg.mode] ---@type swayimg.gallery
-	local img = api.get_image()
-	if enabled == 'toggle' then enabled = not img.mark end
-	api.mark_image(enabled)
-	set_mark(img.path, enabled)
-end
-
-function M.get_current() return sai[swayimg.mode].get_image() or U.dummy_image end
-function M.remove(x)
-	local ci = M.get_current()
-	if x == ci.path then e.trigger { event = 'ImgChangedPre', data = ci } end
-	api.remove(x)
-	set_mark(x, false)
-	e.trigger { event = 'OptionSet', match = 'sai.imagelist.size', data = last_lsize }
-end
-function M.add(x)
-	api.add(x)
-	last_lsize = api.size
-	e.trigger { event = 'OptionSet', match = 'sai.imagelist.size', data = last_lsize }
-end
-function M.size() return api.size end
 
 return require('sai.api.proxy').new(M)

@@ -68,6 +68,90 @@ local function new_go(api, api_name)
 	})
 end
 
+---@param api_name 'viewer'|'slideshow'
+---@return sai.viewer|sai.slideshow
+function M.new(api_name)
+	local api = swayimg[api_name] ---@type swayimg.viewer
+	local self = {
+		super = api,
+
+		--- https://github.com/artemsen/swayimg/blob/master/src/viewer.cpp#L29
+		_auto_center = true,
+		_loop = true,
+		_default_position = 'center',
+		_image_background = { 0xff333333, 0xff4c4c4c, size = 20 }, -- chessboard
+		_drag_button = 'MouseRight',
+		_history_size = 0,
+		_preload_size = 0,
+	}
+
+	if api_name == 'viewer' then
+		self._default_scale = 'optimal'
+		self._window_background = 0xff000000
+		self.text = mode_text.new {
+			super = api,
+			_api_name = api_name,
+			_topleft = {
+				'File:\t{name}',
+				'Format:\t{format}',
+				'File size:\t{sizehr}',
+				'File time:\t{time}',
+				'EXIF date:\t{meta.Exif.Photo.DateTimeOriginal}',
+				'EXIF camera:\t{meta.Exif.Image.Model}',
+			},
+			_topright = {
+				'Image:\t{list.index} of {list.total}',
+				'Frame:\t{frame.index} of {frame.total}',
+				'Size:\t{frame.width}x{frame.height}',
+			},
+			_bottomleft = { 'Scale: {scale}' },
+			_bottomright = {},
+		}
+	else --- https://github.com/artemsen/swayimg/blob/master/src/slideshow.cpp#L17
+		self._default_scale = 'fit'
+		self._window_background = 'auto'
+		self.text = mode_text.new {
+			super = api,
+			_api_name = api_name,
+			_topleft = {},
+			_topright = { '{name}' },
+			_bottomleft = {},
+			_bottomright = {},
+		}
+	end
+	self._original_default_scale = self._default_scale
+
+	---@cast self sai.api.viewer
+
+	self.get_abs_scale = function() return api.scale end
+	self.pan = new_panner(self)
+	self.go = new_go(api)
+	self.scale_centered = function(s, x, y)
+		api.set_abs_scale(s, x, y)
+		self._scale = s
+	end
+
+	self.export = function(path)
+		api.export(path)
+		sai.notify 'Export done'
+		e.trigger { event = 'User', match = 'ExportFinished', data = path }
+	end
+
+	api.on_image_change(function()
+		self._scale = false
+		e.trigger { event = 'ImgChanged', mode = api_name, match = api_name, data = U.lazyimg(api) }
+	end)
+
+	for k, v in pairs(M) do
+		self[k] = v
+	end
+	self.new = nil
+
+	self = mode_base.new(self, api_name) ---@type sai.api.viewer
+
+	return self
+end
+
 ---@param factor_fn fun(last:lastimg, img:swayimg.image):number
 ---@return fun(self:sai.api.viewer,x:default_scale_t):string
 local function gen_keep(factor_fn)
@@ -128,7 +212,7 @@ function M:set_default_scale(x)
 		if not handled then handled = x end
 	end
 
-	self._raw_default_scale = handled
+	self._original_default_scale = handled
 	self.super.default_scale = handled
 end
 
@@ -141,7 +225,7 @@ function M:set_scale(x)
 end
 function M:get_scale()
 	if self._scale then return self._scale end
-	if self._raw_default_scale == 'keep' then return self.super.scale end
+	if self._original_default_scale == 'keep' then return self.super.scale end
 	return self._default_scale
 end
 
@@ -177,90 +261,6 @@ function M:set_history_size(x)
 	self.super.history = x
 	self._history_size = x
 	return true
-end
-
----@param api_name 'viewer'|'slideshow'
----@return sai.viewer|sai.slideshow
-function M.new(api_name)
-	local api = swayimg[api_name] ---@type swayimg.viewer
-	local self = {
-		super = api,
-
-		_history_size = 0,
-		_preload_size = 0,
-
-		--- https://github.com/artemsen/swayimg/blob/master/src/viewer.cpp#L29
-		_auto_center = true,
-		_loop = true,
-		_default_position = 'center',
-		_image_background = { 0xff333333, 0xff4c4c4c, size = 20 }, -- chessboard
-	}
-
-	if api_name == 'viewer' then
-		self._default_scale = 'optimal'
-		self._window_background = 0xff000000
-		self.text = mode_text.new {
-			super = api,
-			_api_name = api_name,
-			_topleft = {
-				'File:\t{name}',
-				'Format:\t{format}',
-				'File size:\t{sizehr}',
-				'File time:\t{time}',
-				'EXIF date:\t{meta.Exif.Photo.DateTimeOriginal}',
-				'EXIF camera:\t{meta.Exif.Image.Model}',
-			},
-			_topright = {
-				'Image:\t{list.index} of {list.total}',
-				'Frame:\t{frame.index} of {frame.total}',
-				'Size:\t{frame.width}x{frame.height}',
-			},
-			_bottomleft = { 'Scale: {scale}' },
-			_bottomright = {},
-		}
-	else --- https://github.com/artemsen/swayimg/blob/master/src/slideshow.cpp#L17
-		self._default_scale = 'fit'
-		self._window_background = 'auto'
-		self.text = mode_text.new {
-			super = api,
-			_api_name = api_name,
-			_topleft = {},
-			_topright = { '{name}' },
-			_bottomleft = {},
-			_bottomright = {},
-		}
-	end
-	self._raw_default_scale = self._default_scale
-
-	---@cast self sai.api.viewer
-
-	self.get_abs_scale = function() return api.scale end
-	self.pan = new_panner(self)
-	self.go = new_go(api)
-	self.scale_centered = function(s, x, y)
-		api.set_abs_scale(s, x, y)
-		self._scale = s
-	end
-
-	self.export = function(path)
-		api.export(path)
-		sai.notify 'Export done'
-		e.trigger { event = 'User', match = 'ExportFinished', data = path }
-	end
-
-	api.on_image_change(function()
-		self._scale = false
-		e.trigger { event = 'ImgChanged', mode = api_name, match = api_name, data = U.lazyimg(api) }
-	end)
-
-	for k, v in pairs(M) do
-		self[k] = v
-	end
-	self.new = nil
-
-	self = mode_base.new(self, api_name) ---@type sai.api.viewer
-
-	return self
 end
 
 return M

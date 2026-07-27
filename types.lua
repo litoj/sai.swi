@@ -6,29 +6,56 @@
 
 ---Main application class.
 ---@class sai: sai.api.proxy
----@field mode appmode_t Which mode is the application in
----@field antialiasing boolean Enable/disable antialiasing
----@field exif_orientation boolean Enable or disable changing orientation based on EXIF
----@field apply_raw_wb boolean Should camera white balance be applied to raw images
----Enable or disable window decoration (title, border, buttons).
----Available only in Wayland, the corresponding protocol must be
----supported by the composer.
----By default disabled in Sway and enabled in other compositors.
----@field decoration boolean
 ---@field app_id string wayland application ID
+---@field mode appmode_t Which mode is the application in
+---@field fullscreen boolean set to `nil` to toggle
+---Set mouse button used for drag-and-drop image file to external apps. (`MouseRight` etc.)
+---Configurable only at startup.
+---@field dnd_button string
 ---Create a floating window with the same coordinates and size as the currently
 ---focused window. This variable can be set only once.
 ---Sway and Hyprland compositors only.
 ---By default enabled in Sway and disabled in other compositors.
 ---@field overlay boolean
----@field fullscreen boolean set to `nil` to toggle
----Set mouse button used for drag-and-drop image file to external apps. (`MouseRight` etc.)
----Configurable only at startup.
----@field dnd_button string
+---Enable or disable window decoration (title, border, buttons).
+---Available only in Wayland, the corresponding protocol must be
+---supported by the composer.
+---By default disabled in Sway and enabled in other compositors.
+---@field decoration boolean
+---@field antialiasing boolean Enable/disable antialiasing
+---@field exif_orientation boolean Enable or disable changing orientation based on EXIF
+---@field apply_raw_wb boolean Should camera white balance be applied to raw images
 ---@field initialized boolean Whether initialization has completed and config has been loaded
----@field pid integer Get the process ID of the swayimg instance (cached)
+---@field pid integer Get the process ID of the swayimg instance (cached). READ-ONLY
 ---@field [appmode_t] mode_base
-_G.sai = {}
+sai = {}
+
+---Set title until image changes.
+---@param title string
+function sai.set_title(title) end
+
+---Exit from application.
+---NOTE: exits only if all SwiLeavePre hooks deregister!
+---@param code? integer Program exit code, `0` by default
+function sai.exit(code) end
+
+---Get application window size.
+---@return { width: integer, height: integer } # Window size in pixels
+function sai.get_window_size() end
+
+---Set application window size.
+---@param width integer Width of the window in pixels
+---@param height integer Height of the window in pixels
+function sai.set_window_size(width, height) end
+
+---Get mouse pointer coordinates.
+---@return { x :integer, y: integer } # Coordinates of the mouse pointer
+function sai.get_mouse_pos() end
+
+---Schedule function execution to after `ms`.
+---@param ms integer
+---@param cb fun()
+function sai.defer_fn(ms, cb) end
 
 ---Execute a shell command in sync.
 ---Escape sequences:
@@ -51,29 +78,6 @@ function sai.notify(msg) end
 ---@param msg string
 ---@param file string? optional redirect of the message to a file (append mode)
 function sai.log(msg, file) end
-
----Schedule function execution to after `ms`.
----@param ms integer
----@param cb fun()
-function sai.defer_fn(ms, cb) end
-
----Exit from application.
----NOTE: exits only if all SwiLeavePre hooks deregister!
----@param code? integer Program exit code, `0` by default
-function sai.exit(code) end
-
----Get mouse pointer coordinates.
----@return { x :integer, y: integer } # Coordinates of the mouse pointer
-function sai.get_mouse_pos() end
-
----Get application window size.
----@return { width: integer, height: integer } # Window size in pixels
-function sai.get_window_size() end
-
----Set application window size.
----@param width integer Width of the window in pixels
----@param height integer Height of the window in pixels
-function sai.set_window_size(width, height) end
 
 --------------------------
 --- Eventloop processing
@@ -331,17 +335,9 @@ function sai.eventloop.takeover_subscribe(cfg) end
 sai.imagelist = {}
 
 do
-	---Get current image entry (metadata is lazy-loaded)
-	---@return swayimg.image
-	function sai.imagelist.get_current() end
-
 	---Get size of image list.
 	---@return integer # Number of entries in the image list
 	function sai.imagelist.size() end
-
-	---Get list of all entries in the image list.
-	---@return swayimg.entry[] # Array with all entries
-	function sai.imagelist.get() end
 
 	---Add entry to the image list.
 	---@param paths string|string[] Paths to add
@@ -350,6 +346,17 @@ do
 	---Remove entry from the image list.
 	---@param paths string|string[] Paths to remove
 	function sai.imagelist.remove(paths) end
+
+	---Clear the image list.
+	function sai.imagelist.clear() end
+
+	---Get list of all entries in the image list.
+	---@return swayimg.entry[] # Array with all entries
+	function sai.imagelist.get() end
+
+	---Get current image entry (metadata is lazy-loaded)
+	---@return swayimg.image
+	function sai.imagelist.get_current() end
 
 	---Helper for working with marks on images
 	---Changes to the size get emitted as OptionSet(`sai.imagelist.marked.size`)
@@ -360,13 +367,13 @@ do
 	---@return integer
 	function sai.imagelist.marked.size() end
 
-	---Get list of all marked paths.
-	---@return string[] paths of all marked images
-	function sai.imagelist.marked.get() end
-
 	---Toggle the marked state of the current entry.
 	---@param state boolean|'toggle'
 	function sai.imagelist.marked.set_current(state) end
+
+	---Get list of all marked paths.
+	---@return string[] paths of all marked images
+	function sai.imagelist.marked.get() end
 end
 
 --------------------------------------------------------------------------------
@@ -379,6 +386,7 @@ end
 ---and how long for (after switching to a different image).
 ---Use `true` to disable timeout and permanently display, `false` to always hide, x for x seconds
 ---@field enabled boolean|number
+---@field status_timeout number Timeout in seconds after which the status message is hidden
 ---@field font string Font face name
 ---@field size integer Font size in pixels
 ---@field line_spacing number Factor of amount of space between lines (>0)
@@ -386,7 +394,6 @@ end
 ---@field foreground integer Foreground text color in ARGB format, e.g. `0xff00aa99`
 ---@field background integer Background text color in ARGB format, e.g. `0xff00aa99`
 ---@field shadow integer Shadow text color in ARGB format, e.g. `0xff00aa99`
----@field status_timeout number Timeout in seconds after which the status message is hidden
 sai.text = {}
 
 ---Get immediate visibility state of the text layer.
@@ -477,7 +484,7 @@ end
 ---@class checkerboard
 ---@field [1] integer first color (i.e. 0xff000000)
 ---@field [2] integer second color (i.e. 0xff888888)
----@field size integer size of individual grids in pixels
+---@field size integer size of individual blocks in the grid in pixels
 
 ---@alias one_time_scale_t
 ---| "optimal" # 100% or less to fit to window
@@ -505,28 +512,29 @@ end
 ---@field up fun(p:integer?) Step up by `p` px (default: step.default_size)
 
 ---@class sai.viewer : mode_base
+---@field auto_center boolean Should image be automatically centered when smaller than window size
+---@field loop boolean Image list loop mode
+---@field default_scale default_scale_t Default scale applied to newly opened images
+---@field default_position fixed_position_t Default position applied to newly opened images
+---@field scale one_time_scale_t|number Scale of the image as a preset or absolute value
+---Position of the image relative to the position of the window.
+---This is the viewport approach!
+---Example: ←↑ corner of the image is outside the window -> `x,y<0`
+---@field position fixed_position_t|{x:integer,y:integer}
+---@field window_background integer|bkgmode_t Window background: solid ARGB color or fill mode
+---Background color or pattern for transparent images (ARGB)
+---@field image_background integer|checkerboard
+---@field animation boolean State of the image (GIF) animation
+---@field frame integer Currently displayed frame number. (stops animation)
+---@field drag_button mbutton_t Mouse button used for dragging the image outside the window.
+---@field preload_size integer Number of images to preload in a separate thread
+---@field history_size integer Number of previously viewed images to keep in cache
 ---Helper table for easier mappings for moving around the image
 ---@field pan sai.viewer.panner
 ---Helper table for easier mappings for switching between images
 ---@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
 ---@overload fun(index:integer) index of the image to open from the imagelist
 ---@field go {[vdir_t]:function}
----@field default_scale default_scale_t Default scale applied to newly opened images
----@field scale one_time_scale_t|number Scale of the image as a preset or absolute value
----@field default_position fixed_position_t Default position applied to newly opened images
----Position of the image relative to the position of the window.
----This is the viewport approach!
----Example: ←↑ corner of the image is outside the window -> `x,y<0`
----@field position fixed_position_t|{x:integer,y:integer}
----@field auto_center boolean Should image be automatically centered when smaller than window size
----@field animation boolean State of the image (GIF) animation
----@field frame integer Currently displayed frame number. (stops animation)
----@field window_background integer|bkgmode_t Window background: solid ARGB color or fill mode
----Background color or pattern for transparent images (ARGB)
----@field image_background integer|checkerboard
----@field loop boolean Image list loop mode
----@field preload_size integer Number of images to preload in a separate thread
----@field history_size integer Number of previously viewed images to keep in cache
 sai.viewer = {}
 
 do
@@ -583,28 +591,28 @@ sai.slideshow = {}
 --------------------------------------------------------------------------------
 
 ---@class sai.gallery: mode_base
+---@field aspect aspect_t Thumbnail aspect ratio
+---@field thumb_size integer Thumbnail size in pixels
+---@field padding_size integer Padding between thumbnails in pixels
+---@field border_size integer Border size for the selected thumbnail in pixels
+---@field selected_scale number Scale factor for the selected thumbnail (1.0 = 100%)
+---@field window_color integer Window background color in ARGB format
+---@field unselected_color integer Background color for unselected thumbnails in ARGB format
+---@field selected_color integer Background color for the selected thumbnail in ARGB format
+---@field border_color integer Border color for the selected thumbnail in ARGB format
+---@field hover boolean Update image selection with mouse movement
+---@field pstore boolean Toggle for persistent storage for thumbnails
+---@field pstore_path string Custom path to the directory for persistent thumbnail storage
+---@field preload boolean Preload invisible thumbnails
+---@field cache_size integer Max number of thumbnails stored in memory cache
+---@field embedded_thumb boolean Use embedded thumbnails
+---Should thumbnails be reloaded when the smallest cached could be less than 1/2 resolution
+---@field thumb_size_diff_reload boolean
 ---Helper table for easier mappings for switching between images
 ---@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
 ---@overload fun(index:integer) index of the image to open from the imagelist
 ---@overload fun(x:integer,y:integer) position of the thumbnail to select (limited to visible images)
 ---@field go {[gdir_t]:function}
----@field aspect aspect_t Thumbnail aspect ratio
----@field thumb_size integer Thumbnail size in pixels
----@field padding_size integer Padding between thumbnails in pixels
----@field border_size integer Border size for the selected thumbnail in pixels
----@field border_color integer Border color for the selected thumbnail in ARGB format
----@field selected_scale number Scale factor for the selected thumbnail (1.0 = 100%)
----@field selected_color integer Background color for the selected thumbnail in ARGB format
----@field unselected_color integer Background color for unselected thumbnails in ARGB format
----@field window_color integer Window background color in ARGB format
----@field preload boolean Preload invisible thumbnails
----@field hover boolean Update image selection with mouse movement
----@field cache_size integer Max number of thumbnails stored in memory cache
----@field pstore boolean Toggle for persistent storage for thumbnails
----@field embedded_thumb boolean Use embedded thumbnails
----@field pstore_path string Custom path to the directory for persistent thumbnail storage
----Should thumbnails be reloaded when the smallest cached could be less than 1/2 resolution
----@field thumb_size_diff_reload boolean
 sai.gallery = {}
 
 ---Get information about currently selected image.

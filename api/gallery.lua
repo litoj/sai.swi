@@ -11,16 +11,12 @@ local api = swayimg.gallery
 local M = {
 	super = api,
 
-	-- settings that are not set directly in gallery.cpp, but in layout.cpp, appmode.cpp and other
-	_embedded_thumb = true,
-	_thumb_size = 200,
-	_padding_size = 5,
+	_pinch_factor = 100.0,
 
-	--- https://github.com/artemsen/swayimg/blob/master/src/gallery.cpp#L73
+	--- https://github.com/artemsen/swayimg/blob/master/src/gallery.cpp#L42
 	_aspect = 'fill',
 	_border_size = 5,
 	_selected_scale = 1.15,
-	_pinch_factor = 100.0,
 
 	_window_color = 0xff000000,
 	_background_color = 0xff202020,
@@ -32,6 +28,9 @@ local M = {
 	_pstore_path = (os.getenv 'XDG_CACHE_HOME' or (os.getenv 'HOME' .. '/.cache')) .. '/swayimg',
 	_preload = false,
 	_cache_size = 100,
+	_thumb_size = 200,
+	_padding_size = 5,
+	_embedded_thumb = true,
 
 	-- Custom settings
 	_thumb_size_diff_reload = false,
@@ -90,7 +89,6 @@ function M.get_at(x, y)
 	if not old then return end
 	api.select_at(x, y)
 	local img = M.get_image()
-	api.select_path(old.path)
 	return img
 end
 

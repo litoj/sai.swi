@@ -11,11 +11,11 @@ local M = {
 	_path = 'sai',
 	initialized = false,
 
-	_overlay = true, -- enabled by default in sway and disabled otherwise
-	_exif_orientation = true, -- automatically applied only to raw files
-	_antialiasing = true,
-	_decoration = true,
 	_dnd_button = 'MouseRight',
+	_overlay = true, -- enabled by default in sway and disabled otherwise
+	_decoration = true,
+	_antialiasing = true,
+	_exif_orientation = true, -- automatically applied only to raw files
 	_apply_raw_wb = true,
 }
 
@@ -47,6 +47,8 @@ function M.log(msg, file)
 		print(msg)
 	end
 end
+
+function M.set_title(x) swayimg.title = x end
 
 local deferred_heap = require 'sai.api.deferred_heap'
 ---Schedules the next callback for swayimg.defer() and reschedule itself.
@@ -148,7 +150,7 @@ swayimg.on_window_resize(function()
 			return
 		elseif x == false and sai.mode ~= 'gallery' then
 			x = sai[sai.mode]
-			x.scale = x._raw_default_scale -- fix incorrect initial size with overlay disabled
+			x.scale = x._original_default_scale -- fix incorrect initial size with overlay disabled
 		end
 
 		x = true

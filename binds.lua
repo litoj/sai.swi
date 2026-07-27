@@ -89,7 +89,11 @@ function M.default()
 	-- text layer
 	gmap('t', function() t.enabled = not t.enabled end, 'Toggle text')
 	-- mouse bindings as keys
-	gmap('MouseLeft', function() sai.mode = 'viewer' end, 'Switch to viewer')
+	gmap('MouseLeft', function()
+		local pos = sai.get_mouse_pos()
+		g.go(pos.x, pos.y)
+		sai.mode = 'viewer'
+	end, 'Switch to viewer')
 
 	-- Viewer
 	local vmap = function(binds, cb, desc)

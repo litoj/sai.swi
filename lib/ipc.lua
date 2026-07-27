@@ -112,8 +112,8 @@ function M:set_enabled(val)
 	if self._enabled == val then return false end
 	self._enabled = val
 
-	if val and sai then
-		sai.eventloop.subscribe {
+	if not self._leave_hook and sai and val then
+		self._leave_hook = sai.eventloop.subscribe {
 			event = 'SwiLeavePre',
 			callback = function()
 				self.enabled = false

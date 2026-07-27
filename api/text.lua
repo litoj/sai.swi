@@ -5,14 +5,11 @@ local M = {
 	super = swayimg.text,
 	_path = 'sai.text',
 
-	-- settings that are not set directly in text.cpp
-	_font = 'monospace',
-	_size = 24,
-
 	--- https://github.com/artemsen/swayimg/blob/master/src/text.cpp#L22
 	_enabled = true,
 	_status_timeout = 3,
-
+	_font = 'monospace',
+	_size = 24,
 	_line_spacing = 1, -- uses a custom formula to achieve the standard meaning of the name
 	_padding = 10,
 
@@ -30,7 +27,7 @@ function M:set_enabled(val)
 	elseif val == false then
 		self.super.visible = false
 	else
-		self.super.timeout = true
+		self.super.timeout = val
 	end
 end
 
