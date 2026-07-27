@@ -48,8 +48,6 @@ function M.log(msg, file)
 	end
 end
 
-function M.set_title(x) swayimg.title = x end
-
 local deferred_heap = require 'sai.api.deferred_heap'
 ---Schedules the next callback for swayimg.defer() and reschedule itself.
 local function cb_rescheduler()
@@ -109,6 +107,8 @@ function M.exec(cmd)
 	return out, code
 end
 
+function M:get_app_id() return swayimg.appid end
+
 ---@param v appmode_t
 function M:set_mode(v)
 	local m = self.super.mode
@@ -129,6 +129,8 @@ function M:get_pid()
 	rawset(self, 'pid', require('ffi').C.getpid())
 	return self.pid
 end
+
+function M.set_title(x) swayimg.title = x end
 
 -- ensure even the default keymappings trigger our events by redefining the defaults
 _G.sai = proxy.new(M)

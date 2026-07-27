@@ -6,7 +6,7 @@
 
 ---Main application class.
 ---@class sai: sai.api.proxy
----@field app_id string wayland application ID
+---@field app_id string Wayland application ID. READ-ONLY
 ---@field mode appmode_t Which mode is the application in
 ---@field fullscreen boolean set to `nil` to toggle
 ---Set mouse button used for drag-and-drop image file to external apps. (`MouseRight` etc.)
@@ -30,14 +30,14 @@
 ---@field [appmode_t] mode_base
 sai = {}
 
----Set title until image changes.
----@param title string
-function sai.set_title(title) end
-
 ---Exit from application.
 ---NOTE: exits only if all SwiLeavePre hooks deregister!
 ---@param code? integer Program exit code, `0` by default
 function sai.exit(code) end
+
+---Set title until image changes.
+---@param title string
+function sai.set_title(title) end
 
 ---Get application window size.
 ---@return { width: integer, height: integer } # Window size in pixels

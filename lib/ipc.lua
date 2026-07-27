@@ -347,10 +347,14 @@ function M:new(path)
 	return setmetatable(new, backer_meta)
 end
 
----@param path string
+---@param path string?
 ---@return sai.lib.ipc.server
 function M.server(path)
-	local self = M.new(server, path)
+	local self = M.new(server, path or ('%s/%s-%d.socket'):format( -- default path
+		os.getenv 'XDG_RUNTIME_DIR' or '/tmp',
+		sai.app_id,
+		sai.pid
+	))
 	self:set_enabled(true)
 	return self
 end
