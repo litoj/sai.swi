@@ -160,7 +160,7 @@ swayimg.on_window_resize(function()
 		rawset(M, '_old_winsize', swayimg.get_window_size())
 
 		-- resolve initial event
-		local ev = { event = 'SwiEnter', match = 'false', data = false }
+		local ev = { event = 'SwiEnter', data = false }
 		e.trigger(ev)
 		if e._hooks.SwiEnter then
 			e._hooks.SwiEnter = nil
@@ -173,7 +173,6 @@ swayimg.on_window_resize(function()
 		end
 
 		-- resolve lazy initiators
-		ev.match = 'true'
 		ev.data = true
 		e.subscribe {
 			event = 'Subscribed',
@@ -181,7 +180,7 @@ swayimg.on_window_resize(function()
 			-- ensure all hooks expecting initialization get loaded
 			-- (especially the lazy ones not checking sai.initialized)
 			callback = function(h)
-				if h.data.pattern ~= 'true' then h.data.callback(ev) end
+				h.data.callback(ev)
 				e._hooks.SwiEnter = nil
 			end,
 		}

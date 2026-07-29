@@ -162,6 +162,7 @@ local function gen_keep(factor_fn)
 			event = 'ImgChangedPre',
 			pattern = self.text._api_name,
 			callback = function(ev)
+				print(e._hooks)
 				if self._default_scale ~= x then return true end
 
 				local img = ev.data or error()

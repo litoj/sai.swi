@@ -170,7 +170,7 @@ function M:__newindex(placement, x)
 				callback = function(ev) render_on_img(new_tr, self.super, placement, ev.data) end,
 			}
 		else
-			e.unsubscribe { event = 'ImgChanged', pattern = self._api_name, group = group }
+			e.unsubscribe { event = 'ImgChanged', match = self._api_name, group = group }
 		end
 
 		new_tr.processed = processed

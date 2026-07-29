@@ -41,7 +41,7 @@ end
 function M.size() return api.size end
 function M.remove(x)
 	local ci = M.get_current()
-	if x == ci.path then e.trigger { event = 'ImgChangedPre', data = ci } end
+	if x == ci.path then e.trigger { event = 'ImgChangedPre', match = swayimg.mode, data = ci } end
 	api.remove(x)
 	set_mark(x, false)
 	e.trigger { event = 'OptionSet', match = 'sai.imagelist.size', data = last_lsize }

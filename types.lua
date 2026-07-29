@@ -293,7 +293,8 @@ end
 ---@field id? hook_id
 ---@field group? string|string[]
 ---@field mode? appmode_t|appmode_t[]
----@field match? string|string[]
+---@field match? string text to let the hooks match it with their patterns
+---@field pattern? string|string[] pattern to match hook patterns with
 
 ---Eventloop processor
 ---@class sai.eventloop

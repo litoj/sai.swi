@@ -13,8 +13,8 @@ local tabled = U.tabled
 local M = {
 	---@type {[event_name_t]:{[string]:hook_cfg[]}}
 	_hooks = {}, ---@private
-	debug_trigger = true,
-	debug_subscribe = true,
+	debug_trigger = false,
+	debug_subscribe = false,
 } -- TODO: could improve deleting perf by having a {[hook_id]:counter}
 
 local modes = { 'viewer', 'gallery', 'slideshow' }
@@ -35,16 +35,10 @@ local function mk_modes(mode)
 end
 mk_modes(modes)
 
----@param cfg sai.eventloop.hook
----@return hook_cfg
-local function mk_hook(cfg)
-	if cfg.match then
-		cfg.pattern = cfg.match
-		---@diagnostic disable-next-line: inject-field
-		cfg.match = nil
-	end
-
-	local t = tabled(cfg.pattern or { '^' }) ---@type string[]|{[string]:boolean}
+---@param tbl string|string[]|{[string]:boolean}
+---@return string[]|{[string]:boolean}
+local function mk_ptn_tbl(tbl)
+	local t = tabled(tbl) ---@type string[]|{[string]:boolean}
 	local i = #t
 	while i > 0 do
 		local p = t[i]
@@ -59,7 +53,25 @@ local function mk_hook(cfg)
 		end
 		i = i - 1
 	end
-	cfg.pattern = t ---@cast cfg hook_cfg
+	return t
+end
+
+---@param cfg sai.eventloop.hook
+---@return hook_cfg
+local function mk_hook(cfg)
+	if cfg.match then
+		if cfg.pattern then
+			for k, v in pairs(cfg.match) do
+				cfg.pattern[k] = v
+			end
+		else
+			cfg.pattern = cfg.match
+		end
+		---@diagnostic disable-next-line: inject-field
+		cfg.match = nil
+	end
+	-- using '^' and not '' to be valid against all ev.match values (not just '')
+	cfg.pattern = mk_ptn_tbl(cfg.pattern or { '^' }) ---@cast cfg hook_cfg
 	cfg.mode = mk_modes(cfg.mode)
 	return cfg
 end
@@ -75,9 +87,9 @@ function M.subscribe(hook)
 			M._hooks[e] = ev_hooks
 		end
 
-		for k, v in pairs(hook.pattern) do
+		for k, v in pairs(hook.pattern) do -- register by match
 			if v then
-				k = type(k) == 'string' and k or '*'
+				k = type(k) == 'string' and k or '*' -- determine match group ('*' for luapat)
 				local hooks = ev_hooks[k]
 				if not hooks then
 					hooks = {}
@@ -93,37 +105,70 @@ function M.subscribe(hook)
 	return hook
 end
 
+---Determines which hooks match the given event pattern/match.
+---@param ev sai.eventloop.filter.opts
 ---@param ptn_map {[string]:hook_cfg[]}
 ---@return fun():(hook:hook_cfg?,ptn:string,i:integer)
-local function matcher(match, ptn_map)
+local function matcher(ev, ptn_map)
 	return coroutine.wrap(function()
-		if not match then
-			for ptn, hooks in pairs(ptn_map) do
-				for i, h in pairs(hooks) do
-					coroutine.yield(h, ptn, i)
+		if ev.match then
+			local match = ev.match ---@cast match string
+			local hooks = ptn_map[match]
+			if hooks then
+				for i, h in ipairs(hooks) do
+					coroutine.yield(h, match, i)
+				end
+			end
+
+			hooks = ptn_map['*']
+			if hooks then
+				for i, h in ipairs(hooks) do
+					if h.pattern[match] == nil then -- `true` was already processed, `false` is to skip it
+						-- TODO: could also support negation here, but it'd be really slow
+						for _, ptn in ipairs(h.pattern) do
+							if match:find(ptn) then
+								coroutine.yield(h, '*', i)
+								break
+							end
+						end
+					end
 				end
 			end
 			return
 		end
 
-		local hooks = ptn_map[match]
-		if hooks then
-			for i, h in pairs(hooks) do
-				coroutine.yield(h, match, i)
-			end
-		end
-
-		hooks = ptn_map['*']
-		if hooks then
-			for i, h in ipairs(hooks) do
-				if h.pattern[match] == nil then -- `true` was already processed, `false` is to skip it
-					for _, ptn in ipairs(h.pattern) do
-						if match:match(ptn) then
-							coroutine.yield(h, '*', i)
-							break
-						end
+		local plist = ptn_map['*']
+		ptn_map['*'] = nil
+		local ptns = mk_ptn_tbl(ev.pattern or '^') -- defaults to match everything
+		for match, hooks in pairs(ptn_map) do -- test all fixed-text matches
+			local ok = ptns[match]
+			if ok == nil then -- find a match
+				for _, ptn in ipairs(ptns) do -- test against all ev patterns
+					if match:find(ptn) then
+						ok = true
+						break
 					end
 				end
+			end
+
+			if ok then
+				for i, h in ipairs(hooks) do
+					coroutine.yield(h, match, i)
+				end
+			end
+		end
+		ptn_map['*'] = plist
+
+		for i, h in ipairs(plist or {}) do
+			for _, p in ipairs(h.pattern) do
+				for _, v in ipairs(ptns) do -- test against all ev patterns
+					if p:find(v) then
+						coroutine.yield(h, '*', i)
+						p = nil ---@diagnostic disable-line: cast-local-type
+						break
+					end
+				end
+				if p == nil then break end
 			end
 		end
 	end)
@@ -153,7 +198,7 @@ function M.apply_filtered(f, on_match)
 	for _, ev in pairs(tabled(f.event or U.rev_idx(M._hooks))) do
 		local ev_hooks = M._hooks[ev]
 		if ev_hooks then
-			for hook, ptn, i in matcher(f.match, ev_hooks) do
+			for hook, ptn, i in matcher(f, ev_hooks) do
 				local ok = true
 				for _, check in ipairs(checks) do
 					if not check(hook) then
@@ -186,13 +231,14 @@ function M.find_all(f)
 	return t
 end
 
-function M.trigger(state)
-	---@cast state sai.eventloop.filter.opts
-	state.mode = state.mode or swayimg.mode
-	if M.debug_trigger then print_debug('trigger', state) end
+function M.trigger(ev)
+	---@cast ev sai.eventloop.filter.opts
+	ev.mode = ev.mode or swayimg.mode
+	if not ev.match and not ev.pattern then ev.match = '' end
+	if M.debug_trigger then print_debug('trigger', ev) end
 
-	M.apply_filtered(state, function(hook)
-		local ok, ret = xpcall(hook.callback, debug.traceback, state)
+	M.apply_filtered(ev, function(hook)
+		local ok, ret = xpcall(hook.callback, debug.traceback, ev)
 		---@diagnostic disable-next-line: param-type-mismatch
 		if not ok then sai.log(ret) end
 
