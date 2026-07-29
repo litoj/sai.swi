@@ -42,7 +42,7 @@ local M = {
 	-- TODO: convert to using lines and pager and create a textbox for line scrolling
 	-- Private state
 	---@see swayimg.viewer.set_text
-	---@see swayimg.text.set_status
+	---@see swayimg.text.status
 	---@type fun(loc:block_position_t, lines:string[])|fun(status:string)|false
 	_raw_update = false, ---@private
 }

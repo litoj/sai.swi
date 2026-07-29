@@ -13,8 +13,8 @@ local tabled = U.tabled
 local M = {
 	---@type {[event_name_t]:{[string]:hook_cfg[]}}
 	_hooks = {}, ---@private
-	debug_trigger = false,
-	debug_subscribe = false,
+	debug_trigger = true,
+	debug_subscribe = true,
 } -- TODO: could improve deleting perf by having a {[hook_id]:counter}
 
 local modes = { 'viewer', 'gallery', 'slideshow' }
@@ -180,7 +180,7 @@ function M.unsubscribe(f)
 	end)
 end
 
-function M.get_subscribed(f)
+function M.find_all(f)
 	local t = {}
 	M.apply_filtered(f or {}, function(h) t[h] = h end)
 	return t
@@ -204,7 +204,7 @@ end
 
 function M.takeover_subscribe(cfg)
 	---@diagnostic disable-next-line: param-type-mismatch
-	local old = M.get_subscribed(cfg)
+	local old = M.find_all(cfg)
 	if not next(old) then
 		M.subscribe(cfg)
 		return

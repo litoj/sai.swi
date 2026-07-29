@@ -32,7 +32,7 @@ M.gallery = require 'sai.api.gallery'
 function M.exit(code)
 	local ev = { event = 'SwiLeavePre', match = tostring(code), data = code }
 	e.trigger(ev)
-	if not next(e.get_subscribed(ev)) then swayimg.exit(code) end
+	if not next(e.find_all(ev)) then swayimg.exit(code) end
 end
 
 function M.notify(msg) swayimg.text.status = string.gsub(tostring(msg), '\t', '  ') end

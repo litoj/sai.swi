@@ -10,7 +10,7 @@ local pager = require 'sai.lib.pager'
 ---@class sai.mode.custom: sai.lib.remapper
 --- Wrapper for auto-changing settings when the mode is active.
 --- Supports also eventloop auto registration and deregistration +
---- - `get_subscribed` gets just your mode changes
+--- - `find_all` gets just your mode changes
 --- - `unsubscribe` temporarily disables filtered events or permanently removes mode event by id
 ---
 --- Changes are active only while the mode is enabled, then they're reverted.
@@ -157,11 +157,11 @@ local function evloop_wrap(mo)
 		if mo._enabled then e.unsubscribe(f) end
 	end
 
-	self.get_subscribed = function(f)
+	self.find_all = function(f)
 		local h = e._hooks
 		---@diagnostic disable: inject-field
 		e._hooks = new
-		local ret = e.get_subscribed(f)
+		local ret = e.find_all(f)
 		e._hooks = h
 		return ret
 	end
@@ -175,7 +175,7 @@ local function evloop_wrap(mo)
 				end
 
 				for f, _ in pairs(filter) do
-					for h, _ in pairs(e.get_subscribed(f)) do
+					for h, _ in pairs(e.find_all(f)) do
 						old[h] = 1
 					end
 					e.unsubscribe(f)

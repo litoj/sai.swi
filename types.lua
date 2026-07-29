@@ -307,7 +307,7 @@ function sai.eventloop.subscribe(hook) end
 
 ---@param f? sai.eventloop.filter.opts
 ---@return table<hook_id,sai.eventloop.hook>
-function sai.eventloop.get_subscribed(f) end
+function sai.eventloop.find_all(f) end
 
 ---@param f sai.eventloop.filter.opts
 function sai.eventloop.unsubscribe(f) end

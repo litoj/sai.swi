@@ -96,6 +96,7 @@ local function discover_settable_fields(wrapper)
 			break
 		end
 	end
+	if not backed then backed = {} end
 	local fields = {}
 
 	for backer, value in pairs(wrapper) do
