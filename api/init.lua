@@ -16,7 +16,25 @@ local M = {
 	_decoration = true,
 	_antialiasing = true,
 	_exif_orientation = true, -- automatically applied only to raw files
-	_apply_raw_wb = true,
+}
+
+local pmt = {
+	__index = function(self, k) return rawget(self, '_' .. k) end,
+	__newindex = function(self, k, v)
+		local old = self[k]
+		rawset(self, '_' .. k, v)
+		swayimg.format_params = {[self._name]={[k]=v}}
+		e.trigger {
+			event = 'OptionSet',
+			match = ('sai.format_params.%s.%s'):format(self._name, k),
+			data = v,
+			old_data = old,
+		}
+	end,
+}
+M.format_params = {
+	raw = setmetatable({ _name = 'raw', _camera_wb = true }, pmt),
+	ttf = setmetatable({ _name = 'ttf' }, pmt),
 }
 
 M.eventloop = e
@@ -122,8 +140,6 @@ function M:set_mode(v)
 	e.trigger(m)
 	return false
 end
-
-function M:set_apply_raw_wb(v) self.super.set_format_params('raw', { camera_wb = v }) end
 
 function M:get_pid()
 	rawset(self, 'pid', require('ffi').C.getpid())

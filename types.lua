@@ -1,5 +1,17 @@
 ---@meta sai
 
+---@class RawParams
+---@field camera_wb boolean Fix colors using white balance from camera
+
+---@class TtfParams
+---@field text string Text to render
+---@field color color_t
+---@field background color_t
+
+---@class FormatParams
+---@field raw RawParams
+---@field ttf TtfParams
+
 --------------------------------------------------------------------------------
 -- Main application class
 --------------------------------------------------------------------------------
@@ -24,7 +36,7 @@
 ---@field decoration boolean
 ---@field antialiasing boolean Enable/disable antialiasing
 ---@field exif_orientation boolean Enable or disable changing orientation based on EXIF
----@field apply_raw_wb boolean Should camera white balance be applied to raw images
+---@field format_params FormatParams
 ---@field initialized boolean Whether initialization has completed and config has been loaded
 ---@field pid integer Get the process ID of the swayimg instance (cached). READ-ONLY
 ---@field [appmode_t] mode_base
