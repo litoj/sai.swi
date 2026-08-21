@@ -33,9 +33,10 @@ local function new_panner(self)
 	return pan
 end
 
--- TODO: use USR1 to add debounce for repeated presses and viewer.open to then jump to the file
+-- TODO: add debounce for repeated presses and viewer.open to then jump to the file
 -- directly
 ---@param api swayimg.viewer
+---@param api_name 'viewer'|'slideshow'
 local function new_go(api, api_name)
 	return setmetatable({}, {
 		__index = function(tbl, idx)
@@ -125,7 +126,7 @@ function M.new(api_name)
 
 	self.get_abs_scale = function() return api.scale end
 	self.pan = new_panner(self)
-	self.go = new_go(api)
+	self.go = new_go(api, api_name)
 	self.scale_centered = function(s, x, y)
 		api.set_abs_scale(s, x, y)
 		self._scale = s
@@ -162,7 +163,6 @@ local function gen_keep(factor_fn)
 			event = 'ImgChangedPre',
 			pattern = self.text._api_name,
 			callback = function(ev)
-				print(e._hooks)
 				if self._default_scale ~= x then return true end
 
 				local img = ev.data or error()
