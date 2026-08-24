@@ -177,11 +177,6 @@ can configure.
   v.default_scale = { width = 2560, height = 1440 }
   ```
 
-### TODOs
-
-- create PR to synchronize order of declaring variables/api to align with source code
-- create custom mode to dynamically pick which elements should be in each text corner
-
 ### [Snippets](./snippets.lua)
 
 A collection of small code snippets that might be often wanted. Or can just serve as an inspiration
@@ -250,6 +245,19 @@ which _sai_ reuses the types:
 settings.Lua.workspace.library = {'/usr/share/swayimg/swayimg.lua', '/usr/local/share/swayimg/swayimg.lua'}
 ```
 
+### TODOs
+
+- make input mode into a simple utils function for requesting user input
+- unify pager and input mode
+- generalize completion in filter mode and filter mode itself (for filtering of any content)
+- repurpose help mode just for showing active keybinds, auto-update with deeper sub-modes
+  - add another mode to filter variables and view and change their live values (like mpv `gv`)
+  - create dynamic picker for which elements should be in each text corner (move the bind list)
+- make it easier to make multi-level keybinds (like vim `cw/ce/cb…`)
+- make a snippet for loading keybind config from ranger
+- allow videos via some `exec://` insertions and sorting tricker (see
+  <https://github.com/artemsen/swayimg/discussions/557#discussioncomment-18144449>)
+
 ## License
 
-Do whatever you please.
+Do whatever you please except advertising modified code as solely yours or mine.
