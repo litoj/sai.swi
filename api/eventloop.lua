@@ -80,11 +80,11 @@ function M.subscribe(hook)
 	if not hook.callback then error('missing callback in: ' .. tostring(hook)) end
 	if M.debug_subscribe then print_debug('subscribe', hook) end
 	hook = mk_hook(hook)
-	for _, e in ipairs(tabled(hook.event or error('missing event in: ' .. tostring(hook)))) do
-		local ev_hooks = M._hooks[e]
+	for _, ev in ipairs(tabled(hook.event or error('missing event in: ' .. tostring(hook)))) do
+		local ev_hooks = M._hooks[ev]
 		if not ev_hooks then
 			ev_hooks = {}
-			M._hooks[e] = ev_hooks
+			M._hooks[ev] = ev_hooks
 		end
 
 		for k, v in pairs(hook.pattern) do -- register by match
@@ -99,7 +99,7 @@ function M.subscribe(hook)
 			end
 		end
 
-		M.trigger { event = 'Subscribed', mode = hook.mode, match = e, data = hook }
+		M.trigger { event = 'Subscribed', mode = hook.mode, match = ev, data = hook }
 	end
 
 	return hook

@@ -78,6 +78,8 @@ local function render_hook(processed, i, hook, ...)
 	end
 end
 
+---@param api swayimg_appmode
+---@param placement block_position_t
 ---@param tracker mode_text.tracker
 ---@param img swayimg.image
 local function render_on_img(tracker, api, placement, img)
@@ -85,7 +87,7 @@ local function render_on_img(tracker, api, placement, img)
 	for i, line in pairs(tracker) do
 		if i ~= 'processed' then render_hook(p, i, line, img) end
 	end
-	api.set_text(placement, p)
+	api.text = { [placement] = p }
 end
 
 local _roi = render_on_img
@@ -144,7 +146,7 @@ function M:__newindex(placement, x)
 			local cfg = U.soft_copy(v)
 			cfg.callback = function(...)
 				render_hook(processed, i, v.callback, ...)
-				self.super.set_text(placement, processed)
+				self.super.text = { [placement] = processed }
 			end
 			cfg.group = group
 			cfg.mode = self._api_name
@@ -178,7 +180,7 @@ function M:__newindex(placement, x)
 		if swayimg.mode == self._api_name then render_on_img(new_tr, self.super, placement, U.lazyimg(self.super)) end
 	else
 		if self._tracked then self._tracked[placement] = nil end
-		self.super.set_text(placement, x)
+		self.super.text = { [placement] = x }
 	end
 end
 

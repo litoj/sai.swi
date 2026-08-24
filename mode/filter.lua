@@ -116,7 +116,7 @@ function M:make_filter(line)
 		end
 	end
 	if not oper then
-		self:complete(line)
+		self:suggest(line)
 		return {
 			'path',
 			self.default_filter == 0 and function(p) return p:find(line, 1, true) end --
@@ -192,7 +192,7 @@ end
 ---Looks at top-level entry fields and all `.meta` keys.
 ---Results are sorted by match position (closer to start = higher priority).
 ---@param base string partial tag/field name to search for
-function M:complete(base)
+function M:suggest(base)
 	if not self.tag_completion then return end
 	if not base or base == '' then
 		self.completion.enabled = false
@@ -221,6 +221,17 @@ function M:complete(base)
 		p.lines = out
 		p.enabled = self.tag_completion
 	end)
+end
+
+function M:complete()
+	-- TODO: separate and use Alt or sth to select between completion items
+	local line = self.completion.lines[1]
+	if not self.completion.enabled or not line then return end
+	-- FIXME: this replaces the whole line, we need to replace just the matched text to be generic
+	local li = self:get_current_line_info()
+	self._visual = li.from
+	self._col = li.to
+	self:insert(line)
 end
 
 local function keys_not_in(map, minus)
@@ -330,38 +341,40 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 
 	if val then
 		M.super.set_enabled(self, true)
-		-- Snapshot the full image list before filtering
-		if not next(self._images) or not self.update_imagelist_on_confirm then
-			local timer = U.timer()
-			local imap = self._images
-			local ilist = l.get() ---@type imgmeta[]
-			timer 'Got imagelist'
-			exiv2.load_all(ilist)
-			timer 'Loaded metadata'
-			self._imagelist = ilist
-			local tmap = self._loaded_tags
-			for i, img in ipairs(ilist) do
-				if imap[img.path] then -- update existing entries instead of reloading exif
-					img = imap[img.path]
-					img.index = i
-					ilist[i] = img
-				else
-					imap[img.path] = img
-					img.out = self:render_item(img) -- load representations of all items
-					for k in pairs(img.meta) do
-						tmap[k] = false
-					end
-				end
-			end
-			timer 'Available metadata gathered'
-			self._filtered = imap
-			self:on_text_change()
 
+		-- Snapshot the full image list before filtering
+		local imap = self._images
+		local ilist = l.get() ---@type imgmeta[]
+		local to_get = {}
+		local tmap = self._loaded_tags
+		for i, img in ipairs(ilist) do
+			if imap[img.path] then -- update existing entries instead of reloading exif
+				img = imap[img.path]
+				img.index = i
+				ilist[i] = img
+			else
+				to_get[#to_get + 1] = img
+			end
+		end
+		exiv2.load_all(to_get)
+		for _, img in ipairs(to_get) do
+			imap[img.path] = img
+			img.out = self:render_item(img) -- load representations of all items
+			for k in pairs(img.meta) do
+				tmap[k] = false -- TODO: move to cpp
+			end
+		end
+		self._filtered = imap
+
+		-- first load | we're apparently working with a new set of images
+		if not next(imap) or #to_get > 0 then
+			self._imagelist = ilist
 			if not sai.gallery.pstore then
 				sai.gallery.pstore_path = '/tmp/sai-filter/'
 				sai.gallery.pstore = true
 			end
 		end
+		self:on_text_change()
 
 		if self.live_imagelist and #self._ordered_filtered_paths > 0 then
 			l.remove(keys_not_in(self._images, self._filtered))

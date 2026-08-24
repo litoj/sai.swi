@@ -128,7 +128,7 @@ function M:render(redraw_if_unchanged)
 		self._mode_text[self._location] = out
 	else -- this is faster but doesn't allow the lines to contain escape sequences
 		---@diagnostic disable-next-line: undefined-field
-		self._mode_text.super.set_text(self._location, out)
+		self._mode_text.super.text = { [self._location] = out }
 	end
 end
 

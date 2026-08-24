@@ -23,7 +23,7 @@ local pmt = {
 	__newindex = function(self, k, v)
 		local old = self[k]
 		rawset(self, '_' .. k, v)
-		swayimg.format_params = {[self._name]={[k]=v}}
+		swayimg.format_params = { [self._name] = { [k] = v } }
 		e.trigger {
 			event = 'OptionSet',
 			match = ('sai.format_params.%s.%s'):format(self._name, k),
@@ -77,7 +77,11 @@ local function cb_rescheduler()
 		cb_rescheduler() -- reschedule for next callback
 	end)
 end
-function M.defer_fn(ms, cb)
+function M.defer_fn(cb, ms)
+	if type(cb) == 'integer' then
+		cb, ms = ms, cb
+	end
+	ms = ms or 0
 	deferred_heap:push(ms, cb)
 	if #deferred_heap == 1 then
 		swayimg.defer(ms / 1000, function() deferred_heap:pop()() end)
@@ -192,7 +196,7 @@ swayimg.on_window_resize(function()
 		ev.data = true
 		e.subscribe {
 			event = 'Subscribed',
-			pattern = 'SwiEnter',
+			match = 'SwiEnter',
 			-- ensure all hooks expecting initialization get loaded
 			-- (especially the lazy ones not checking sai.initialized)
 			callback = function(h)
@@ -209,7 +213,10 @@ e.subscribe {
 	event = 'Subscribed',
 	match = 'Redraw',
 	callback = function()
-		swayimg.on_redrawn(function() e.trigger { event = 'Redraw' } end)
+		swayimg.on_redrawn(function()
+			e.trigger { event = 'Redraw' }
+			if not e._hooks.Redraw then swayimg.on_redrawn(function() end) end
+		end)
 	end,
 }
 

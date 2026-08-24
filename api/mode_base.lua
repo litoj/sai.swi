@@ -79,14 +79,14 @@ function M.new(self, api_name)
 				end
 
 				local old_cnt = cnt
-				sai.defer_fn(self.multiclick_delay, function()
+				sai.defer_fn(function()
 					if cnt == old_cnt then -- user didn't click again
 						if map[cnt] then -- run the action for cnt
 							exec()
 						end
 						cnt = 0
 					end
-				end)
+				end, self.multiclick_delay)
 			end)
 		else
 			api.on_key(b, action or function() sai.notify('Unhandled key: ' .. b) end)

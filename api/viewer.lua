@@ -133,9 +133,17 @@ function M.new(api_name)
 	end
 
 	self.export = function(path)
-		api.export(path)
-		sai.notify 'Export done'
-		e.trigger { event = 'User', match = 'ExportFinished', data = path }
+		sai.notify('Exporting to ' .. path)
+		-- run out-of-sync to wait for the text to be drawn first (lua calls lock the application)
+		e.subscribe {
+			event = 'Redraw',
+			callback = function()
+				api.export(path)
+				sai.notify 'Export finished'
+				e.trigger { event = 'User', match = 'Exported', data = path }
+				return true
+			end,
+		}
 	end
 
 	api.on_image_change(function()

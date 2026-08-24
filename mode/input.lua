@@ -41,7 +41,7 @@ local M = {
 	-- TODO: make available as U.input that users can call on-demand with custom prompt
 	-- TODO: convert to using lines and pager and create a textbox for line scrolling
 	-- Private state
-	---@see swayimg.viewer.set_text
+	---@see swayimg.viewer.text
 	---@see swayimg.text.status
 	---@type fun(loc:block_position_t, lines:string[])|fun(status:string)|false
 	_raw_update = false, ---@private
@@ -127,7 +127,7 @@ function M:render()
 		for l in display:gmatch '([^\n]*)\n?' do
 			lines[#lines + 1] = l
 		end
-		self._raw_update(self._location, lines)
+		self._raw_update.text = { [self._location] = lines }
 	end
 end
 
@@ -303,7 +303,9 @@ function M:_on_dst_change(mode, loc)
 			self._raw_update = sai.notify
 		else
 			self.sai.text.enabled = true
-			self._raw_update = swayimg[self._mode or sai.mode].set_text
+			-- get the api to use without setting a fixed mode (allows different mode when re-enabled)
+			-- TODO: unify the text api also for status and use just mode_text
+			self._raw_update = swayimg[self._mode or sai.mode]
 		end
 
 		self:render()

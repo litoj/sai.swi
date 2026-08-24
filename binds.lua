@@ -271,14 +271,7 @@ function M.filter(self)
 	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
 	map('Ctrl+j', function() self.selected_pos = self.selected_pos + 1 end, 'next filtered image')
 	map('Ctrl+k', function() self.selected_pos = self.selected_pos - 1 end, 'prev filtered image')
-	map('Tab', function()
-		local cl = self.completion.lines
-		if not cl[1] or not self.completion.enabled then return end
-		local li = self:get_current_line_info()
-		self._visual = li.from
-		self._col = li.to
-		self:insert(cl[1])
-	end, 'Complete tag')
+	map('Tab', function() self:complete() end, 'Complete tag')
 end
 
 ---@param self sai.mode.cmd

@@ -65,9 +65,9 @@ function sai.set_window_size(width, height) end
 function sai.get_mouse_pos() end
 
 ---Schedule function execution to after `ms`.
----@param ms integer
 ---@param cb fun()
-function sai.defer_fn(ms, cb) end
+---@param ms? integer (default: min=1)
+function sai.defer_fn(cb, ms) end
 
 ---Execute a shell command in sync.
 ---Escape sequences:
@@ -102,52 +102,36 @@ function sai.log(msg, file) end
 ---@field data? unknown observed object
 
 ---@alias event_name_t
----| 'ImgChanged' # after selected image has changed, match: mode, data: new image
+---| 'Redraw' # after the window is redrawn - after ImgChanged and at other times
 ---| 'ImgChangedPre' # just before selecting a different image, match: mode, data: old image
----| 'Redraw' # whenever the window is redrawn - after ImgChanged and at other times
+---| 'ImgChanged' # after selected image has changed, match: mode, data: new image
+---| 'ModeChangedPre' # match: 'o:n' as in old:new, mode: current mode, data: new mode
+---| 'ModeChanged' # match: 'o:n' as in old:new, mode: current mode, data: old mode
+---| 'Signal' # USR1 or USR2 received by swayimg
 ---| 'OptionSet' # after setting any option in the api, match: opt object path, data: opt value
 ---| 'ShellCmdPost' # after sai.exec, match: cmd, data: output
----| 'ModeChanged' # match: 'o:n' as in old:new, mode: new mode, data: old mode
----| 'ModeChangedPre' # match: 'o:n' as in old:new, mode: old mode, data: new mode
+---| 'Subscribed' # hook sub, match: event, mode: hook's modecfg, data: hook config
+---| 'User' # custom user-emitted/triggered signaling
 ---| 'WinResized' # when a window is resized, data: new size
 ---| 'SwiEnter' # just after loading config and initializing imagelist
 ---| 'SwiLeavePre' # before exiting swayimg - hooks for given statuscode must deregister to exit
----| 'Signal' # USR1 or USR2 received by swayimg
----| 'Subscribed' # when a hook gets subscribed, match: event, mode: hook's mode, data: hook config
----| 'User' # custom user-emitted/triggered signaling
 
----@class hook.base
----@field event event_name_t|event_name_t[]
----@field mode? appmode_t|appmode_t[]
+---@class hook.base: sai.eventloop.filter.opts
 ---@field group? string
----Simple string to match directly, luapat,
----or negated simple match ("!plainstr") to forbid that match
----@field pattern? string|string[]
 ---@field once? boolean should the hook be unsubscribed after first call
 ---@field callback fun(ev:sai.eventloop.event):(boolean?) return true to unsubscribe
 
 do -- Event and Hook type definitions
 	---@class event.ImgChanged: event.base
-	---@field event 'ImgChanged'
+	---@field event 'ImgChanged'|'ImgChangedPre'
 	---@field match appmode_t
 	---@field data swayimg.image
 
 	---Hook for ImgChanged events
 	---@class hook.ImgChanged: hook.base
-	---@field event 'ImgChanged'
+	---@field event 'ImgChanged'|'ImgChangedPre'
 	---@field pattern? appmode_t|string[] prefer `pattern` over `mode` for better performance
 	---@field callback fun(ev:event.ImgChanged):(boolean?)
-
-	---@class event.ImgChangedPre: event.base
-	---@field event 'ImgChangedPre'
-	---@field match appmode_t
-	---@field data swayimg.image
-
-	---Hook for ImgChangedPre events
-	---@class hook.ImgChangedPre: hook.base
-	---@field event 'ImgChangedPre'
-	---@field pattern? appmode_t|string[] prefer `pattern` over `mode` for better performance
-	---@field callback fun(ev:event.ImgChangedPre):(boolean?)
 
 	---@class event.OptionSet: event.base
 	---@field event 'OptionSet'
@@ -172,30 +156,16 @@ do -- Event and Hook type definitions
 	---@alias mode_diff 'v:g'|'g:v'|'s:v'|'v:s'|'s:g'|'g:s' # 'old:new' format
 
 	---@class event.ModeChanged: event.base
-	---@field event 'ModeChanged'
+	---@field event 'ModeChanged'|'ModeChangedPre'
 	---@field match mode_diff
-	---@field mode appmode_t new mode
-	---@field data appmode_t old mode
+	---@field mode appmode_t currently active mode
+	---@field data appmode_t previous|next mode
 
 	---Hook for ModeChanged events
 	---@class hook.ModeChanged: hook.base
-	---@field event 'ModeChanged'
-	---@field pattern? mode_diff|string[]
-	---@field mode appmode_t
+	---@field event 'ModeChanged'|'ModeChangedPre'
+	---@field match? mode_diff|string[]
 	---@field callback fun(ev:event.ModeChanged):(boolean?)
-
-	---@class event.ModeChangedPre: event.base
-	---@field event 'ModeChangedPre'
-	---@field match mode_diff
-	---@field mode appmode_t old mode
-	---@field data appmode_t new mode
-
-	---Hook for ModeChangedPre events
-	---@class hook.ModeChangedPre: hook.base
-	---@field event 'ModeChangedPre'
-	---@field pattern? mode_diff|string[]
-	---@field mode appmode_t
-	---@field callback fun(ev:event.ModeChangedPre):(boolean?)
 
 	---@class event.WinResized: event.base
 	---@field event 'WinResized'
@@ -232,19 +202,19 @@ do -- Event and Hook type definitions
 	---Hook for Signal events
 	---@class hook.Signal: hook.base
 	---@field event 'Signal'
-	---@field pattern? 'USR1'|'USR2'|string[]
+	---@field match? 'USR1'|'USR2'|('USR1'|'USR2')[]
 	---@field callback fun(ev:event.Signal):(boolean?)
 
 	---@class event.Subscribed: event.base
 	---@field event 'Subscribed'
-	---@field match string event being subscribed to
-	---@field mode appmode_t[] hook's mode
+	---@field match event_name_t event being subscribed to
+	---@field mode table<appmode_t,integer> hook's modecfg
 	---@field data sai.eventloop.hook hook config
 
 	---Hook for Subscribed events
 	---@class hook.Subscribed: hook.base
 	---@field event 'Subscribed'
-	---@field mode appmode_t[]
+	---@field match event_name_t
 	---@field callback fun(ev:event.Subscribed):(boolean?)
 
 	---@class event.User: event.base
@@ -256,46 +226,42 @@ do -- Event and Hook type definitions
 	---@field event 'User'
 	---@field callback fun(ev:event.User):(boolean?)
 
-	---@class event.User.ExportFinished: event.User
+	---@class event.User.Exported: event.User
 	---@field event 'User'
-	---@field match 'ExportFinished'
+	---@field match 'Exported'
 	---@field data string path of the exported file
 
-	---Hook for User.ExportFinished events
-	---@class hook.User.ExportFinished: hook.User
-	---@field pattern? 'ExportFinished'|string[]
-	---@field callback fun(ev:event.User.ExportFinished):(boolean?)
+	---Hook for User.Exported events
+	---@class hook.User.Exported: hook.User
+	---@field pattern? 'Exported'|string[]
+	---@field callback fun(ev:event.User.Exported):(boolean?)
 
 	---@alias sai.eventloop.event
 	---| event.ImgChanged
-	---| event.ImgChangedPre
 	---| event.OptionSet
 	---| event.ShellCmdPost
 	---| event.ModeChanged
-	---| event.ModeChangedPre
 	---| event.WinResized
 	---| event.SwiEnter
 	---| event.SwiLeavePre
 	---| event.Signal
 	---| event.Subscribed
 	---| event.User
-	---| event.User.ExportFinished
+	---| event.User.Exported
 
 	---@alias sai.eventloop.hook
 	---| hook.base
 	---| hook.ImgChanged
-	---| hook.ImgChangedPre
 	---| hook.OptionSet
 	---| hook.ShellCmdPost
 	---| hook.ModeChanged
-	---| hook.ModeChangedPre
 	---| hook.WinResized
 	---| hook.SwiEnter
 	---| hook.SwiLeavePre
 	---| hook.Signal
 	---| hook.Subscribed
 	---| hook.User
-	---| hook.User.ExportFinished
+	---| hook.User.Exported
 end
 
 ---@alias hook_id hook.base
@@ -306,7 +272,7 @@ end
 ---@field group? string|string[]
 ---@field mode? appmode_t|appmode_t[]
 ---@field match? string text to let the hooks match it with their patterns
----@field pattern? string|string[] pattern to match hook patterns with
+---@field pattern? string|string[] luapat to match with or '!'-prefixed str to ignore
 
 ---Eventloop processor
 ---@class sai.eventloop
@@ -581,7 +547,7 @@ do
 	function sai.viewer.rotate(angle) end
 
 	---Export currently displayed frame to PNG file.
-	---@see event.User.ExportFinished
+	---@see event.User.Exported
 	---@param path string Path of the exported file
 	function sai.viewer.export(path) end
 
