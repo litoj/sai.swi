@@ -79,7 +79,7 @@ function sai.get_mouse_pos() end
 ---@param ms? integer (default: min=1)
 function sai.defer_fn(cb, ms) end
 
----Execute a shell command in sync.
+---Execute a shell command.
 ---Escape sequences:
 --- - `%`: current file unquoted
 --- - `%f`: current file quoted with singlequotes
@@ -88,9 +88,10 @@ function sai.defer_fn(cb, ms) end
 --- - `%%`: normal percentage sign (`%`)
 ---@see event.ShellCmdPost
 ---@param cmd string
----@return string stdout
+---@param async? boolean should the command be launched in the bg (no event will be emitted)
+---@return string stdout or the expanded command when in async mode
 ---@return integer exitcode
-function sai.exec(cmd) end
+function sai.exec(cmd, async) end
 
 ---Show status message for the duration of `sai.text.status_timeout` seconds.
 ---@param msg string
@@ -140,7 +141,7 @@ do -- Event and Hook type definitions
 	---Hook for ImgChanged events
 	---@class hook.ImgChanged: hook.base
 	---@field event 'ImgChanged'|'ImgChangedPre'
-	---@field pattern? appmode_t|string[] prefer `pattern` over `mode` for better performance
+	---@field match? appmode_t|appmode_t[] prefer `match` over `mode` for better performance
 	---@field callback fun(ev:event.ImgChanged):(boolean?)
 
 	---@class event.OptionSet: event.base
@@ -174,7 +175,7 @@ do -- Event and Hook type definitions
 	---Hook for ModeChanged events
 	---@class hook.ModeChanged: hook.base
 	---@field event 'ModeChanged'|'ModeChangedPre'
-	---@field match? mode_diff|string[]
+	---@field match? mode_diff|mode_diff[]
 	---@field callback fun(ev:event.ModeChanged):(boolean?)
 
 	---@class event.WinResized: event.base

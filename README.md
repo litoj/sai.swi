@@ -216,7 +216,7 @@ You can add a keybind to update swayimg:
 v.map('Alt+F5', require('sai.snippets').update) -- for just viewer mode
 
 local map = require 'sai.binds' -- for any mode combo
-map('a', 'Alt+F5', require('sai.snippets').update)
+map('a', 'A-F5', require('sai.snippets').update)
 ```
 
 ### Use the API

@@ -86,31 +86,11 @@ function M.defer_fn(cb, ms)
 end
 
 -- TODO: how to make stderr appear? 2>&1 doesn't work
-function M.exec(cmd)
-	local abort
-	cmd = cmd:gsub('([^%%])%%([^%%])', function(a, type)
-		if type == 'm' or type == 's' then
-			local marked = M.imagelist.marked.get()
+function M.exec(cmd, async)
+	cmd = U.parse_cmd(cmd)
+	if not cmd then return end
 
-			if #marked > 0 then
-				return ("%s'%s'"):format(a, table.concat(marked, "' '"))
-			elseif type == 'm' then
-				abort = true
-				M.notify 'No marked files'
-				return ''
-			else -- type == 's'
-				type = 'f'
-			end
-		end
-
-		local path = M.imagelist.get_current().path
-		if type == 'f' then
-			return ("%s'%s'"):format(a, path)
-		else
-			return ('%s%s%s'):format(a, path, type)
-		end
-	end):gsub('%%%%', '%%')
-	if abort then return end
+	if async then return cmd, os.execute(('{ %s; } >/dev/null </dev/null &'):format(cmd)) end
 
 	local p, err = io.popen(cmd .. '\necho $?', 'r')
 	if not p then error('Error executing command: ' .. (err or '')) end

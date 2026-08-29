@@ -315,6 +315,35 @@ function U.str_bindlist(api, fmt_str)
 	return out
 end
 
+---@param cmd string
+---@return string?
+function U.parse_cmd(cmd)
+	local abort
+	cmd = cmd:gsub('([^%%])%%([^%%])', function(a, type)
+		if type == 'm' or type == 's' then
+			local marked = sai.imagelist.marked.get()
+
+			if #marked > 0 then
+				return ("%s'%s'"):format(a, table.concat(marked, "' '"))
+			elseif type == 'm' then
+				abort = true
+				sai.notify 'No marked files'
+				return ''
+			else -- type == 's'
+				type = 'f'
+			end
+		end
+
+		local path = sai.imagelist.get_current().path
+		if type == 'f' then
+			return ("%s'%s'"):format(a, path)
+		else
+			return ('%s%s%s'):format(a, path, type)
+		end
+	end):gsub('%%%%', '%%')
+	return not abort and cmd
+end
+
 ---Nicely format the requested value to human readable rational numbers.
 ---@param img_meta table<string,string> the `.meta` field of the image
 ---@param tag string name/path of the exif value to get
