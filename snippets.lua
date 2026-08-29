@@ -93,6 +93,36 @@ function M.resize_image_with_window()
 	}
 end
 
+---@param cmd? string string to run with % or %f as the template for the video file
+function M.auto_open_video(cmd)
+	cmd = cmd or 'mpv --no-terminal %f'
+	sai.formats.video = { size = 100, columns = 1, rows = 1 }
+	local disable = function() end
+	e.subscribe {
+		event = 'ImgChanged',
+		match = { 'viewer', 'slideshow' },
+		callback = function(ev)
+			disable()
+			if ev.data.format:find('Video', 1, true) then
+				sai.exec(cmd, true)
+				disable = function()
+					os.execute(("pkill -f '%s'"):format(cmd:gsub('%%[f]?', ev.data.path)))
+					disable = function() end
+				end
+			end
+		end,
+	}
+	e.subscribe { event = 'ModeChanged', match = { 'v:g', 's:g' }, callback = function() disable() end }
+	e.subscribe {
+		event = 'SwiLeavePre',
+		mode = { 'viewer', 'slideshow' },
+		callback = function()
+			disable()
+			return true
+		end,
+	}
+end
+
 function M.cycle_values(values, current)
 	for i, mode in ipairs(values) do
 		if mode == current then return values[i % #values + 1] end
@@ -158,7 +188,7 @@ function M.two_pane_mode(key)
 	super.new(tp)
 
 	tp.sai.mode = 'gallery'
----@diagnostic disable-next-line: param-type-mismatch
+	---@diagnostic disable-next-line: param-type-mismatch
 	tp.sai.gallery(function(g) ---@param g sai.gallery
 		g.padding_size = 0
 		g.cache_size = 0

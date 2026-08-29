@@ -187,6 +187,8 @@ Snippets include:
 - loading the current directory when swayimg opened with just 1 image
 - printing a status message on every variable change (like it used to be)
 - resizing the image with the window if the image is in not zoomed in
+- automatically open video in viewer mode (and close on switch) using your command (`mpv` by
+  default)
 - cycling fixed scaling and position modes
 - notifying on shell command output
 - pretty print tables - replace default tostring() method for better table conversion
@@ -255,8 +257,6 @@ settings.Lua.workspace.library = {'/usr/share/swayimg/swayimg.lua', '/usr/local/
   - create dynamic picker for which elements should be in each text corner (move the bind list)
 - make it easier to make multi-level keybinds (like vim `cw/ce/cb…`)
 - make a snippet for loading keybind config from ranger
-- allow videos via some `exec://` insertions and sorting tricker (see
-  <https://github.com/artemsen/swayimg/discussions/557#discussioncomment-18144449>)
 
 ## License
 
