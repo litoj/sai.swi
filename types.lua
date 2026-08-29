@@ -1,20 +1,30 @@
 ---@meta sai
 
----@class RawParams
----@field camera_wb boolean Fix colors using white balance from camera
-
----@class TtfParams
----@field text string Text to render
----@field color color_t
----@field background color_t
-
----@class FormatParams
----@field raw RawParams
----@field ttf TtfParams
-
 --------------------------------------------------------------------------------
 -- Main application class
 --------------------------------------------------------------------------------
+
+---@class RawCfg
+---@field enable? boolean
+---@field camera_wb? boolean Fix colors using white balance from camera
+
+---@class TtfCfg
+---@field enable? boolean
+---@field text? string Text to render
+---@field color? color_t
+---@field background? color_t
+
+---@class VideoCfg
+---@field enable? boolean Enable decoder
+---@field size? integer Size (width) of a single tile (frame)
+---@field columns? integer Number of columns in storyboard
+---@field rows? integer Number of rows in storyboard
+---@field padding? integer Gap between frames in pixels
+
+---@class FormatCfg
+---@field raw? RawCfg
+---@field ttf? TtfCfg
+---@field video? VideoCfg
 
 ---Main application class.
 ---@class sai: sai.api.proxy
@@ -36,7 +46,7 @@
 ---@field decoration boolean
 ---@field antialiasing boolean Enable/disable antialiasing
 ---@field exif_orientation boolean Enable or disable changing orientation based on EXIF
----@field format_params FormatParams
+---@field formats FormatCfg
 ---@field initialized boolean Whether initialization has completed and config has been loaded
 ---@field pid integer Get the process ID of the swayimg instance (cached). READ-ONLY
 ---@field [appmode_t] mode_base
@@ -423,7 +433,7 @@ do
 	---Extended text layer functionality for setting dynamic text values.
 	---Multiline generators should remember the size of their previous output to reset the lines to ''
 	---@alias extended_text_template
-	---| text_template_t basic single-line template string
+	---| string basic single-line template string
 	---| mode_base.text.dyntext event-based generator
 	---| fun(img:swayimg.image):(string|string[]?) generator for ImgChanged event
 
@@ -436,6 +446,7 @@ do
 	---or specify the full exif path (without `meta.` prefix), like {Exif.Fujifilm.Rating}
 	---`utils.format_exif` then automatically formats the values.
 	---HINT: to see what tags are available: `print(sai.viewer.get_image().meta)`
+	---@see swayimg_appmode.text
 	---@class mode_base.text
 	---@field topleft extended_text_template[] Text layer scheme for top-left corner
 	---@field topright extended_text_template[] Text layer scheme for top-right corner

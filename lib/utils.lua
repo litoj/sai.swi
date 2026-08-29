@@ -62,6 +62,50 @@ function U.new_object(self, module)
 	return self
 end
 
+---@param defaults table (optionally) nested tables with the default values (or empty)
+---@param on_set fun(_, tbl:table) on-change callback with the table with all performed changes
+---@return table
+---@return fun(_, tbl:table):false handler for setting the entire field where this table resides
+function U.deep_backer(defaults, on_set)
+	local meta = {}
+	local function rawupdate(self, new)
+		for idx, v in pairs(new) do
+			local key = '_' .. idx
+			if type(v) == 'table' then
+				if rawget(self, key) == nil then
+					rawset(self, key, setmetatable({ super = self, __name = idx }, meta))
+				end
+				rawupdate(self[key], v)
+			else
+				rawset(self, key, v)
+			end
+		end
+	end
+	function meta:__index(idx)
+		local key = '_' .. idx
+		local ret = rawget(self, key)
+		if ret == nil then
+			ret = setmetatable({ super = self, __name = idx }, meta)
+			rawset(self, key, ret)
+		end
+		return ret
+	end
+	function meta:__newindex(idx, val)
+		local update = { [idx] = val }
+		rawupdate(self, update)
+		self(update)
+	end
+	function meta:__call(val) self.super { [self.__name] = val } end
+
+	local self = setmetatable({}, { __index = meta.__index, __newindex = meta.__newindex, __call = on_set })
+	rawupdate(self, defaults)
+	return self, function(_, tbl)
+		rawupdate(self, tbl)
+		on_set(nil, tbl)
+		return false
+	end
+end
+
 ---@param so_path string path relative to sai as pwd
 ---@return table loaded_lib
 function U.compile_and_load(so_path)

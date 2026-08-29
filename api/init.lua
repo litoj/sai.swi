@@ -3,6 +3,7 @@
 
 local proxy = require 'sai.api.proxy'
 local e = require 'sai.api.eventloop'
+local U = require 'sai.lib.utils'
 
 ---@type sai
 ---@diagnostic disable-next-line: missing-fields
@@ -18,24 +19,18 @@ local M = {
 	_exif_orientation = true, -- automatically applied only to raw files
 }
 
-local pmt = {
-	__index = function(self, k) return rawget(self, '_' .. k) end,
-	__newindex = function(self, k, v)
-		local old = self[k]
-		rawset(self, '_' .. k, v)
-		swayimg.format_params = { [self._name] = { [k] = v } }
-		e.trigger {
-			event = 'OptionSet',
-			match = ('sai.format_params.%s.%s'):format(self._name, k),
-			data = v,
-			old_data = old,
-		}
-	end,
-}
-M.format_params = {
-	raw = setmetatable({ _name = 'raw', _camera_wb = true }, pmt),
-	ttf = setmetatable({ _name = 'ttf' }, pmt),
-}
+M._formats, M.set_formats = U.deep_backer({
+	raw = { camera_wb = true },
+	video = {
+		size = 300,
+		columns = 3,
+		rows = 3,
+		padding = 5,
+	},
+}, function(_, tbl)
+	swayimg.format_conf = tbl
+	e.trigger { event = 'OptionSet', match = 'sai.formats', data = tbl }
+end)
 
 M.eventloop = e
 M.imagelist = require 'sai.api.imagelist'
