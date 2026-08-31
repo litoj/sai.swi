@@ -81,7 +81,8 @@ function sai.defer_fn(cb, ms) end
 
 ---Show status message for the duration of `sai.text.status_timeout` seconds.
 ---@param msg string
-function sai.notify(msg) end
+---@param timeout integer? how many seconds to display the message for
+function sai.notify(msg, timeout) end
 
 ---Print a message on-screen and to the terminal.
 ---@param msg string
@@ -457,6 +458,7 @@ do
 	---@field mark_color integer Mark icon color in ARGB format
 	---@field pinch_factor number how aggressive should the effect be
 	---@field multiclick_delay integer ms for coupling mouse clicks as one mouse event
+	---@field on_unassigned fun(combo:string) callback for handling unassigned key combinations
 	local mode_base = {}
 
 	---Reload current view. Causes ImgChanged event.

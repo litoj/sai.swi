@@ -48,7 +48,21 @@ function M.exit(code)
 	if not next(e.find_all(ev)) then swayimg.exit(code) end
 end
 
-function M.notify(msg) swayimg.text.status = string.gsub(tostring(msg), '\t', '  ') end
+function M.notify(msg, timeout)
+	msg = string.gsub(tostring(msg), '\t', '  ')
+	if not timeout then
+		swayimg.text.status = msg
+		return
+	end
+
+	local old = sai.text.status_timeout
+	-- set directly to keep the official queryable value the same
+	swayimg.text.status_timeout = timeout
+	sai.defer_fn(function()
+		-- set the original value back only if it hasn't changed in between
+		if sai.text.status_timeout == timeout then swayimg.text.status_timeout = old end
+	end, timeout)
+end
 
 function M.log(msg, file)
 	if file then

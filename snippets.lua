@@ -37,12 +37,16 @@ function M.load_dir_if_single()
 	end
 end
 
-function M.print_shell_output()
+---@param timeout integer how many seconds to display the output for, negative for #out/-timeout
+function M.print_shell_output(timeout)
+	timeout = timeout or -10
 	e.subscribe {
 		event = 'User',
 		match = 'ShellCmdPost',
 		callback = function(ev)
-			if #ev.data then sai.notify(ev.data) end
+			if #ev.data.stdout > 0 then
+				sai.notify(ev.data.stdout, timeout < 0 and math.ceil(#ev.data.stdout / -timeout) or timeout)
+			end
 		end,
 	}
 end

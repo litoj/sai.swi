@@ -36,6 +36,12 @@ function M.new(self, api_name)
 		self.super.reload()
 	end
 
+	self._on_unassigned = function(key) sai.notify('Unhandled key: ' .. key) end
+	function self:set_on_unassigned(fn)
+		self._on_unassigned = fn
+		api.on_unassigned_key(fn)
+	end
+
 	self._mc_map = {}
 	function self:_rawmap(b, cfg, action)
 		if type(action) == 'string' then action = function() sai.exec(cfg.cb) end end
