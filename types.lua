@@ -79,20 +79,6 @@ function sai.get_mouse_pos() end
 ---@param ms? integer (default: min=1)
 function sai.defer_fn(cb, ms) end
 
----Execute a shell command.
----Escape sequences:
---- - `%`: current file unquoted
---- - `%f`: current file quoted with singlequotes
---- - `%s`: all marked files or current file quoted with singlequotes
---- - `%m`: only marked files or don't execute
---- - `%%`: normal percentage sign (`%`)
----@see event.ShellCmdPost
----@param cmd string
----@param async? boolean should the command be launched in the bg (no event will be emitted)
----@return string stdout or the expanded command when in async mode
----@return integer exitcode
-function sai.exec(cmd, async) end
-
 ---Show status message for the duration of `sai.text.status_timeout` seconds.
 ---@param msg string
 function sai.notify(msg) end
@@ -101,6 +87,20 @@ function sai.notify(msg) end
 ---@param msg string
 ---@param file string? optional redirect of the message to a file (append mode)
 function sai.log(msg, file) end
+
+---Execute a shell command.
+---Escape sequences:
+--- - `%`: current file unquoted
+--- - `%f`: current file quoted with singlequotes
+--- - `%s`: all marked files or current file quoted with singlequotes
+--- - `%m`: only marked files or don't execute
+--- - `%%`: normal percentage sign (`%`)
+---@see event.User.ShellCmdPost
+---@param cmd string
+---@param async? boolean should the command be launched in the bg (no event will be emitted)
+---@return string stdout or the expanded command when in async mode
+---@return integer exitcode
+function sai.exec(cmd, async) end
 
 --------------------------
 --- Eventloop processing
@@ -120,7 +120,6 @@ function sai.log(msg, file) end
 ---| 'ModeChanged' # match: 'o:n' as in old:new, mode: current mode, data: old mode
 ---| 'Signal' # USR1 or USR2 received by swayimg
 ---| 'OptionSet' # after setting any option in the api, match: opt object path, data: opt value
----| 'ShellCmdPost' # after sai.exec, match: cmd, data: output
 ---| 'Subscribed' # hook sub, match: event, mode: hook's modecfg, data: hook config
 ---| 'User' # custom user-emitted/triggered signaling
 ---| 'WinResized' # when a window is resized, data: new size
@@ -153,16 +152,6 @@ do -- Event and Hook type definitions
 	---@class hook.OptionSet: hook.base
 	---@field event 'OptionSet'
 	---@field callback fun(ev:event.OptionSet):(boolean?)
-
-	---@class event.ShellCmdPost: event.base
-	---@field event 'ShellCmdPost'
-	---@field match string command that was executed
-	---@field data? string command output
-
-	---Hook for ShellCmdPost events
-	---@class hook.ShellCmdPost: hook.base
-	---@field event 'ShellCmdPost'
-	---@field callback fun(ev:event.ShellCmdPost):(boolean?)
 
 	---@alias mode_diff 'v:g'|'g:v'|'s:v'|'v:s'|'s:g'|'g:s' # 'old:new' format
 
@@ -238,19 +227,26 @@ do -- Event and Hook type definitions
 	---@field callback fun(ev:event.User):(boolean?)
 
 	---@class event.User.Exported: event.User
-	---@field event 'User'
 	---@field match 'Exported'
 	---@field data string path of the exported file
 
 	---Hook for User.Exported events
 	---@class hook.User.Exported: hook.User
-	---@field pattern? 'Exported'|string[]
+	---@field match 'Exported'
 	---@field callback fun(ev:event.User.Exported):(boolean?)
+
+	---@class event.User.ShellCmdPost: event.User
+	---@field match 'ShellCmdPost'
+	---@field data? {cmd:string,stdout:string}
+
+	---Hook for ShellCmdPost events
+	---@class hook.User.ShellCmdPost: hook.User
+	---@field match 'ShellCmdPost'
+	---@field callback fun(ev:event.User.ShellCmdPost):(boolean?)
 
 	---@alias sai.eventloop.event
 	---| event.ImgChanged
 	---| event.OptionSet
-	---| event.ShellCmdPost
 	---| event.ModeChanged
 	---| event.WinResized
 	---| event.SwiEnter
@@ -259,12 +255,12 @@ do -- Event and Hook type definitions
 	---| event.Subscribed
 	---| event.User
 	---| event.User.Exported
+	---| event.User.ShellCmdPost
 
 	---@alias sai.eventloop.hook
 	---| hook.base
 	---| hook.ImgChanged
 	---| hook.OptionSet
-	---| hook.ShellCmdPost
 	---| hook.ModeChanged
 	---| hook.WinResized
 	---| hook.SwiEnter
@@ -273,6 +269,7 @@ do -- Event and Hook type definitions
 	---| hook.Subscribed
 	---| hook.User
 	---| hook.User.Exported
+	---| hook.User.ShellCmdPost
 end
 
 ---@alias hook_id hook.base

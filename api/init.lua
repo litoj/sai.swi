@@ -85,24 +85,8 @@ function M.defer_fn(cb, ms)
 	end
 end
 
--- TODO: how to make stderr appear? 2>&1 doesn't work
-function M.exec(cmd, async)
-	cmd = U.parse_cmd(cmd)
-	if not cmd then return end
-
-	if async then return cmd, os.execute(('{ %s; } >/dev/null </dev/null &'):format(cmd)) end
-
-	local p, err = io.popen(cmd .. '\necho $?', 'r')
-	if not p then error('Error executing command: ' .. (err or '')) end
-	local out = p:read '*a'
-	p:close()
-
-	local code = out:match '(%d+)\n$'
-	out = out:sub(1, -#code - 2)
-
-	e.trigger { event = 'ShellCmdPost', match = cmd, data = out }
-	return out, code
-end
+--- for bw compatibility and ease of use
+M.exec = require('sai.bridge.utils').exec
 
 function M:get_app_id() return swayimg.appid end
 

@@ -1,5 +1,5 @@
 ---@diagnostic disable: invisible
----@module 'sai.lib.ipc'
+---@module 'sai.bridge.ipc'
 
 local ffi = require 'ffi'
 local bit = require 'bit'
@@ -85,19 +85,19 @@ local function set_timeouts(fd, seconds)
 end
 
 local function make_addr(path)
-	---@type sai.lib.ipc.sockaddr_un
+	---@type sai.bridge.ipc.sockaddr_un
 	local addr = ffi.new 'struct sockaddr_un' ---@diagnostic disable-line: assign-type-mismatch
 	addr.sun_family = AF_UNIX --[[@as integer]]
 	ffi.copy(ffi.cast('char *', addr.sun_path), path)
 	return addr
 end
 
----@class sai.lib.ipc.sockaddr_un : ffi.cdata*
+---@class sai.bridge.ipc.sockaddr_un : ffi.cdata*
 ---@field sun_family integer
 ---@field sun_path string
 
 ---IPC: remote Lua code execution via Unix domain socket.
----@class sai.lib.ipc
+---@class sai.bridge.ipc
 ---@field enabled boolean starts/stops the server or client
 ---@field private _socket_path string
 local M = {
@@ -127,7 +127,7 @@ end
 ---`hook` is called on enable/disable to manage the signal subscription.
 ---The default hooks into sai.eventloop Signal events.
 ---Set `hook = nil` for manual control.
----@class sai.lib.ipc.server : sai.lib.ipc
+---@class sai.bridge.ipc.server : sai.bridge.ipc
 local server = {
 	_signal = 'USR2', ---@protected signal to listen on or false to disable auto-hook
 	_sub_id = nil, ---@private
@@ -186,7 +186,7 @@ function server:set_enabled(val)
 end
 
 --- Default hook: subscribe to sai.eventloop Signal events.
----@param self sai.lib.ipc.server
+---@param self sai.bridge.ipc.server
 ---@param enable boolean
 function server.hook(self, enable)
 	if enable then
@@ -259,7 +259,7 @@ function server:receive()
 end
 
 ---Client instance: connects, synchronous send/recv.
----@class sai.lib.ipc.client : sai.lib.ipc
+---@class sai.bridge.ipc.client : sai.bridge.ipc
 local client = {}
 
 ---@param code string
@@ -348,7 +348,7 @@ function M:new(path)
 end
 
 ---@param path string?
----@return sai.lib.ipc.server
+---@return sai.bridge.ipc.server
 function M.server(path)
 	local self = M.new(server, path or ('%s/%s-%d.socket'):format( -- default path
 		os.getenv 'XDG_RUNTIME_DIR' or '/tmp',
@@ -360,7 +360,7 @@ function M.server(path)
 end
 
 ---@param path string
----@return sai.lib.ipc.client
+---@return sai.bridge.ipc.client
 function M.client(path)
 	local self = M.new(client, path)
 	self:set_enabled(true)

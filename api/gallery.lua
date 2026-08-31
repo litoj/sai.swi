@@ -129,7 +129,7 @@ function api.get_image()
 	return img
 			and setmetatable(img, {
 				__index = function(self, idx)
-					if idx == 'meta' then self.meta = require('sai.lib.exiv2').get_meta(self.path) end
+					if idx == 'meta' then self.meta = require('sai.bridge.exiv2').get_meta(self.path) end
 					return rawget(self, idx)
 				end,
 			})

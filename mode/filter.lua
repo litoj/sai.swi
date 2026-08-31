@@ -2,8 +2,8 @@
 ---@module 'sai.mode.filter'
 
 local U = require 'sai.lib.utils'
+local BU = require 'sai.bridge.utils'
 local pager = require 'sai.lib.pager'
-local exiv2 = require 'sai.lib.exiv2'
 local l = sai.imagelist
 local binds = require 'sai.binds'
 
@@ -68,7 +68,7 @@ function M:new()
 		_max_height = 10,
 	}
 	self._images = {}
-	self._loaded_tags = { path = true, size = true, mtime = true }
+	self._loaded_tags = { index = true, path = true, size = true, mtime = true, mark = true }
 	M.super.new(self)
 	binds.filter(self)
 
@@ -150,7 +150,7 @@ function M:make_filter(line)
 		end,
 		[':'] = function() -- run code; tag value is set as `self` variable, value defaults to imgmeta
 			if #tag == 0 then tag = 'self' end
-			return U.make_runnable(val)
+			return BU.make_runnable(val)
 		end,
 	}
 
@@ -356,7 +356,7 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 				to_get[#to_get + 1] = img
 			end
 		end
-		exiv2.load_all(to_get)
+		require('sai.bridge.exiv2').load_all(to_get)
 		for _, img in ipairs(to_get) do
 			imap[img.path] = img
 			img.out = self:render_item(img) -- load representations of all items

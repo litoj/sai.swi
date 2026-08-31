@@ -193,31 +193,30 @@ function M.input(self)
 	-- Make mappings invisible in help lists
 	map = M.gen_mapadd(self, { kind = 'private', _wrapped = true })
 
+	local BU = require 'sai.bridge.utils'
 	-- Clipboard management
 	map('Ctrl+a', function()
 		self._visual = 1
 		self.col = #self.text + 1
 	end, 'Select all')
-	map('Ctrl+x', function()
+	local set = function()
 		local from, to = self._col, self._visual
 		if not to then return end
 		if from > to then
 			from, to = to, from
 		end
-		U.clipboard_set(self._text:sub(from, to))
+		BU.clipboard_set(self._text:sub(from, to))
+	end
+	map('Ctrl+x', function()
+		set()
 		self:insert ''
 	end, 'Cut to clipboard')
 	map('Ctrl+c', function()
-		local from, to = self._col, self._visual
-		if not to then return end
-		if from > to then
-			from, to = to, from
-		end
-		U.clipboard_set(self._text:sub(from, to))
+		set()
 		self.visual = false
-	end, 'Copy selection')
+	end, 'Copy to clipboard')
 	map('Ctrl+v', function()
-		local text = U.clipboard_get()
+		local text = BU.clipboard_get()
 		if text then self:insert(text) end
 	end, 'Paste from clipboard')
 

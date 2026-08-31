@@ -121,7 +121,7 @@ static int lua_load_all(lua_State *L) {
 	return 0;
 }
 
-extern "C" int luaopen_exiv2_to_lua(lua_State *L) {
+extern "C" int luaopen_exiv2(lua_State *L) {
 	lua_createtable(L, 0, 2);
 
 	lua_pushcfunction(L, lua_get_meta);
@@ -131,11 +131,4 @@ extern "C" int luaopen_exiv2_to_lua(lua_State *L) {
 	lua_setfield(L, -2, "load_all");
 
 	return 1;
-}
-extern "C" int luaopen_lib_exiv2_to_lua(lua_State *L) {
-	return luaopen_exiv2_to_lua(L);
-}
-
-extern "C" int luaopen_sai_lib_exiv2_to_lua(lua_State *L) {
-	return luaopen_exiv2_to_lua(L);
 }

@@ -4,16 +4,24 @@ local M = {}
 local e = require 'sai.api.eventloop'
 
 function M.update()
-	sai.exec 'cd ~/.config/swayimg/sai && git pull'
-	-- recompile if sources have updated
-	local path = debug.getinfo(1, 'S').source:match '(/.*/)' .. 'exiv2_to_lua.so'
-	if os.execute(string.format('[ %s -nt %s ]', path:gsub('.so$', '.cpp'), path)) ~= 1 then
-		local old = package.loaded['sai.lib.exiv2']
-		if not old then return end
-		for k, v in pairs(require('sai.lib.utils').compile_and_load(path)) do -- update old instance
-			old[k] = v
+	-- recompile and hot-swap every bridge module whose sources have been updated
+	local bridge_dir = debug.getinfo(1, 'S').source:match '/.+/sai/' .. 'bridge/'
+	sai.exec(('cd %s && git pull'):format(bridge_dir))
+
+	local BU = require 'sai.bridge.utils'
+	local p = io.popen('ls -1 ' .. bridge_dir .. '*.so') or error('Could not list cpp modules in: ' .. bridge_dir)
+	for so_path in p:lines() do
+		-- recompile if the source has been updated
+		if os.execute(string.format('[ %s -nt %s ]', so_path:gsub('.so$', '.cpp'), so_path)) ~= 1 then
+			BU.compile_so(so_path)
+			-- hot-swap the instance if the module is already loaded in memory
+			local old = package.loaded['sai.bridge.' .. so_path:match '([^/]+)%.so$']
+			for k, v in pairs(old and BU.load_so(so_path) or {}) do
+				old[k] = v
+			end
 		end
 	end
+	p:close()
 end
 
 function M.load_dir_if_single()
@@ -31,7 +39,8 @@ end
 
 function M.print_shell_output()
 	e.subscribe {
-		event = 'ShellCmdPost',
+		event = 'User',
+		match = 'ShellCmdPost',
 		callback = function(ev)
 			if #ev.data then sai.notify(ev.data) end
 		end,
