@@ -44,7 +44,12 @@ function M.print_shell_output(timeout)
 		event = 'User',
 		match = 'ShellCmdPost',
 		callback = function(ev)
-			if #ev.data.stdout > 0 then
+			if #ev.data.stderr > 0 then
+				sai.notify(
+					('===ERROR STREAM===\n%s\n\n===STDOUT===\n%s'):format(ev.data.stderr, ev.data.stdout),
+					timeout < 0 and math.ceil((2 * #ev.data.stderr + #ev.data.stdout) / -timeout) or 2 * timeout
+				)
+			elseif #ev.data.stdout > 0 then
 				sai.notify(ev.data.stdout, timeout < 0 and math.ceil(#ev.data.stdout / -timeout) or timeout)
 			end
 		end,

@@ -28,23 +28,36 @@ function BU.parse_shell_cmd(cmd)
 	return cmd
 end
 
--- TODO: how to make stderr appear? 2>&1 doesn't work
 ---@see sai.exec
 function BU.exec(cmd, async)
 	cmd = BU.parse_shell_cmd(cmd)
 
 	if async then return cmd, select(1, os.execute(('{ %s; } >/dev/null </dev/null &'):format(cmd))) end
 
-	local p, err = io.popen(cmd .. '\necho $?', 'r')
-	if not p then error('Error executing command: ' .. (err or '')) end
-	local out = p:read '*a'
-	p:close()
+	local h = io.popen 'mktemp' or error 'Failed to execute mktemp'
+	local tf = h:read 'a'
+	h:close()
+
+	local err
+	h, err = io.popen(('{ %s; } 2>%s\necho $?'):format(cmd, tf), 'r')
+	if not h then error('Error executing command: ' .. (err or '')) end
+	local out = h:read 'a'
+	h:close()
+
+	h = io.open(tf, 'r')
+	if not h then
+		err = ''
+	else
+		err = h:read 'a'
+		h:close()
+	end
+	os.remove(tf)
 
 	local code = out:match '(%d+)\n$'
 	out = out:sub(1, -#code - 2)
 
-	sai.eventloop.trigger { event = 'User', match = 'ShellCmdPost', data = { cmd = cmd, stdout = out } }
-	return out, code
+	sai.eventloop.trigger { event = 'User', match = 'ShellCmdPost', data = { cmd = cmd, stdout = out, stderr = err } }
+	return out, code, err
 end
 
 ---Get the current Wayland clipboard content via wl-paste.

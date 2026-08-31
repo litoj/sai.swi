@@ -101,6 +101,7 @@ function sai.log(msg, file) end
 ---@param async? boolean should the command be launched in the bg (no event will be emitted)
 ---@return string stdout or the expanded command when in async mode
 ---@return integer exitcode
+---@return string stderr in case of any warnings etc
 function sai.exec(cmd, async) end
 
 --------------------------
@@ -238,7 +239,7 @@ do -- Event and Hook type definitions
 
 	---@class event.User.ShellCmdPost: event.User
 	---@field match 'ShellCmdPost'
-	---@field data? {cmd:string,stdout:string}
+	---@field data? {cmd:string,stdout:string,stderr:string}
 
 	---Hook for ShellCmdPost events
 	---@class hook.User.ShellCmdPost: hook.User

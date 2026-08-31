@@ -26,6 +26,7 @@ function M:new()
 	return self
 end
 
+--TODO: generalize so it can run for shell cmd as well
 function M:on_confirm(out) -- TODO: history for >1 item doesn't work
 	self.text = ''
 	self._hist_matcher = ''

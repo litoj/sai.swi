@@ -14,26 +14,27 @@ local msize = 0
 
 ---@type sai.imagelist.marked
 local marked = M.marked
-local last_lsize = 0
+local last_lsize = api.size
 
 local function set_mark(x, enabled)
 	if msize ~= marked.size() then
-	else
-		local changed
-		for _, path in ipairs(type(x) == 'string' and { x } or x) do
-			if enabled == not mlist[path] then
-				if enabled then
-					mlist[path] = 1
-					msize = msize + 1
-				else
-					mlist[path] = nil
-					msize = msize - 1
-				end
-				changed = true
-			end
-		end
-		if not changed then return end
+		return -- already updated
 	end
+
+	local changed
+	for _, path in ipairs(type(x) == 'string' and { x } or x) do
+		if enabled == not mlist[path] then
+			if enabled then
+				mlist[path] = 1
+				msize = msize + 1
+			else
+				mlist[path] = nil
+				msize = msize - 1
+			end
+			changed = true
+		end
+	end
+	if not changed then return end
 
 	e.trigger { event = 'OptionSet', match = 'sai.imagelist.marked.size', data = msize }
 end
@@ -68,6 +69,7 @@ function marked.size()
 	local lsize = api.size
 	if lsize ~= last_lsize then
 		mlist = {}
+		msize = 0
 		for _, v in ipairs(api.get()) do
 			if v.mark then
 				mlist[v.path] = 1
@@ -75,9 +77,24 @@ function marked.size()
 			end
 		end
 		last_lsize = lsize
+		e.trigger { event = 'OptionSet', match = 'sai.imagelist.marked.size', data = msize }
+		e.trigger { event = 'OptionSet', match = 'sai.imagelist.size', data = last_lsize }
 	end
 	return msize
 end
+
+-- TODO: replace with a proper imagelist change listener when I convince artemsen to add one
+-- <https://github.com/artemsen/swayimg/issues/561>
+e.subscribe {
+	event = 'User',
+	match = 'ShellCmdPost',
+	callback = function(ev)
+		-- if there is a chance that images disappeared, then check for imagelist size changes
+		if ev.data.cmd:find('rm', 1, true) or ev.data.cmd:find('mv', 1, true) then --
+			sai.defer_fn(marked.size, 100)
+		end
+	end,
+}
 
 -- TODO: allow set_current also generally for imagelist - traverse for gallery and open for viewer
 function marked.set_current(enabled)
