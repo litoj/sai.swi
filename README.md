@@ -79,10 +79,13 @@ https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
   - `%`: unquoted current (like in 4.x): `v.map('', [[bash -c '$(which trash || echo rm) "%"']])`
 - **IPC**: expose a Unix socket for external programs to evaluate Lua code in swayimg.
   ```lua
-  local ipc = require 'sai.lib.ipc'
+  local ipc = require 'sai.bridge.ipc'
   local server = ipc.server('/tmp/swi.sock') -- auto-enabled
   local client = ipc.client('/tmp/swi.sock') -- auto-enabled
   print(client:send("return sai.text.size")) --> current font size
+  -- functions work too: sent as bytecode, must be self-contained (globals
+  -- resolve inside swayimg, client locals/upvalues do not travel)
+  print(client:send(function() return sai.text.size end))
   client.enabled = false
   server.enabled = false
   ```
@@ -238,13 +241,70 @@ require 'sai.api.globals'
 -- now you can use all options as variables and make intricate behaviour using eventloop hooks
 ```
 
-### Better dev experience in NeoVim
+## 🔧 Development
 
-If you're already using _lua_ls_ you only need to include the original swayimg api definitions from
-which _sai_ reuses the types:
+### Structure
+
+- `api/`: everything related just to the replacement of the swayimg api + `eventloop` more generic event handler
+- `bridge/`: everything that talks to the world outside - using lua `ffi`, C, shell, etc.
+- `lib/`: pure-Lua utilities extending the possibilities for building your own scripts and plugins
+- `mode/`: custom modes ready to go or to be extended
+
+### Dev experience in nvim
+
+_sai_ reuses the types of the original swayimg api. Add them to your _lua_ls_
+workspace:
 
 ```lua
 settings.Lua.workspace.library = {'/usr/share/swayimg/swayimg.lua', '/usr/local/share/swayimg/swayimg.lua'}
+```
+
+### Debugging in nvim
+
+Ensure you have `lua51-cjson` installed.
+
+_sai_ has a DAP harness (`bridge/debug.lua`) and an nvim-dap adapter
+(`nvim_dap.lua`). Debug a running swayimg from nvim: set breakpoints, step,
+evaluate. While stopped, the harness freezes the swayimg event loop.
+
+The adapter is not a nvim plugin. It lives in the swayimg config directory.
+Load it straight from there:
+
+```lua
+-- registers in dap.configurations.lua and the `sai` adapter
+loadfile(os.getenv 'HOME' .. '/.config/swayimg/sai/nvim_dap.lua')().setup()
+```
+
+Start the harness in swayimg via pressing <kbd>Shift+F6</kbd> or running:
+```lua
+require('sai.bridge.debug').start {} -- $XDG_RUNTIME_DIR/sai-debug-<pid>.sock
+```
+
+`setup()` registers the `sai` adapter and an 'Attach to swayimg'
+configuration that nvim-dap offers only when the current file lives under a
+swayimg directory, like osv does for nvim itself. Debug lua as
+usual - your nvim-dap bindings pick it up.
+
+### Tests
+
+Each test module is named after the sai module it exercises. All tests run
+end-to-end, over real processes:
+
+- `debug` — the DAP protocol, raw client vs harness: breakpoints
+  (conditional, hit-count, log), scopes, variables, evaluate, stepping,
+  exceptions, coroutines
+- `ipc` — the IPC bridge between processes: poll- and signal-driven servers,
+  results, errors, large payloads, reconnects
+- `nvim_dap` — one full DAP session through the whole stack: swayimg driven by
+  headless nvim with nvim-dap. Needs a Wayland session and images; skips
+  itself without them.
+
+Run from anywhere:
+
+```sh
+luajit tests/init.lua                     # all tests
+luajit tests/debug.lua                    # one module
+luajit tests/init.lua debug.breakpoints   # one method
 ```
 
 ### TODOs
@@ -260,4 +320,4 @@ settings.Lua.workspace.library = {'/usr/share/swayimg/swayimg.lua', '/usr/local/
 
 ## License
 
-Do whatever you please except advertising modified code as solely yours or mine.
+Do whatever you please but don't lie about what it is.

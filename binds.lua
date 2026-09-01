@@ -49,6 +49,12 @@ function M.default()
 		function() require('sai.mode.help').enabled = not require('sai.mode.help').enabled end,
 		'Toggle help'
 	)
+	map(
+		'a',
+		'Shift+F6',
+		function() sai.notify('Started debug ipc on: ' .. require('sai.bridge.debug').start {}) end,
+		'Start debug ipc'
+	)
 
 	-- Global keybinds
 	map('a', 'Return', function() sai.mode = sai.mode == 'gallery' and 'viewer' or 'gallery' end, 'Toggle viewer')
