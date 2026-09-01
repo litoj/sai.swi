@@ -36,6 +36,7 @@ function M.new(self, api_name)
 		self.super.reload()
 	end
 
+	-- TODO: should be in keybind_processor and here we should just set the method to the api
 	self._on_unassigned = function(key) sai.notify('Unhandled key: ' .. key) end
 	function self:set_on_unassigned(fn)
 		self._on_unassigned = fn

@@ -217,7 +217,7 @@ function M.unsubscribe(f)
 		local ev_hooks = M._hooks[ev]
 		local ptn_hooks = ev_hooks[ptn]
 
-		ptn_hooks[i] = nil
+		table.remove(ptn_hooks, i)
 		if not next(ptn_hooks) then
 			ev_hooks[ptn] = nil
 			if not next(ev_hooks) then M._hooks[ev] = nil end
@@ -237,15 +237,18 @@ function M.trigger(ev)
 	if not ev.match and not ev.pattern then ev.match = '' end
 	if M.debug_trigger then print_debug('trigger', ev) end
 
+	local prune = {}
 	M.apply_filtered(ev, function(hook)
 		local ok, ret = xpcall(hook.callback, debug.traceback, ev)
 		---@diagnostic disable-next-line: param-type-mismatch
 		if not ok then sai.log(ret) end
 
-		if hook.once or (ok and ret) then
-			M.unsubscribe { id = hook } -- unsub from all places, not just where it matched
-		end
+		-- defer removal to not mangle indexes during table traversal
+		if hook.once or (ok and ret) then prune[#prune + 1] = hook end
 	end)
+	for _, hook in ipairs(prune) do
+		M.unsubscribe { id = hook } -- unsub from all places, not just where it matched
+	end
 end
 
 function M.takeover_subscribe(cfg)

@@ -202,13 +202,19 @@ U.max_tbl_len = 80
 
 ---@param t table
 ---@param indent string?
-function U.tbl_to_str(t, indent)
+function U.tbl_to_str(t, indent, visited)
 	indent = (indent or '') .. '  '
+	visited = visited or { [t] = 'root' }
 	local s = {}
 	local space = U.max_tbl_len
 	for k, v in pairs(t) do
 		if type(v) == 'table' then
-			v = U.tbl_to_str(v, indent)
+			if visited[v] then
+				v = ('<%s>'):format(visited[v])
+			else
+				visited[v] = ('%s.%s'):format(visited[t], k)
+				v = U.tbl_to_str(v, indent, visited)
+			end
 		elseif type(v) == 'function' then
 			v = 'fn()'
 		elseif type(v) == 'string' then

@@ -35,7 +35,7 @@ function BU.exec(cmd, async)
 	if async then return cmd, select(1, os.execute(('{ %s; } >/dev/null </dev/null &'):format(cmd))) end
 
 	local h = io.popen 'mktemp' or error 'Failed to execute mktemp'
-	local tf = h:read 'a'
+	local tf = h:read 'l'
 	h:close()
 
 	local err
