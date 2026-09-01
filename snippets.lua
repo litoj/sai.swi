@@ -27,7 +27,18 @@ end
 function M.load_dir_if_single()
 	local function check_n_load()
 		local l = sai.imagelist
-		if l.size() == 1 then l.add(l.get_current().path:match '.+/') end
+		if l.size() ~= 1 then return end
+		local dir = l.get_current().path:match '.+/'
+
+		-- find follows symlinks (-L): symlinked files are added, symlinked dirs are not
+		local p = io.popen(("find -L '%s' -maxdepth 1 -type f"):format(dir:gsub("'", [['\'']])))
+			or error('Could not list files in: ' .. dir)
+		local files = {}
+		for line in p:lines() do
+			files[#files + 1] = line
+		end
+		p:close()
+		l.add(files)
 	end
 
 	if sai.initialized then
@@ -37,7 +48,7 @@ function M.load_dir_if_single()
 	end
 end
 
----@param timeout integer how many seconds to display the output for, negative for #out/-timeout
+---@param timeout? integer how many seconds to display the output for, negative for #out/-timeout
 function M.print_shell_output(timeout)
 	timeout = timeout or -10
 	e.subscribe {

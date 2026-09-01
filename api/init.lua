@@ -81,7 +81,7 @@ local function cb_rescheduler()
 	local next_delay = deferred_heap:time_to_next() -- what is the earliest next cb to run
 	if next_delay == nil then return end
 
-	swayimg.defer(next_delay / 1000, function()
+	swayimg.defer(math.max(next_delay, 1) / 1000, function()
 		deferred_heap:pop()()
 		cb_rescheduler() -- reschedule for next callback
 	end)
@@ -90,10 +90,10 @@ function M.defer_fn(cb, ms)
 	if type(cb) == 'integer' then
 		cb, ms = ms, cb
 	end
-	ms = ms or 0
+	ms = ms or 1
 	deferred_heap:push(ms, cb)
 	if #deferred_heap == 1 then
-		swayimg.defer(ms / 1000, function() deferred_heap:pop()() end)
+		swayimg.defer(math.max(ms, 1) / 1000, function() deferred_heap:pop()() end)
 	else
 		cb_rescheduler()
 	end
@@ -145,6 +145,7 @@ swayimg.on_window_resize(function()
 			return
 		elseif x == false and sai.mode ~= 'gallery' then
 			x = sai[sai.mode]
+			---@diagnostic disable-next-line: undefined-field
 			x.scale = x._original_default_scale -- fix incorrect initial size with overlay disabled
 		end
 

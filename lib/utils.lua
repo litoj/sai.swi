@@ -67,13 +67,13 @@ end
 ---@return table
 ---@return fun(_, tbl:table):false handler for setting the entire field where this table resides
 function U.deep_backer(defaults, on_set)
-	local meta = {}
+	local meta = {} ---@type metatable
 	local function rawupdate(self, new)
 		for idx, v in pairs(new) do
 			local key = '_' .. idx
 			if type(v) == 'table' then
 				if rawget(self, key) == nil then
-					rawset(self, key, setmetatable({ super = self, __name = idx }, meta))
+					rawset(self, key, setmetatable({ __super = self, __name = idx }, meta))
 				end
 				rawupdate(self[key], v)
 			else
@@ -85,7 +85,7 @@ function U.deep_backer(defaults, on_set)
 		local key = '_' .. idx
 		local ret = rawget(self, key)
 		if ret == nil then
-			ret = setmetatable({ super = self, __name = idx }, meta)
+			ret = setmetatable({ __super = self, __name = idx }, meta)
 			rawset(self, key, ret)
 		end
 		return ret
@@ -95,7 +95,15 @@ function U.deep_backer(defaults, on_set)
 		rawupdate(self, update)
 		self(update)
 	end
-	function meta:__call(val) self.super { [self.__name] = val } end
+	---@diagnostic disable-next-line: undefined-field
+	function meta:__call(val) self.__super { [self.__name] = val } end
+	function meta:__tostring()
+		local copy = {}
+		for k, v in pairs(self) do
+			if k:sub(1, 1) == '_' and k:sub(2, 2) ~= '_' then copy[k:sub(2)] = v end
+		end
+		return tostring(copy)
+	end
 
 	local self = setmetatable({}, { __index = meta.__index, __newindex = meta.__newindex, __call = on_set })
 	rawupdate(self, defaults)
@@ -203,6 +211,8 @@ U.max_tbl_len = 80
 ---@param t table
 ---@param indent string?
 function U.tbl_to_str(t, indent, visited)
+	local m = getmetatable(t)
+	if m and m.__tostring then return m.__tostring(t) end
 	indent = (indent or '') .. '  '
 	visited = visited or { [t] = 'root' }
 	local s = {}

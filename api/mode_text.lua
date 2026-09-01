@@ -46,7 +46,7 @@ local function replace_sai_vars(line, vars, ev)
 		local val = sai
 		for key in path:gmatch '[^.]+' do
 			val = val[key]
-			if type(val) == 'function' then val = val() end
+			-- if type(val) == 'function' then val = val() end
 			if val == nil then return end
 		end
 		line = line:gsub(var, U.to_pretty_str(val))
