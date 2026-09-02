@@ -4,6 +4,8 @@
 -- Main application class
 --------------------------------------------------------------------------------
 
+---@alias block_position_t 'topleft'|'topright'|'bottomleft'|'bottomright'
+
 ---@class RawCfg
 ---@field enable? boolean
 ---@field camera_wb? boolean Fix colors using white balance from camera
@@ -395,6 +397,7 @@ function sai.text.is_visible() end
 
 do
 	---@class keybind_processor
+	---@field on_unassigned fun(combo:string) callback for handling unassigned key combinations
 	local keybind_processor = {}
 
 	---Map a keyboard or mouse event to an action.
@@ -404,10 +407,12 @@ do
 	function keybind_processor.map(bind, action, opts) end
 
 	---@class bindcfg
-	---@field cb function|string the action that runs on the binding activation (or the shell command)
+	---The action that runs on the binding activation (or the shell command).
+	---In overriding modes you can use `false` to set to unmapped (use the default handler).
+	---@field cb function|string|false
 	---@field trace string where was the binding defined
 	---@field desc? string optional description of the action
-	---@field kind? 'default'|'private' what category does this bind belong to, unspecified is for user
+	---@field kind? 'default'|'private'|'input' what category does this bind belong to, unspecified is for user
 
 	---@param bind string
 	---@param bindcfg bindcfg config to set the bind to
@@ -459,7 +464,6 @@ do
 	---@field mark_color integer Mark icon color in ARGB format
 	---@field pinch_factor number how aggressive should the effect be
 	---@field multiclick_delay integer ms for coupling mouse clicks as one mouse event
-	---@field on_unassigned fun(combo:string) callback for handling unassigned key combinations
 	local mode_base = {}
 
 	---Reload current view. Causes ImgChanged event.

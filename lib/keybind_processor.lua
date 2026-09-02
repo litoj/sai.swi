@@ -1,5 +1,6 @@
 ---@module 'sai.lib.keybind_processor'
 local U = require 'sai.lib.utils'
+local X = require 'sai.bridge.xkb'
 
 ---@class sai.lib.keybind_processor: keybind_processor
 ---@field _path string path to the module for error processing
@@ -7,7 +8,13 @@ local U = require 'sai.lib.utils'
 ---Function to set a mapping directly without updating the active mappings.
 ---Nil action gets replaced with the default handler for unbound keys
 ---@field warn_on_duplicates boolean
-local M = {}
+local M = {
+	---How to handle unassigned xkb key combinations.
+	---Default custom handler tries to solve common layout differences (toggled shift)
+	---@protected
+	---@type fun(key: string)|false
+	_on_unassigned = false,
+}
 
 -- TODO: make modebase translate multimaps (`cd`) correctly and use sig USR1 for fallback
 ---Must be overriden by inheriting class
@@ -40,7 +47,7 @@ function M:new()
 	if self._mappings then
 		local trace = U.pretty_trace('keybind_processor.+new', debug.traceback())
 		for k, v in pairs(self._mappings) do
-			local newkey = U.normalize_key(k)
+			local newkey = X.userbind_to_xkb(k)
 			if k ~= newkey then
 				self._mappings[k] = nil
 				self._mappings[newkey] = v
@@ -55,14 +62,14 @@ function M:new()
 	end
 
 	self.remap = function(b, cfg)
-		b = U.normalize_key(b)
+		b = X.userbind_to_xkb(b)
 		local old = self._mappings[b]
 		cfg.trace = cfg.trace or cfg.kind or debug.traceback()
 		self:_setmap(b, cfg)
 		return old
 	end
 
-	self.unmap = function(b) M:_setmap(U.normalize_key(b)) end
+	self.unmap = function(b) M:_setmap(X.userbind_to_xkb(b)) end
 
 	local function pretty_trace(trace) return U.pretty_trace('keybind_processor.+map', trace) end
 

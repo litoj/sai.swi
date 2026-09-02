@@ -4,5 +4,5 @@
 ---@class exiv2
 ---@field get_meta fun(path:string): meta:{[string]:string}|nil, err:string?
 ---@field load_all fun(entries:swayimg.entry[])
-local M = require('sai.bridge.utils').load_so(debug.getinfo(1, 'S').short_src:sub(1, -4) .. 'so')
+local M = require('sai.bridge.shell').load_so(debug.getinfo(1, 'S').short_src:sub(1, -4) .. 'so')
 return M

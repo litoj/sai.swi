@@ -10,32 +10,28 @@ local U = require 'sai.lib.utils'
 
 -- applied one by one: another module in the same process may have defined
 -- some of them already (ffi.cdef cannot redefine)
-local DEFS = {
-	'typedef unsigned short sa_family_t;',
-	'typedef unsigned int mode_t;',
-	'typedef int pid_t;',
-	'struct sockaddr_un { sa_family_t sun_family; char sun_path[108]; };',
-	'struct timeval { long tv_sec; long tv_usec; };',
-	'struct pollfd { int fd; short events; short revents; };',
-	'int socket(int domain, int type, int protocol);',
-	'int bind(int fd, const struct sockaddr_un *addr, int addrlen);',
-	'int listen(int fd, int backlog);',
-	'int accept4(int fd, void *addr, void *addrlen, int flags);',
-	'int connect(int fd, const struct sockaddr_un *addr, int addrlen);',
-	'int recv(int fd, void *buf, size_t len, int flags);',
-	'int send(int fd, const void *buf, size_t len, int flags);',
-	'int close(int fd);',
-	'int unlink(const char *path);',
-	'int fcntl(int fd, int cmd, ...);',
-	'int chmod(const char *path, mode_t mode);',
-	'pid_t getpid(void);',
-	'int setsockopt(int fd, int level, int optname, const void *optval, int optlen);',
-	'int poll(struct pollfd *fds, unsigned long nfds, int timeout);',
-}
-
-for _, def in ipairs(DEFS) do
-	pcall(ffi.cdef, def)
-end
+ffi.cdef [[
+typedef unsigned short sa_family_t;
+typedef unsigned int mode_t;
+typedef int pid_t;
+struct sockaddr_un { sa_family_t sun_family; char sun_path[108]; };
+struct timeval { long tv_sec; long tv_usec; };
+struct pollfd { int fd; short events; short revents; };
+int socket(int domain, int type, int protocol);
+int bind(int fd, const struct sockaddr_un *addr, int addrlen);
+int listen(int fd, int backlog);
+int accept4(int fd, void *addr, void *addrlen, int flags);
+int connect(int fd, const struct sockaddr_un *addr, int addrlen);
+int recv(int fd, void *buf, size_t len, int flags);
+int send(int fd, const void *buf, size_t len, int flags);
+int close(int fd);
+int unlink(const char *path);
+int fcntl(int fd, int cmd, ...);
+int chmod(const char *path, mode_t mode);
+pid_t getpid(void);
+int setsockopt(int fd, int level, int optname, const void *optval, int optlen);
+int poll(struct pollfd *fds, unsigned long nfds, int timeout);
+]]
 
 local AF_UNIX = 1
 local SOCK_STREAM = 1

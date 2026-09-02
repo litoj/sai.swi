@@ -36,7 +36,7 @@ function M:_rawmap(b, cfg, fn)
 	if cfg and not cfg._wrapped then
 		---@diagnostic disable-next-line: inject-field
 		cfg._wrapped = true
-		if fndbg(fn, 'u').nparams == 1 then
+		if type(fn) == 'function' and fndbg(fn, 'u').nparams == 1 then
 			cfg.cb = function() fn(self) end
 			M.super._rawmap(self, b, cfg)
 			return

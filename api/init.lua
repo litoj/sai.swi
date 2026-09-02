@@ -100,7 +100,7 @@ function M.defer_fn(cb, ms)
 end
 
 --- for bw compatibility and ease of use
-M.exec = require('sai.bridge.utils').exec
+M.exec = require('sai.bridge.shell').exec
 
 function M:get_app_id() return swayimg.appid end
 

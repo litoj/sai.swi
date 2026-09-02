@@ -288,18 +288,7 @@ usual - your nvim-dap bindings pick it up.
 ### Tests
 
 Each test module is named after the sai module it exercises. All tests run
-end-to-end, over real processes:
-
-- `debug` — the DAP protocol, raw client vs harness: breakpoints
-  (conditional, hit-count, log), scopes, variables, evaluate, stepping,
-  exceptions, coroutines
-- `ipc` — the IPC bridge between processes: poll- and signal-driven servers,
-  results, errors, large payloads, reconnects
-- `nvim_dap` — one full DAP session through the whole stack: swayimg driven by
-  headless nvim with nvim-dap. Needs a Wayland session and images; skips
-  itself without them.
-
-Run from anywhere:
+end-to-end, over real processes. Run it from anywhere:
 
 ```sh
 luajit tests/init.lua                     # all tests

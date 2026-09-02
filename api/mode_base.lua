@@ -36,11 +36,36 @@ function M.new(self, api_name)
 		self.super.reload()
 	end
 
-	-- TODO: should be in keybind_processor and here we should just set the method to the api
-	self._on_unassigned = function(key) sai.notify('Unhandled key: ' .. key) end
+	self._on_unassigned = function(key)
+		local sym = key:match '[^+]+$'
+		local ok
+		if #sym > 1 then
+			if sym:sub(1, 3) == 'KP_' then -- try non-kp versions of kp keys
+				local k = self._mappings[key:gsub('KP_', '')]
+				if k then return k.cb() end
+			else
+				ok = sym:sub(1, 1):match '%l' -- allow ccaron/aacute, not Next/End
+			end
+		else
+			ok = sym:match '%d'
+		end
+
+		if ok then
+			-- toggle Shift and try again
+			local k = key:find('Shift', 1, true) and key:gsub('Shift%+', '') or key:gsub('([^+]+)$', 'Shift+%1')
+			k = self._mappings[k]
+			if k then return k.cb() end
+		end
+
+		if key == 'ISO_Level3_Shift' then return end -- AltGr
+		sai.notify('Unhandled key: ' .. key)
+	end
+	api.on_unassigned_key(self._on_unassigned)
+
 	function self:set_on_unassigned(fn)
 		self._on_unassigned = fn
 		api.on_unassigned_key(fn)
+		return false
 	end
 
 	self._mc_map = {}
@@ -78,6 +103,7 @@ function M.new(self, api_name)
 				cnt = 0
 			end
 
+			-- TODO: maybe rework to generally map for any sequence of keys? -> vim
 			api.on_mouse(b, function()
 				cnt = cnt + 1
 				if not map[cnt + 1] then -- multiclick not registered
@@ -96,7 +122,7 @@ function M.new(self, api_name)
 				end, self.multiclick_delay)
 			end)
 		else
-			api.on_key(b, action or function() sai.notify('Unhandled key: ' .. b) end)
+			api.on_key(b, action or function() self._on_unassigned(b) end)
 		end
 	end
 	self._rawunmap = self._rawmap

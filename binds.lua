@@ -45,7 +45,7 @@ function M.default()
 	-- Custom keybind for our own help mode
 	map(
 		'a',
-		{ 'F1', U.key_map['?'] },
+		{ 'F1', 'question' },
 		function() require('sai.mode.help').enabled = not require('sai.mode.help').enabled end,
 		'Toggle help'
 	)
@@ -199,7 +199,7 @@ function M.input(self)
 	-- Make mappings invisible in help lists
 	map = M.gen_mapadd(self, { kind = 'private', _wrapped = true })
 
-	local BU = require 'sai.bridge.utils'
+	local BU = require 'sai.bridge.shell'
 	-- Clipboard management
 	map('Ctrl+a', function()
 		self._visual = 1

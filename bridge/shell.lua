@@ -1,10 +1,11 @@
----@module 'sai.bridge.utils'
----@class sai.bridge.utils
-local BU = {}
+---@module 'sai.bridge.shell'
+
+---@class sai.bridge.shell
+local M = {}
 
 ---@param cmd string
 ---@return string
-function BU.parse_shell_cmd(cmd)
+function M.parse_shell_cmd(cmd)
 	cmd = cmd:gsub('([^%%])%%([^%%])', function(a, type)
 		if type == 'm' or type == 's' then
 			local marked = sai.imagelist.marked.get()
@@ -29,8 +30,8 @@ function BU.parse_shell_cmd(cmd)
 end
 
 ---@see sai.exec
-function BU.exec(cmd, async)
-	cmd = BU.parse_shell_cmd(cmd)
+function M.exec(cmd, async)
+	cmd = M.parse_shell_cmd(cmd)
 
 	if async then return cmd, select(1, os.execute(('{ %s; } >/dev/null </dev/null &'):format(cmd))) end
 
@@ -62,7 +63,7 @@ end
 
 ---Get the current Wayland clipboard content via wl-paste.
 ---@return string? text clipboard content, or nil on failure
-function BU.clipboard_get()
+function M.clipboard_get()
 	local p = io.popen('wl-paste -n', 'r')
 	if not p then return end
 	local text = p:read '*a'
@@ -73,7 +74,7 @@ end
 ---Set the Wayland clipboard content via wl-copy.
 ---@param text string text to copy to clipboard
 ---@return boolean ok true on success
-function BU.clipboard_set(text)
+function M.clipboard_set(text)
 	local p = io.popen('wl-copy', 'w')
 	if not p then return false end
 	p:write(text)
@@ -83,7 +84,7 @@ end
 
 ---@param code string
 ---@return (fun(self?:any):any)?
-function BU.make_runnable(code)
+function M.make_runnable(code)
 	if not code:find 'return[^\n]*$' and not code:find '[^=]=[^=][^\n]*$' then
 		code = code:gsub('([^\n]+)$', 'return %1', 1)
 	end
@@ -101,7 +102,7 @@ function BU.make_runnable(code)
 end
 
 ---@param so_path string path relative to sai as pwd
-function BU.compile_so(so_path)
+function M.compile_so(so_path)
 	local h = io.popen(string.format( --
 		'g++ -O2 -shared -fPIC -o "%s" "%s" 2>&1 >/dev/null',
 		so_path,
@@ -112,14 +113,14 @@ function BU.compile_so(so_path)
 	if out ~= '' then error('Failed to compile module: ' .. out) end
 end
 
-function BU.load_so(so_path)
+function M.load_so(so_path)
 	local src = so_path:gsub('so$', 'cpp')
 	if not os.rename(src, src) then error('No such cpp module: ' .. src) end
-	if not os.rename(so_path, so_path) then BU.compile_so(so_path) end
+	if not os.rename(so_path, so_path) then M.compile_so(so_path) end
 
 	local loader = package.loadlib(so_path, 'luaopen_' .. so_path:match '([^/]+)%.so$')
 	if not loader then error('Unable to load library: ' .. so_path) end
 	return loader()
 end
 
-return BU
+return M

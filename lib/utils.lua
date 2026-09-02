@@ -11,19 +11,22 @@ U.dummy_image = {
 	format = '',
 }
 
----@param api swayimg.viewer
----@return swayimg.image
-function U.lazyimg(api)
+function U.lazyload(fn)
 	return setmetatable({}, {
 		__index = function(self, idx)
 			-- load just once and replace with the actual data
-			---@diagnostic disable-next-line: cast-local-type
-			api = api.get_image() or U.dummy_image
-			setmetatable(self, { __index = api })
+			fn = fn()
+			setmetatable(self, { __index = fn })
 
-			return api[idx]
+			return fn[idx]
 		end,
 	})
+end
+
+---@param api swayimg.viewer|swayimg.gallery
+---@return swayimg.image
+function U.lazyimg(api)
+	return U.lazyload(function() return api.get_image() or U.dummy_image end)
 end
 
 ---@generic O
@@ -114,98 +117,6 @@ function U.deep_backer(defaults, on_set)
 	end
 end
 
----A map of translations of key aliases to their xkb names
-U.key_map = {
-	BS = 'BackSpace',
-	Del = 'Delete',
-	Esc = 'Escape',
-	CR = 'Return',
-	Enter = 'Return',
-	PgUp = 'Prior',
-	PgDown = 'Next',
-	PageUp = 'Prior',
-	PageDown = 'Next',
-	-- Punctuation (unshifted)
-	[' '] = 'space',
-	['.'] = 'period',
-	[','] = 'comma',
-	[';'] = 'semicolon',
-	["'"] = 'apostrophe',
-	['`'] = 'grave',
-	['/'] = 'slash',
-	['\\'] = 'backslash',
-	['['] = 'bracketleft',
-	[']'] = 'bracketright',
-	['-'] = 'minus',
-	['='] = 'equal',
-	-- Shifted punctuation (US layout)
-	['+'] = 'Shift+plus',
-	['_'] = 'Shift+underscore',
-	[':'] = 'Shift+colon',
-	['"'] = 'Shift+quotedbl',
-	['~'] = 'Shift+asciitilde',
-	['?'] = 'Shift+question',
-	['|'] = 'Shift+bar',
-	['{'] = 'Shift+braceleft',
-	['}'] = 'Shift+braceright',
-	['>'] = 'Shift+greater',
-	['<'] = 'Shift+less',
-	-- Shifted numbers (US layout)
-	['!'] = 'Shift+exclam',
-	['@'] = 'Shift+at',
-	['#'] = 'Shift+numbersign',
-	['$'] = 'Shift+dollar',
-	['%'] = 'Shift+percent',
-	['^'] = 'Shift+asciicircum',
-	['&'] = 'Shift+ampersand',
-	['*'] = 'Shift+asterisk',
-	['('] = 'Shift+parenleft',
-	[')'] = 'Shift+parenright',
-}
-for _, v in ipairs { 'Middle', 'Left', 'Right' } do
-	U.key_map[v:sub(1, 1) .. 'MB'] = 'Mouse' .. v
-	U.key_map[v .. 'Mouse'] = 'Mouse' .. v
-end
-for _, v in ipairs { 'Left', 'Right', 'Up', 'Down' } do
-	U.key_map['SM' .. v:sub(1, 1)] = 'Scroll' .. v
-	U.key_map[v:sub(1, 1) .. 'MS'] = 'Scroll' .. v
-end
-
----A map of key combos to their printable chars
-U.rev_key_map = U.rev_idx(U.key_map)
-
----Parse vim-like shortcuts into classic gui-style.
----@param bind string
----@return string
-function U.normalize_key(bind)
-	if bind:match '^<.+>$' then bind = bind:sub(2, -2) end
-	bind = bind:gsub('[AM][+-]', 'Alt+', 1):gsub('S[+-]', 'Shift+', 1):gsub('C[+-]', 'Ctrl+', 1)
-
-	if bind:match 'Shift%+Tab$' then
-		bind = bind:gsub('Shift%+Tab$', 'Shift+ISO_Left_Tab')
-	else
-		local key = bind:match '[^+-]*.$'
-		bind = bind:sub(1, -#key - 1) .. (U.key_map[key] or key)
-	end
-
-	bind = bind:gsub('Alt+(.*)Ctrl', '%1Ctrl+Alt'):gsub('Shift+(.*)Alt', '%1Alt+Shift')
-	return bind
-end
-
-function U.short_key_name(bind)
-	bind = bind:gsub('Alt[+-]', 'A-'):gsub('Shift[+-]', 'S-'):gsub('Ctrl[+-]', 'C-')
-	if bind:match 'ISO_Left_Tab$' then
-		bind = bind:gsub('S-(.*)ISO_Left_Tab', '%1')
-	else
-		local key = bind:match '[^+-]*.$'
-		local found = U.rev_key_map[key]
-		bind = bind:sub(1, -#key - 1) .. (found or key)
-		if found then return ('<%s>'):format(bind) end
-	end
-	if bind:match '-.' then bind = ('<%s>'):format(bind) end
-	return bind
-end
-
 U.max_tbl_len = 80
 
 ---@param t table
@@ -278,7 +189,7 @@ function U.print_trace() print(U.pretty_trace('print_trace', debug.traceback()))
 function U.ordered_binds(api)
 	local binds = {}
 	for k, v in pairs(api.get_mappings()) do ---@cast v bindcfg
-		if v.kind ~= 'private' then
+		if v.desc or not v.kind or v.kind == 'default' then
 			if not binds[v] then
 				binds[v] = {
 					bind = {},

@@ -13,8 +13,10 @@ local sock = require 'sai.bridge.socket'
 local U = require 'sai.lib.utils'
 
 -- the rest of the cdefs this module needs lives in sai.bridge.socket
-pcall(ffi.cdef, 'char *realpath(const char *path, char *resolve);')
-pcall(ffi.cdef, 'void free(void *ptr);')
+ffi.cdef [[
+char *realpath(const char *path, char *resolve);
+void free(void *ptr);
+]]
 
 pcall(function() cjson.encode_empty_table_as_object(true) end)
 

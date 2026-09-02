@@ -1,7 +1,7 @@
 ---@module 'sai.mode.cmd'
 
 local U = require 'sai.lib.utils'
-local BU = require 'sai.bridge.utils'
+local S = require 'sai.bridge.shell'
 local binds = require 'sai.binds'
 
 ---@class sai.mode.cmd: sai.mode.input
@@ -33,7 +33,7 @@ function M:on_confirm(out) -- TODO: history for >1 item doesn't work
 	if not out then return end
 
 	self.enabled = false -- disable first to avoid any messages overriding code work
-	local cb = BU.make_runnable(out)
+	local cb = S.make_runnable(out)
 	if not cb then return end
 
 	local repeated = false

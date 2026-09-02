@@ -2,7 +2,7 @@
 ---@module 'sai.mode.filter'
 
 local U = require 'sai.lib.utils'
-local BU = require 'sai.bridge.utils'
+local S = require 'sai.bridge.shell'
 local pager = require 'sai.lib.pager'
 local l = sai.imagelist
 local binds = require 'sai.binds'
@@ -150,7 +150,7 @@ function M:make_filter(line)
 		end,
 		[':'] = function() -- run code; tag value is set as `self` variable, value defaults to imgmeta
 			if #tag == 0 then tag = 'self' end
-			return BU.make_runnable(val)
+			return S.make_runnable(val)
 		end,
 	}
 

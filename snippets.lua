@@ -8,7 +8,7 @@ function M.update()
 	local bridge_dir = debug.getinfo(1, 'S').source:match '/.+/sai/' .. 'bridge/'
 	sai.exec(('cd %s && git pull'):format(bridge_dir))
 
-	local BU = require 'sai.bridge.utils'
+	local BU = require 'sai.bridge.shell'
 	local p = io.popen('ls -1 ' .. bridge_dir .. '*.so') or error('Could not list cpp modules in: ' .. bridge_dir)
 	for so_path in p:lines() do
 		-- recompile if the source has been updated

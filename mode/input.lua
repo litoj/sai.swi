@@ -2,6 +2,7 @@
 ---@module 'sai.mode.input'
 
 local U = require 'sai.lib.utils'
+local X = require 'sai.bridge.xkb'
 local binds = require 'sai.binds'
 
 ---A text input mode that captures key events for text entry.
@@ -43,7 +44,7 @@ local M = {
 	-- Private state
 	---@see swayimg.viewer.text
 	---@see swayimg.text.status
-	---@type fun(loc:block_position_t, lines:string[])|fun(status:string)|false
+	---@type fun(loc:block_position_t, lines:string[])|fun(status:string)|false|swayimg_appmode
 	_raw_update = false, ---@private
 }
 setmetatable(M, { __index = M.super })
@@ -55,26 +56,10 @@ function M:on_confirm(result) end
 
 ---@param fn string|fun(self:self)
 function M:_rawmap(b, cfg, fn)
-	if type(fn) == 'string' then
-		---@diagnostic disable-next-line: duplicate-set-field
-		cfg.cb = function() self:insert(fn) end
-		if not cfg.desc then cfg.kind = 'private' end
-		M.super._rawmap(self, b, cfg, cfg.cb)
-		return
-	end
+	-- minimize number of overrides
+	if not self._enabled or (cfg.kind == 'input' and not self._mode_api._mappings[b]) then return end
 
 	M.super._rawmap(self, b, cfg, fn)
-end
-
--- Add letter and digit mappings
-for i = string.byte 'a', string.byte 'z' do
-	local lc = string.char(i)
-	local uc = string.char(i - 32)
-	U.rev_key_map[lc] = lc -- a-z
-	U.rev_key_map['Shift+' .. lc] = uc -- Shift+a → A
-end
-for i = 0, 9 do
-	U.rev_key_map[tostring(i)] = tostring(i) -- 0-9
 end
 
 ---@return sai.mode.input
@@ -83,10 +68,32 @@ function M:new()
 	M.super.new(self)
 
 	local maps = self._mappings
-	for key, char in pairs(U.rev_key_map) do
-		if #char == 1 then maps[key] = { cb = char, trace = self._path, _traced = true } end
+	for key, char in pairs(X.rev_key_map) do
+		if #char == 1 then
+			if key:sub(1, 1) == 'S' then -- if not shifter by default - A-Z vs a-z
+				maps[key] = {
+					cb = function() self._on_unassigned(char) end,
+					trace = self._path,
+					_traced = true,
+					kind = 'private',
+				}
+			else
+				maps[key] = { cb = false, trace = self._path, _traced = true, kind = 'input' }
+				key = 'Shift+' .. key
+				if not maps[key] then maps[key] = { cb = false, trace = self._path, _traced = true, kind = 'input' } end
+			end
+		end
 	end
 	binds.input(self)
+
+	self._on_unassigned = function(bind)
+		local kind, ch = X.process_next_input(bind)
+		if kind == 'command' then
+			self._api_on_unassigned(bind)
+		elseif kind == 'text' then
+			self:insert(ch)
+		end
+	end
 
 	return self
 end
@@ -105,13 +112,13 @@ function M:render()
 			f_ic, t_ic = t_ic, f_ic
 		end
 
-		display = ('%s%s%s%s%s'):format(
+		display = table.concat {
 			self._text:sub(1, from - 1),
 			f_ic,
 			self._text:sub(from, to - 1),
 			t_ic,
-			self._text:sub(to)
-		)
+			self._text:sub(to),
+		}
 	else
 		display = ('%s%s%s'):format( --
 			self._text:sub(1, self._col - 1),
@@ -305,6 +312,7 @@ function M:_on_dst_change(mode, loc)
 			self.sai.text.enabled = true
 			-- get the api to use without setting a fixed mode (allows different mode when re-enabled)
 			-- TODO: unify the text api also for status and use just mode_text
+			---@diagnostic disable-next-line: assign-type-mismatch
 			self._raw_update = swayimg[self._mode or sai.mode]
 		end
 
