@@ -3,13 +3,15 @@
 
 local U = require 'sai.lib.utils'
 local X = require 'sai.bridge.xkb'
+local utf8 = require 'sai.bridge.utf8'
 local binds = require 'sai.binds'
 
 ---A text input mode that captures key events for text entry.
 ---Configure hooks and parameters before enabling.
+---All positions are in characters (utf8-aware); the text itself is always valid utf8.
 ---@class sai.mode.input: sai.mode.custom
----@field text string state of user input
----@field col integer cursor position (1-based insert position)
+---@field text string state of user input (always valid utf8)
+---@field col integer cursor position (1-based insert position, in characters)
 ---@field line integer cursor line (1-based)
 ---@field location block_position_t|'status' where should we output to
 ---@field visual integer|false position of the selection marker (like `col`)
@@ -113,17 +115,17 @@ function M:render()
 		end
 
 		display = table.concat {
-			self._text:sub(1, from - 1),
+			utf8.sub(self._text, 1, from - 1),
 			f_ic,
-			self._text:sub(from, to - 1),
+			utf8.sub(self._text, from, to - 1),
 			t_ic,
-			self._text:sub(to),
+			utf8.sub(self._text, to),
 		}
 	else
 		display = ('%s%s%s'):format( --
-			self._text:sub(1, self._col - 1),
+			utf8.sub(self._text, 1, self._col - 1),
 			self._cursor_icon,
-			self._text:sub(self._col)
+			utf8.sub(self._text, self._col)
 		)
 	end
 
@@ -147,8 +149,8 @@ function M:insert(text)
 		from, to = to, from
 	end
 
-	self._text = self._text:sub(1, from - 1) .. text .. self._text:sub(to)
-	self._col = from + #text
+	self._text = utf8.sub(self._text, 1, from - 1) .. text .. utf8.sub(self._text, to)
+	self._col = from + utf8.len(text)
 
 	if self.on_text_change then self:on_text_change(self._text) end
 	self:render()
@@ -172,7 +174,7 @@ function M:delete(from, to)
 
 	if from == 0 then return end
 	if from < 0 or to <= 0 then error 'Only positive indexes allwed in delete()' end
-	self._text = self._text:sub(1, from - 1) .. self._text:sub(to + 1)
+	self._text = utf8.sub(self._text, 1, from - 1) .. utf8.sub(self._text, to + 1)
 	if self._visual then self._visual = false end
 
 	local oc = self._col
@@ -194,13 +196,13 @@ end
 function M:abort() return self:confirm(false) end
 
 ---Get the content as lines with their indexes to the text.
----@return {line:string,from:integer,to:integer}[] list of lines and their positions
+---@return {line:string,from:integer,to:integer}[] list of lines and their (char) positions
 function M:get_lines_info()
 	local lines = {}
 	local i = 1
 	for l in self._text:gmatch '([^\n]*)\n?' do
-		lines[#lines + 1] = { line = l, from = i, to = i + #l }
-		i = i + #l + 1
+		lines[#lines + 1] = { line = l, from = i, to = i + utf8.len(l) }
+		i = i + utf8.len(l) + 1
 	end
 	return lines
 end
@@ -213,7 +215,7 @@ function M:get_current_line_info()
 	end
 
 	sai.log '"._text" has been set directly! Please use the public field ".text"'
-	self.col = #self._text
+	self.col = utf8.len(self._text)
 	return lines[#lines]
 end
 
@@ -221,10 +223,14 @@ end
 ---Updates and renders text, moving the cursor to stay relative to text following it
 ---@param val string
 function M:set_text(val)
-	if self._col > #val or self._col > #self._text then
-		self._col = #val + 1
-	elseif select(2, val:find(self._text:sub(self._col), 1, true)) == #val then
-		self._col = #val - (#self._text - self._col)
+	local len, oldlen = utf8.len(val), utf8.len(self._text)
+	if self._visual then self._visual = math.min(self._visual, len + 1) end
+	if self._col > len or self._col > oldlen then
+		self._col = len + 1
+	else
+		-- text was inserted before the cursor: keep the cursor relative to the text following it
+		local suffix = utf8.sub(self._text, self._col)
+		if #suffix <= #val and val:sub(-#suffix) == suffix then self._col = len - (oldlen - self._col) end
 	end
 	self._text = val
 
@@ -235,14 +241,14 @@ end
 
 ---@protected
 function M:set_visual(val)
-	self._visual = val and math.max(1, math.min(#self._text + 1, val)) or val
+	self._visual = val and math.max(1, math.min(utf8.len(self._text) + 1, val)) or val
 	if self._enabled then self:render() end
 	return false
 end
 
 ---@protected
 function M:set_col(val)
-	self._col = math.max(1, math.min(#self._text + 1, val))
+	self._col = math.max(1, math.min(utf8.len(self._text) + 1, val))
 	if self._enabled then self:render() end
 	return false
 end

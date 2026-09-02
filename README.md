@@ -77,6 +77,7 @@ https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
     - `%s`: fallbacks to current file
     - `%m`: doesn't execute the command if no files were marked
   - `%`: unquoted current (like in 4.x): `v.map('', [[bash -c '$(which trash || echo rm) "%"']])`
+- **utf8** input support with compose keys etc. all included
 - **IPC**: expose a Unix socket for external programs to evaluate Lua code in swayimg.
   ```lua
   local ipc = require 'sai.bridge.ipc'
@@ -111,6 +112,7 @@ can configure.
 #### Input mode
 
 - allows you to input arbitrary text and do whatever you want with it
+- utf8-aware: the cursor and all motions work on characters, not bytes
 - multiline text
 - text selection
 - support for all common gui keyboard shortcuts
@@ -245,15 +247,21 @@ require 'sai.api.globals'
 
 ### Structure
 
-- `api/`: everything related just to the replacement of the swayimg api + `eventloop` more generic event handler
+- `api/`: everything related just to the replacement of the swayimg api + `eventloop` more generic
+  event handler
 - `bridge/`: everything that talks to the world outside - using lua `ffi`, C, shell, etc.
+  - C/C++ modules compile on first `require`: `sai.bridge.exiv2` builds `bridge/exiv2.so` from its
+    `.cpp` source
+  - `sai.bridge.utf8` provides the utf8 module as in Lua 5.3+: a system installation (e.g. the
+    `lua51-luautf8` package, including its `find`/`gmatch`/`gsub` extras) is used when present,
+    otherwise the stock Lua 5.3 C source is downloaded (patched for LuaJIT) and compiled on first `require`;
+    the callable form `utf8(s)` coerces any string into a valid utf8 string
 - `lib/`: pure-Lua utilities extending the possibilities for building your own scripts and plugins
 - `mode/`: custom modes ready to go or to be extended
 
 ### Dev experience in nvim
 
-_sai_ reuses the types of the original swayimg api. Add them to your _lua_ls_
-workspace:
+_sai_ reuses the types of the original swayimg api. Add them to your _lua_ls_ workspace:
 
 ```lua
 settings.Lua.workspace.library = {'/usr/share/swayimg/swayimg.lua', '/usr/local/share/swayimg/swayimg.lua'}
@@ -263,12 +271,12 @@ settings.Lua.workspace.library = {'/usr/share/swayimg/swayimg.lua', '/usr/local/
 
 Ensure you have `lua51-cjson` installed.
 
-_sai_ has a DAP harness (`bridge/debug.lua`) and an nvim-dap adapter
-(`nvim_dap.lua`). Debug a running swayimg from nvim: set breakpoints, step,
-evaluate. While stopped, the harness freezes the swayimg event loop.
+_sai_ has a DAP harness (`bridge/debug.lua`) and an nvim-dap adapter (`nvim_dap.lua`). Debug a
+running swayimg from nvim: set breakpoints, step, evaluate. While stopped, the harness freezes the
+swayimg event loop.
 
-The adapter is not a nvim plugin. It lives in the swayimg config directory.
-Load it straight from there:
+The adapter is not a nvim plugin. It lives in the swayimg config directory. Load it straight from
+there:
 
 ```lua
 -- registers in dap.configurations.lua and the `sai` adapter
@@ -276,19 +284,19 @@ loadfile(os.getenv 'HOME' .. '/.config/swayimg/sai/nvim_dap.lua')().setup()
 ```
 
 Start the harness in swayimg via pressing <kbd>Shift+F6</kbd> or running:
+
 ```lua
 require('sai.bridge.debug').start {} -- $XDG_RUNTIME_DIR/sai-debug-<pid>.sock
 ```
 
-`setup()` registers the `sai` adapter and an 'Attach to swayimg'
-configuration that nvim-dap offers only when the current file lives under a
-swayimg directory, like osv does for nvim itself. Debug lua as
-usual - your nvim-dap bindings pick it up.
+`setup()` registers the `sai` adapter and an 'Attach to swayimg' configuration that nvim-dap offers
+only when the current file lives under a swayimg directory, like osv does for nvim itself. Debug lua
+as usual - your nvim-dap bindings pick it up.
 
 ### Tests
 
-Each test module is named after the sai module it exercises. All tests run
-end-to-end, over real processes. Run it from anywhere:
+Each test module is named after the sai module it exercises. All tests run end-to-end, over real
+processes. Run it from anywhere:
 
 ```sh
 luajit tests/init.lua                     # all tests
@@ -304,7 +312,8 @@ luajit tests/init.lua debug.breakpoints   # one method
 - repurpose help mode just for showing active keybinds, auto-update with deeper sub-modes
   - add another mode to filter variables and view and change their live values (like mpv `gv`)
   - create dynamic picker for which elements should be in each text corner (move the bind list)
-- make it easier to make multi-level keybinds (like vim `cw/ce/cb…`)
+  - create a tab list for various categories of keybinds so that it is easier to search through
+- make it easier to make multi-level keybinds (like vim `cd/ce/cb…`)
 - make a snippet for loading keybind config from ranger
 
 ## License

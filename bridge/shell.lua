@@ -82,6 +82,40 @@ function M.clipboard_set(text)
 	return p:close()
 end
 
+---The transform doubles as a content check: returning false rejects and
+---removes the download (e.g. the remote file changed unexpectedly).
+---@param url string remote location of the file
+---@param path string destination path relative to sai as pwd
+---@param transform fun(content:string):string|false? content filter
+function M.download(url, path, transform)
+	local h = io.popen(
+		('{ curl -fsSL -o "%s" "%s" || wget -q -O "%s" "%s"; } 2>&1 >/dev/null'):format(path, url, path, url)
+	) or error 'Error in download command'
+	local out = h:read 'a'
+	h:close()
+
+	local f = io.open(path, 'r')
+	if out ~= '' or not f or f:seek 'end' == 0 then
+		os.remove(path)
+		error('Failed to download ' .. url .. ': ' .. out)
+	end
+	f:close()
+
+	if transform then
+		f = io.open(path, 'r') or error('Could not read downloaded file: ' .. path)
+		local content = f:read 'a'
+		f:close()
+		content = transform(content)
+		if not content then
+			os.remove(path)
+			error('Unexpected contents at ' .. url)
+		end
+		f = io.open(path, 'w') or error('Could not write file: ' .. path)
+		f:write(content)
+		f:close()
+	end
+end
+
 ---@param code string
 ---@return (fun(self?:any):any)?
 function M.make_runnable(code)
@@ -101,12 +135,31 @@ function M.make_runnable(code)
 	end
 end
 
+---Find the source file of a compiled module: either an in-repo `.cpp`
+---or a downloaded/generated `.c` sibling.
+---@param so_path string path relative to sai as pwd
+---@return string? src
+---@return string? compiler
+local function source_of(so_path)
+	for _, src_type in ipairs { { 'cpp', 'g++' }, { 'c', 'gcc' } } do
+		local src = so_path:gsub('so$', src_type[1])
+		if os.rename(src, src) then return src, src_type[2] end
+	end
+end
+
 ---@param so_path string path relative to sai as pwd
 function M.compile_so(so_path)
+	local src, cc = source_of(so_path)
+	if not src then error('No source file for module: ' .. so_path) end
+	-- stock Lua C sources expect the luajit include path and the 5.2+ module
+	-- export macro that LuaJIT headers do not define
+	local cflags = cc == 'gcc' and '-I/usr/include/luajit-2.1 -DLUAMOD_API=' or ''
 	local h = io.popen(string.format( --
-		'g++ -O2 -shared -fPIC -o "%s" "%s" 2>&1 >/dev/null',
+		'%s -O2 -shared -fPIC %s -o "%s" "%s" 2>&1 >/dev/null',
+		cc,
+		cflags,
 		so_path,
-		so_path:gsub('so$', 'cpp')
+		src
 	)) or error 'Error in compilation command'
 	local out = h:read 'a'
 	h:close()
@@ -114,8 +167,7 @@ function M.compile_so(so_path)
 end
 
 function M.load_so(so_path)
-	local src = so_path:gsub('so$', 'cpp')
-	if not os.rename(src, src) then error('No such cpp module: ' .. src) end
+	if not source_of(so_path) then error('No source file for module: ' .. so_path) end
 	if not os.rename(so_path, so_path) then M.compile_so(so_path) end
 
 	local loader = package.loadlib(so_path, 'luaopen_' .. so_path:match '([^/]+)%.so$')

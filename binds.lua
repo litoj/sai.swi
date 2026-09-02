@@ -2,6 +2,7 @@
 ---@module 'sai.binds'
 
 local U = require 'sai.lib.utils'
+local utf8 = require 'sai.bridge.utf8'
 
 local M = {}
 
@@ -199,11 +200,11 @@ function M.input(self)
 	-- Make mappings invisible in help lists
 	map = M.gen_mapadd(self, { kind = 'private', _wrapped = true })
 
-	local BU = require 'sai.bridge.shell'
+	local S = require 'sai.bridge.shell'
 	-- Clipboard management
 	map('Ctrl+a', function()
 		self._visual = 1
-		self.col = #self.text + 1
+		self.col = utf8.len(self.text) + 1
 	end, 'Select all')
 	local set = function()
 		local from, to = self._col, self._visual
@@ -211,7 +212,7 @@ function M.input(self)
 		if from > to then
 			from, to = to, from
 		end
-		BU.clipboard_set(self._text:sub(from, to))
+		S.clipboard_set(utf8.sub(self._text, from, to))
 	end
 	map('Ctrl+x', function()
 		set()
@@ -222,19 +223,49 @@ function M.input(self)
 		self.visual = false
 	end, 'Copy to clipboard')
 	map('Ctrl+v', function()
-		local text = BU.clipboard_get()
+		local text = S.clipboard_get()
 		if text then self:insert(text) end
 	end, 'Paste from clipboard')
 
 	-- Deleting text
 	map('BackSpace', function() self:delete(not self._visual and self._col - 1) end, 'Delete prev char')
 	map('Delete', function() self:delete(not self._visual and self._col) end, 'Delete next char')
-	local function get_word_idx(text, col, backward)
-		if backward then
-			return text:sub(1, col):find '%w*%W*$', col
-		else
-			return col, select(2, text:sub(col):find '^%W*%w*') + col
+
+	-- utf8-aware word scanning: ASCII %w plus any non-ASCII codepoint counts as a word char
+	local function word_flags(text)
+		local flags = {}
+		for _, cp in utf8.codes(text) do
+			flags[#flags + 1] = cp >= 0x80 or utf8.char(cp):match '%w' ~= nil
 		end
+		return flags
+	end
+
+	---@param text string
+	---@param col integer char position to scan from
+	---@param backward boolean scan towards the text start instead
+	---@return integer from start of the word boundary
+	---@return integer to end of the word boundary
+	local function get_word_idx(text, col, backward)
+		local isw = word_flags(text)
+		local n = #isw
+		local i = col
+		if backward then
+			i = math.min(i, n)
+			while i > 0 and not isw[i] do
+				i = i - 1
+			end
+			while i > 0 and isw[i] do
+				i = i - 1
+			end
+			return i + 1, col
+		end
+		while i <= n and not isw[i] do
+			i = i + 1
+		end
+		while i <= n and isw[i] do
+			i = i + 1
+		end
+		return col, i
 	end
 	map('Ctrl+BackSpace', function() self:delete(get_word_idx(self._text, self._col - 1, true)) end, 'Delete prev word')
 	map('Ctrl+Delete', function() self:delete(get_word_idx(self._text, self._col)) end, 'Delete next word')
@@ -253,17 +284,23 @@ function M.input(self)
 	end
 
 	add_move('Ctrl+Left', function() self.col = get_word_idx(self._text, self._col - 1, true) end, 'prev word')
-	add_move(
-		'Ctrl+Right',
-		function() self.col = select(2, self._text:sub(self._col):find '^%w*%W*') + self._col end,
-		'next word'
-	)
+	add_move('Ctrl+Right', function()
+		local isw = word_flags(self._text)
+		local i, n = self._col, #isw
+		while i <= n and isw[i] do
+			i = i + 1
+		end
+		while i <= n and not isw[i] do
+			i = i + 1
+		end
+		self.col = i
+	end, 'next word')
 	add_move('Left', function() self.col = self._col - 1 end)
 	add_move('Right', function() self.col = self._col + 1 end)
 	add_move('Up', function() self.line = self.line - 1 end)
 	add_move('Down', function() self.line = self.line + 1 end)
 	add_move('End', function() self.col = self:get_current_line_info().to end, 'line end')
-	add_move('Ctrl+End', function() self.col = #self.text + 1 end, 'text end')
+	add_move('Ctrl+End', function() self.col = utf8.len(self.text) + 1 end, 'text end')
 	add_move('Home', function() self.col = self:get_current_line_info().from end, 'line start')
 	add_move('Ctrl+Home', function() self.col = 1 end, 'text start')
 end

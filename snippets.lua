@@ -8,15 +8,15 @@ function M.update()
 	local bridge_dir = debug.getinfo(1, 'S').source:match '/.+/sai/' .. 'bridge/'
 	sai.exec(('cd %s && git pull'):format(bridge_dir))
 
-	local BU = require 'sai.bridge.shell'
+	local S = require 'sai.bridge.shell'
 	local p = io.popen('ls -1 ' .. bridge_dir .. '*.so') or error('Could not list cpp modules in: ' .. bridge_dir)
 	for so_path in p:lines() do
 		-- recompile if the source has been updated
 		if os.execute(string.format('[ %s -nt %s ]', so_path:gsub('.so$', '.cpp'), so_path)) ~= 1 then
-			BU.compile_so(so_path)
+			S.compile_so(so_path)
 			-- hot-swap the instance if the module is already loaded in memory
 			local old = package.loaded['sai.bridge.' .. so_path:match '([^/]+)%.so$']
-			for k, v in pairs(old and BU.load_so(so_path) or {}) do
+			for k, v in pairs(old and S.load_so(so_path) or {}) do
 				old[k] = v
 			end
 		end
