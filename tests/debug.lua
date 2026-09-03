@@ -104,8 +104,9 @@ end
 
 local function request_ok(c, command, args)
 	local r = request(c, command, args)
-	ok('request ' .. command .. ' responded', r ~= nil)
-	ok('request ' .. command .. ' success', r and r.success == true)
+	if not r or r.success ~= true then
+		fail('request ' .. command .. ': ' .. tostring(r and r.message or 'no response'))
+	end
 	return r
 end
 
@@ -210,6 +211,9 @@ local T = {}
 
 T.breakpoints = scenario(function()
 	write_debuggee [[
+e_table = { alpha = 1, beta = 2, gamma = 3, delta = 4, epsilon = 5, zeta = 6, eta = 7, theta = 8, iota = 9, kappa = 10 }
+e_proxy = setmetatable({ 10, 20, 30 }, { __tostring = function(t) return 'PROXY ' .. #t end })
+
 local function work(n)
 	local acc = 0
 	for i = 1, n do
@@ -243,11 +247,9 @@ io.stdout:flush()
 
 	r = request_ok(c, 'stackTrace', { threadId = 1 })
 	local frames = r and r.body and r.body.stackFrames
-	ok('stack frames present', frames and #frames >= 1)
 	eq('top frame name', 'work', frames and frames[1].name)
 	eq('top frame line', bp_line, frames and frames[1].line)
 	eq('top frame path', script_path, frames and frames[1].source and frames[1].source.path)
-	ok('caller frame present', frames and #frames >= 2)
 	eq('caller frame name', 'main chunk', frames and frames[2] and frames[2].name)
 
 	r = request_ok(c, 'scopes', { frameId = frames[1].id })
@@ -260,31 +262,50 @@ io.stdout:flush()
 	for _, v in ipairs((r and r.body and r.body.variables) or {}) do
 		names[v.name] = v.value
 	end
-	ok('local acc', names.acc ~= nil)
-	ok('local i', names.i ~= nil)
-	ok('local n', names.n ~= nil)
 	eq('acc value at first hit', '0', names.acc)
 
 	r = request_ok(c, 'evaluate', { expression = 'i * 10 + acc', frameId = frames[1].id })
 	eq('evaluate scalar', '10', r and r.body and r.body.result)
 
-	r = request_ok(c, 'evaluate', { expression = '{ 1, 2, 3 }', frameId = frames[1].id })
-	ok('evaluate table result', r and r.body and r.body.result ~= nil)
+	r = request_ok(c, 'evaluate', { expression = '/nat i * 10 + acc', frameId = frames[1].id })
+	eq('evaluate /nat prefix stripped', '10', r and r.body and r.body.result)
+
+	r = request_ok(c, 'evaluate', { expression = '{ [19] = "a", [2] = "b", [1] = "c" }', frameId = frames[1].id })
 	local table_ref = r and r.body and r.body.variablesReference
 	ok('evaluate table ref', table_ref and table_ref ~= 0)
 
+	r = request_ok(c, 'evaluate', { expression = 'e_table', frameId = frames[1].id })
+	local res = r and r.body and r.body.result or ''
+	ok('evaluate wide table one-line', type(res) == 'string' and not res:find('\n', 1, true))
+	r = request_ok(c, 'variables', { variablesReference = r and r.body and r.body.variablesReference })
+	local prev = ''
+	local sorted = true
+	for _, v in ipairs((r and r.body and r.body.variables) or {}) do
+		if v.name < prev then sorted = false end
+		prev = v.name
+	end
+	ok('table members sorted by name', sorted)
+
 	r = request_ok(c, 'variables', { variablesReference = table_ref })
-	eq('table member count', 3, r and r.body and #(r.body.variables or {}))
+	local names = {}
+	for _, v in ipairs((r and r.body and r.body.variables) or {}) do
+		names[#names + 1] = v.name
+	end
+	eq('table member count', 3, #names)
+	eq('numeric names sort numerically', '1,2,19', table.concat(names, ','))
+
+	-- metamethod tables render their __tostring now instead of a bare 'table'
+	r = request_ok(c, 'evaluate', { expression = 'e_proxy', frameId = frames[1].id })
+	eq('proxy value via metamethod', 'PROXY 3', r and r.body and r.body.result)
 
 	r = request_ok(c, 'evaluate', { expression = 'nosuchvar + 1', frameId = frames[1].id })
 	ok('evaluate error has message', r and r.body and r.body.result ~= nil and #r.body.result > 0)
 
-	r = request_ok(c, 'setVariable', {
+	request_ok(c, 'setVariable', {
 		variablesReference = scope_ref,
 		name = 'n',
 		value = '9',
 	})
-	ok('setVariable responded', r ~= nil)
 
 	r = request_ok(c, 'variables', { variablesReference = scope_ref })
 	names = {}

@@ -13,22 +13,11 @@
 
 local ffi = require 'ffi'
 
-pcall(
-	function()
-		ffi.cdef [[
-	char *realpath(const char *path, char *resolve);
-	void free(void *ptr);
-	int usleep(unsigned int usec);
-	int kill(int pid, int sig);
-	int access(const char *path, int mode);
-	struct timeval {
-		long tv_sec;
-		long tv_usec;
-	};
-	int gettimeofday(struct timeval *tv, void *tz);
-	]]
-	end
-)
+ffi.cdef [[
+int usleep(unsigned int usec);
+int kill(int pid, int sig);
+int access(const char *path, int mode);
+]]
 
 local H = {}
 
@@ -39,6 +28,24 @@ function print(...)
 	io.stdout:flush()
 end
 
+-- computed without realpath: the bridge modules owning its cdef can only
+-- load after the package paths below are set up
+local dir = debug.getinfo(1, 'S').source:match '^@(.*)/'
+if not dir:match '^/' then dir = (os.getenv 'PWD' or '.') .. '/' .. dir end
+H.dir = dir
+H.sai_dir = H.dir:match '^(.*)/'
+H.swayimg_dir = H.sai_dir:match '^(.*)/'
+package.path = H.dir .. '/?.lua;' .. H.swayimg_dir .. '/?.lua;' .. package.path
+
+-- cdef ownership: sai.bridge.socket owns `timeval` and the socket calls,
+-- sai.bridge.debug owns `realpath`/`free`
+require 'sai.bridge.socket'
+require 'sai.bridge.debug'
+
+ffi.cdef [[
+int gettimeofday(struct timeval *tv, void *tz);
+]]
+
 local function abs_path(p)
 	local r = ffi.C.realpath(p, nil)
 	if r == nil then return nil end
@@ -47,11 +54,6 @@ local function abs_path(p)
 	return s
 end
 H.abs_path = abs_path
-
-H.dir = abs_path(debug.getinfo(1, 'S').source:match '^@(.*)/')
-H.sai_dir = H.dir:match '^(.*)/'
-H.swayimg_dir = H.sai_dir:match '^(.*)/'
-package.path = H.dir .. '/?.lua;' .. H.swayimg_dir .. '/?.lua;' .. package.path
 
 local passed, failed, skipped = 0, 0, 0
 

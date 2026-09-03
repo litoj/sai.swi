@@ -33,21 +33,10 @@ end
 local function kill_server() H.kill(tonumber((H.read_file(pid_path) or ''):match '%d+')) end
 
 -- A test method: always kills the server and removes its files afterwards,
--- ipc runs without the rest of sai: the parts it touches
-local function mock_sai()
-	rawset(_G, 'sai', {
-		log = function(m) print(m) end,
-		eventloop = { subscribe = function() return {} end, unsubscribe = function() end },
-	})
-end
-
 -- even when the scenario crashes midway
 local function scenario(fn)
 	return function()
-		local saved_sai = rawget(_G, 'sai')
-		mock_sai()
 		local ran, err = pcall(fn)
-		rawset(_G, 'sai', saved_sai)
 		kill_server()
 		cleanup()
 		if not ran then H.fail('scenario crashed', err) end
@@ -122,26 +111,8 @@ end
 local T = {}
 
 T.config = scenario(function()
-	-- the auto-enabled servers below arm O_ASYNC with SIGUSR2: ignore it so
-	-- their traffic cannot kill this test process
-	local ffi = require 'ffi'
-	ffi.cdef [[
-	typedef void (*sighandler_t)(int);
-	sighandler_t signal(int, sighandler_t);
-	]]
-	ffi.C.signal(12, ffi.cast('sighandler_t', function() end))
-
-	local s = ipc.server '/tmp/sai_ipc_test_x.sock'
-	ok('enabled by default', s.enabled)
-	ok('has poll', type(s.poll) == 'function')
-
-	local c = ipc.client '/tmp/sai_ipc_test_x.sock'
-	ok('client enabled by default', c.enabled)
-	ok('has send method', type(c.send) == 'function')
-
-	s.enabled = false
-	c.enabled = false
-
+	-- serving is exercised end-to-end by the poll_driven/signal_driven
+	-- scenarios below; here only the config semantics
 	local s2 = ipc.server '/tmp/sai_ipc_test_x2.sock'
 	s2._signal = 'USR1'
 	ok('signal set to USR1', rawget(s2, '_signal') == 'USR1')
