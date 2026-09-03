@@ -26,6 +26,7 @@ M._formats, M.set_formats = U.deep_backer({
 		columns = 3,
 		rows = 3,
 		padding = 5,
+		label = 0x0affffff,
 	},
 }, function(_, tbl)
 	swayimg.format_conf = tbl
@@ -51,17 +52,26 @@ end
 function M.notify(msg, timeout)
 	msg = string.gsub(tostring(msg), '\t', '  ')
 	if not timeout then
-		swayimg.text.status = msg
-		return
+		if sai.text.status_timeout ~= 0 then
+			swayimg.text.status = msg
+			return
+		else
+			timeout = #msg / 10
+		end
 	end
 
 	local old = sai.text.status_timeout
 	-- set directly to keep the official queryable value the same
 	swayimg.text.status_timeout = timeout
+	swayimg.text.status = msg
 	sai.defer_fn(function()
 		-- set the original value back only if it hasn't changed in between
-		if sai.text.status_timeout == timeout then swayimg.text.status_timeout = old end
-	end, timeout)
+		if sai.text.status_timeout == timeout then
+			swayimg.text.status_timeout = old
+			-- put back the previous message
+			if old == 0 then sai.text.status = sai.text.status end
+		end
+	end, timeout * 1000)
 end
 
 function M.log(msg, file)

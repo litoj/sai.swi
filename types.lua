@@ -22,6 +22,7 @@
 ---@field columns? integer Number of columns in storyboard
 ---@field rows? integer Number of rows in storyboard
 ---@field padding? integer Gap between frames in pixels
+---@field label? integer Icon color in gallery mode
 
 ---@class FormatCfg
 ---@field raw? RawCfg
@@ -506,6 +507,10 @@ end
 ---@field down fun(p:integer?) Step down by `p` px (default: step.default_size)
 ---@field up fun(p:integer?) Step up by `p` px (default: step.default_size)
 
+---@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
+---@overload fun(index:integer) index of the image to open from the imagelist
+---@class sai.viewer.go: {[vdir_t]: function}
+
 ---@class sai.viewer : mode_base
 ---@field auto_center boolean Should image be automatically centered when smaller than window size
 ---@field loop boolean Image list loop mode
@@ -527,9 +532,7 @@ end
 ---Helper table for easier mappings for moving around the image
 ---@field pan sai.viewer.panner
 ---Helper table for easier mappings for switching between images
----@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
----@overload fun(index:integer) index of the image to open from the imagelist
----@field go {[vdir_t]:function}
+---@field go sai.viewer.go
 sai.viewer = {}
 
 do
@@ -585,6 +588,11 @@ sai.slideshow = {}
 -- Gallery mode
 --------------------------------------------------------------------------------
 
+---@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
+---@overload fun(index:integer) index of the image to open from the imagelist
+---@overload fun(x:integer,y:integer) position of the thumbnail to select (limited to visible images)
+---@class sai.gallery.go: {[gdir_t]:function}
+
 ---@class sai.gallery: mode_base
 ---@field aspect aspect_t Thumbnail aspect ratio
 ---@field thumb_size integer Thumbnail size in pixels
@@ -604,10 +612,7 @@ sai.slideshow = {}
 ---Should thumbnails be reloaded when the smallest cached could be less than 1/2 resolution
 ---@field thumb_size_diff_reload boolean
 ---Helper table for easier mappings for switching between images
----@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
----@overload fun(index:integer) index of the image to open from the imagelist
----@overload fun(x:integer,y:integer) position of the thumbnail to select (limited to visible images)
----@field go {[gdir_t]:function}
+---@field go sai.gallery.go
 sai.gallery = {}
 
 ---Get information about currently selected image.

@@ -311,4 +311,38 @@ function U.fuzzy_find(str, match, max_misses)
 	if si <= max_misses then return s, si end
 end
 
+---@param wrapper sai.api.proxy API object to inspect
+---@param filter? fun(name:string,value:any):boolean|{[string]:0|false} map of banned values or a filter fn
+---@return {name:string,value:any}[] fields List of settable fields with their current values
+function U.get_dynfields(wrapper, filter)
+	if type(filter) ~= 'function' then
+		local tbl = filter or {}
+		filter = function(k) return tbl[k] == nil end
+	end
+	local backed
+	---@diagnostic disable-next-line: invisible
+	for k, v in pairs(rawget(wrapper, 'super') or {}) do
+		if type(k) == 'userdata' then -- the raw cpp api has fieldmethods hidden in an object
+			backed = v
+			break
+		end
+	end
+	if not backed then backed = {} end
+	local fields = {}
+
+	for backing_field, value in pairs(wrapper) do
+		if backing_field:sub(1, 1) == '_' then
+			local field = backing_field:sub(2)
+
+			-- Check if backing field has an official setter, enabler, or override
+			if (rawget(wrapper, 'set' .. backing_field) or backed[field]) and filter(backing_field, value) then
+				fields[#fields + 1] = { name = field, value = value }
+			end
+		end
+	end
+	table.sort(fields, function(a, b) return tostring(a.name) < tostring(b.name) end)
+
+	return fields
+end
+
 return U

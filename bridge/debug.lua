@@ -80,6 +80,13 @@ local function tbl(x)
 	return x
 end
 
+-- caught errors must surface even without a log file: the DAP client shows
+-- nothing for requests that are silently dropped after a failed pcall
+local function log_err(msg)
+	print('sai.debug: ' .. tostring(msg))
+	log(msg)
+end
+
 local function norm_path(p)
 	if type(p) ~= 'string' or p == '' then return nil end
 	local c = S.path_cache[p]
@@ -231,13 +238,13 @@ local function parse_frames(conn)
 			if ok then
 				S.queue[#S.queue + 1] = msg
 			else
-				log('bad message: ' .. tostring(msg))
+				log_err('bad message: ' .. tostring(msg))
 			end
 		end
 	end
 	conn.buffer = buf
 	if #buf > 1024 * 1024 then
-		log 'input overflow'
+		log_err 'input overflow'
 		handle_disconnect()
 	end
 end
@@ -247,7 +254,7 @@ local function send_msg(m)
 	m.seq = S.seq
 	local ok, enc = pcall(cjson.encode, m)
 	if not ok then
-		log('encode error: ' .. tostring(enc))
+		log_err('encode error: ' .. tostring(enc))
 		return
 	end
 	send_all('Content-Length: ' .. #enc .. '\r\n\r\n' .. enc)
@@ -428,15 +435,14 @@ function handlers.scopes(req)
 	})
 end
 
+-- Values go to the DAP client as single-line strings; the pretty tostring
+-- is multi-line, so flatten it (global tostring stays pretty).
+local function val_str(v) return (tostring(v):gsub('\n%s*', ' ')) end
+
 local function var_item(name, val)
 	local v = { name = tostring(name), type = type(val), variablesReference = 0 }
-	if type(val) == 'table' then
-		local mt = getmetatable(val)
-		v.value = mt and mt.__tostring and 'table' or tostring(val)
-		v.variablesReference = new_var_ref(val)
-	else
-		v.value = tostring(val)
-	end
+	if type(val) == 'table' then v.variablesReference = new_var_ref(val) end
+	v.value = val_str(val)
 	return v
 end
 
@@ -467,23 +473,42 @@ function handlers.variables(req)
 			vars[#vars + 1] = var_item(k, val)
 		end
 	end
+
+	-- sort by name so the interactive variable list is stable: getlocal
+	-- gives declaration order, pairs() is arbitrary hash order; the index
+	-- tiebreak keeps same-named locals and upvalues from flipping around.
+	-- All-digit names (array indexes) sort numerically, not as text
+	for i, v in ipairs(vars) do
+		v._i = i
+	end
+	table.sort(vars, function(a, b)
+		if a.name == b.name then return a._i < b._i end
+		local na, nb = tonumber(a.name), tonumber(b.name)
+		if na and nb then return na < nb end
+		return a.name < b.name
+	end)
+	for _, v in ipairs(vars) do
+		v._i = nil
+	end
 	respond(req, { variables = vars })
 end
 
 function handlers.evaluate(req)
 	local args = tbl(req.arguments)
 	local level = args.frameId and S.frames[args.frameId]
-	local ok, res = eval_in(level and level + 1, tostring(args.expression or ''))
+	-- `/nat` marks native-code evaluation in debuggers like C or C++; Lua
+	-- has no native/interpreted split, so just strip the prefix
+	local expr = (tostring(args.expression or ''):gsub('^/nat%s*', ''))
+	local ok, res = eval_in(level and level + 1, expr)
 	if not ok then res = res or 'evaluation failed' end
 	local v
 	if type(res) == 'table' then
-		local mt = getmetatable(res)
 		v = {
-			result = mt and mt.__tostring and 'table' or tostring(res),
+			result = val_str(res),
 			variablesReference = new_var_ref(res),
 		}
 	else
-		v = { result = tostring(res), variablesReference = 0 }
+		v = { result = val_str(res), variablesReference = 0 }
 	end
 	respond(req, v)
 end
@@ -511,7 +536,7 @@ function handlers.setVariable(req)
 	elseif type(ref) == 'table' then
 		ref[args.name] = val
 	end
-	local body = { value = tostring(val), type = type(val), variablesReference = 0 }
+	local body = { value = val_str(val), type = type(val), variablesReference = 0 }
 	if type(val) == 'table' then body.variablesReference = new_var_ref(val) end
 	respond(req, body)
 end
@@ -540,10 +565,7 @@ local function dispatch(msg)
 	local h = handlers[msg.command]
 	if h then
 		local ok, err = pcall(h, msg)
-		if not ok then
-			log('handler error: ' .. tostring(err))
-			respond_err(msg, err)
-		end
+		if not ok then log_err('handler error: ' .. tostring(err)) end
 	else
 		respond(msg, {})
 	end

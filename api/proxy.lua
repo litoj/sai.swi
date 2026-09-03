@@ -53,6 +53,8 @@ function M.__newindex(self, idx, val)
 	e.trigger { event = 'OptionSet', match = ('%s.%s'):format(self._path, idx), data = val, old_data = old }
 end
 
+M.__tostring = require('sai.lib.backer').__tostring
+
 ---Create a dynamic table where variable I/O can be custom-defined
 ---Practically a metatable designed for automatic passthrough to a different api.
 ---@generic O: sai.api.proxy

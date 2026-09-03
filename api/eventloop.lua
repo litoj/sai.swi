@@ -237,17 +237,19 @@ function M.trigger(ev)
 	if not ev.match and not ev.pattern then ev.match = '' end
 	if M.debug_trigger then print_debug('trigger', ev) end
 
-	local prune = {}
-	M.apply_filtered(ev, function(hook)
+	-- first collect them to ensure they cannot cause a self-removal and mangle indexes (indirectly)
+	-- i.e. if a hook disables a custom mode that unsubs that hook then the next hook would be skipped
+	local found = {}
+	M.apply_filtered(ev, function(hook) found[#found + 1] = hook end)
+
+	for _, hook in ipairs(found) do
 		local ok, ret = xpcall(hook.callback, debug.traceback, ev)
 		---@diagnostic disable-next-line: param-type-mismatch
 		if not ok then sai.log(ret) end
 
-		-- defer removal to not mangle indexes during table traversal
-		if hook.once or (ok and ret) then prune[#prune + 1] = hook end
-	end)
-	for _, hook in ipairs(prune) do
-		M.unsubscribe { id = hook } -- unsub from all places, not just where it matched
+		if hook.once or (ok and ret) then
+			M.unsubscribe { id = hook } -- unsub from all places, not just where it matched
+		end
 	end
 end
 
