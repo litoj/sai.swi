@@ -20,6 +20,7 @@ local binds = require 'sai.binds'
 local M = {
 	super = require 'sai.mode.custom',
 	_trigger = false, -- disable trigger to ensure text is visible even when set to `status`
+	map_filter = function(b) return not b:match '%u%l*$' end,
 
 	-- Public, changeable at any time
 	---hook called on every text change
@@ -68,21 +69,14 @@ function M:new()
 	M.super.new(self)
 
 	local maps = self._mappings
-	for key, char in pairs(X.rev_key_map) do
-		if #char == 1 then
-			if key:sub(1, 1) == 'S' then -- if not shifter by default - A-Z vs a-z
-				maps[key] = {
-					cb = function() self._on_unassigned(char) end,
-					trace = self._path,
-					_traced = true,
-					kind = 'input',
-				}
-			else
-				maps[key] = { cb = false, trace = self._path, _traced = true, kind = 'input' }
-				key = 'Shift+' .. key
-				if not maps[key] then maps[key] = { cb = false, trace = self._path, _traced = true, kind = 'input' } end
-			end
-		end
+	for i = 65, 90 do
+		local uc = string.char(i)
+		maps['Shift+' .. string.char(i + 32)] = {
+			cb = function() self._on_unassigned(uc) end,
+			trace = self._path,
+			_traced = true,
+			kind = 'input',
+		}
 	end
 	binds.input(self)
 

@@ -14,17 +14,24 @@ local M = { warn_on_duplicates = true, multiclick_delay = 175 }
 ---@return {_path:string, _mappings: sai.lib.keybind_processor.bindmap }}[]
 function M:get_active_bindsets()
 	local bindsets = {}
-	local active = self._mappings
+	local all = {}
+	for k, v in self._mappings do
+		all[k] = v
+	end
 	for i = #self._active_binders, 1, -1 do
 		local binder = self._active_binders[i]
 		local mappings = {}
 		for k, v in pairs(binder._mappings) do
-			local used = active[k]
+			local used = all[k]
 			-- recognize only if it is this mapping and if this is a mapping, not un-mapping
-			if used and used.cb == v.cb and used.cb then mappings[k] = v end
+			if used and used.cb == v.cb then
+				all[k] = nil
+				if used.cb then mappings[k] = v end
+			end
 		end
 		bindsets[#bindsets + 1] = { _path = binder._path, _mappings = mappings }
 	end
+	bindsets[#bindsets + 1] = { _path = self._path, _mappings = all } -- the rest is the main mode
 	return bindsets
 end
 

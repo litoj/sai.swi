@@ -16,7 +16,10 @@ local reconfigurer = require 'sai.lib.reconfigurer'
 ---@field sai? sai.lib.reconfigurer.sai fakeapi to set changes to apply only when mode is enabled
 local M = {
 	warn_on_duplicates = true, --- for keybind_processor
-	clean_map = false, --- clear all mappings in the current mode
+	--- Filter of existing mappings for which should be kept and which disabled while mode is enabled
+	--- Return `true` to remove.
+	---@type boolean|fun(bind:string,bindcfg:bindcfg):boolean
+	map_filter = false,
 	persist_mode_change = false, --- should mode change disable this object
 
 	---@type sai.api.mode_base|false
@@ -95,6 +98,14 @@ function M:set_enabled(val)
 	if val then
 		---@diagnostic disable-next-line: assign-type-mismatch
 		self._mode_api = sai[sai.mode] -- key mode dynamic if not set by the user
+
+		if self.map_filter then -- unmap all keybinds
+			local fn = self.map_filter == true and function() return true end or self.map_filter
+			for b, cfg in pairs(self._mode_api._mappings) do
+				if fn(b, cfg) then M._rawmap(self, b) end
+			end
+		end
+
 		for b, cfg in pairs(self._mappings) do
 			self:_rawmap(b, cfg, cfg.cb)
 		end
@@ -104,6 +115,7 @@ function M:set_enabled(val)
 			self._mode_api.on_unassigned = self._on_unassigned
 		end
 	else
+		-- also override anything that is there back to the original
 		for b, cfg in pairs(self._omaps) do
 			self._mode_api:_setmap(b, cfg)
 		end
