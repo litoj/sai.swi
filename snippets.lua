@@ -116,8 +116,9 @@ function M.resize_image_with_window()
 		event = 'WinResized',
 		mode = { 'viewer', 'slideshow' },
 		callback = function(ev)
-			local v = sai[ev.mode]
-			if type(v.scale) == 'string' then swayimg[ev.mode].set_fix_scale(v.scale) end
+			local v = sai[ev.mode] ---@type sai.api.viewer
+			---@diagnostic disable-next-line: invisible
+			if type(v.scale) == 'string' then v.super.set_fix_scale(v.scale) end
 		end,
 	}
 end
@@ -198,16 +199,10 @@ end
 
 function M.two_pane_mode(key)
 	local super = require 'sai.mode.custom'
-	local tp = { ---@class tp: sai.mode.custom
-		_mode = 'gallery',
-		_path = 'two_pane',
-		save_user_changes = true,
-	}
+	---@class tp: sai.mode.custom
+	local tp = { _path = 'snippets.two_pane_mode' }
 	function tp:set_enabled(val)
-		if self._enabled == val then
-			if val then sai.mode = 'gallery' end
-			return
-		end
+		if self._enabled == val then return end
 		if val and not self.sai.gallery.thumb_size then
 			self.sai.gallery.thumb_size = sai.get_window_size().width / 2
 		end
@@ -216,6 +211,7 @@ function M.two_pane_mode(key)
 
 	super.new(tp)
 
+	tp.sai.save_user_changes = true
 	tp.sai.mode = 'gallery'
 	---@diagnostic disable-next-line: param-type-mismatch
 	tp.sai.gallery(function(g) ---@param g sai.gallery

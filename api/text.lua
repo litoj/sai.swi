@@ -7,6 +7,7 @@ local M = {
 
 	--- https://github.com/artemsen/swayimg/blob/master/src/text.cpp#L22
 	_enabled = true,
+	_status = '',
 	_status_timeout = 3,
 	_font = 'monospace',
 	_size = 24,
@@ -29,6 +30,11 @@ function M:set_enabled(val)
 	else
 		self.super.timeout = val
 	end
+end
+
+function M:set_status(val)
+	self.super.status = val
+	return false
 end
 
 -- transform scale factor into a pixel value

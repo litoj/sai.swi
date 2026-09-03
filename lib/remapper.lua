@@ -4,20 +4,21 @@
 local U = require 'sai.lib.utils'
 local kp = require 'sai.lib.keybind_processor'
 local backer = require 'sai.lib.backer'
+local reconfigurer = require 'sai.lib.reconfigurer'
 
 ---Keybind override: temporarily replace keybindings in current mode.
 ---Implements the same map/unmap interface as mode_base.
 ---@class sai.lib.remapper: sai.lib.keybind_processor, sai.lib.backer
----@field mode? appmode_t in which mode should we set the bindings
 ---@field enabled? boolean
 ---Unbound key handler with auto-injected _self_
 ---On set() the function will get wrapped with _self_, so the value on get() will differ
 ---@field on_unassigned fun(self:sai.lib.remapper, bind:string)
+---@field sai? sai.lib.reconfigurer.sai fakeapi to set changes to apply only when mode is enabled
 local M = {
 	warn_on_duplicates = true, --- for keybind_processor
+	clean_map = false, --- clear all mappings in the current mode
+	persist_mode_change = false, --- should mode change disable this object
 
-	---@type appmode_t|false
-	_mode = false, ---@protected
 	---@type sai.api.mode_base|false
 	_mode_api = false, ---@protected
 	_enabled = false, ---@protected
@@ -33,17 +34,27 @@ local M = {
 ---@return O self
 function M:new()
 	if self._trigger == nil then self._trigger = not not self._path end
+
+	self.sai = reconfigurer.new { super = sai }
+	self.sai.eventloop.subscribe {
+		event = { 'ModeChangedPre', 'ModeChanged' },
+		callback = function(ev)
+			if not self.persist_mode_change then self.enabled = false end
+			if self._enabled then self:_on_mode_change(ev) end
+		end,
+	}
 	return backer.new(kp.new(U.new_object(self, M)))
 end
 
-function M:set_mode(mode)
-	if self._mode == mode then return false end
-
-	local oe = self._enabled
-	M.set_enabled(self, false)
-	self._mode = mode
-	M.set_enabled(self, oe)
-	return false
+---@param ev event.ModeChanged
+function M:_on_mode_change(ev)
+	if ev.event == 'ModeChangedPre' then -- undo keybind changes on old mode
+		M.set_enabled(self, false)
+		self._enabled = true
+	else -- apply keybind changes to new mode
+		self._enabled = false
+		M.set_enabled(self, true)
+	end
 end
 
 ---@param _ nil action cannot differ from config in remapper
@@ -69,6 +80,7 @@ function M:set_on_unassigned(fn)
 
 		if not self._api_on_unassigned then self._api_on_unassigned = self._mode_api._on_unassigned end
 		-- NOTE: if someone changes the active mode's handler directly, we override it without recovery
+		-- this is the correct behaviour
 		self._on_unassigned = wrapped
 		self._mode_api.on_unassigned = fn or self._api_on_unassigned
 	end
@@ -78,10 +90,11 @@ end
 function M:set_enabled(val)
 	if val == self._enabled then return false end
 	self._enabled = val
+	self.sai(val) -- also changes mode to the desired one so keymaps ger applied correctly
 
 	if val then
 		---@diagnostic disable-next-line: assign-type-mismatch
-		self._mode_api = sai[self._mode or sai.mode] -- keey mode dynamic if not set by the user
+		self._mode_api = sai[sai.mode] -- key mode dynamic if not set by the user
 		for b, cfg in pairs(self._mappings) do
 			self:_rawmap(b, cfg, cfg.cb)
 		end

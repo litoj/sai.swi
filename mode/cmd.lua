@@ -27,7 +27,7 @@ function M:new()
 end
 
 --TODO: generalize so it can run for shell cmd as well
-function M:on_confirm(out) -- TODO: history for >1 item doesn't work
+function M:on_confirm(out)
 	self.text = ''
 	self._hist_matcher = ''
 	if not out then return end

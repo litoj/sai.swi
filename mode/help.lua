@@ -13,7 +13,7 @@ local binds = require('sai.binds').help
 local M = {
 	super = require 'sai.mode.custom',
 	_path = 'sai.mode.help',
-	_persist_mode_change = true,
+	persist_mode_change = true,
 	auto_help = true,
 
 	_tab = 1, ---@protected
@@ -37,20 +37,12 @@ function M:new()
 	self.sai.slideshow.default_scale = 'keep_width'
 	self.sai.text.enabled = true
 	local gspace = sai.gallery.thumb_size + sai.gallery.padding_size
-	---@diagnostic disable-next-line: param-type-mismatch
-	self.sai.gallery(function(g) ---@param g sai.gallery
+	self.sai.gallery(function(g)
 		g.thumb_size = gspace / 3
 		g.padding_size = gspace / 3
 		g.cache_size = 0
 		g.preload = false
 	end)
-	self.sai.eventloop.subscribe {
-		event = 'ModeChanged',
-		callback = function(ev)
-			self.mode = ev.mode
-			self:set_tab(self._tab) -- regenerate content in case we're on keybindings
-		end,
-	}
 
 	return self
 end
@@ -86,33 +78,6 @@ local function complete_bindlist()
 	return 'All Binds', out
 end
 
----@param wrapper sai.api.proxy API object to inspect
----@return table<string,any>[] fields List of settable fields with their current values
-local function discover_settable_fields(wrapper)
-	local backed
-	for k, v in pairs(wrapper.super) do
-		if type(k) == 'userdata' then
-			backed = v
-			break
-		end
-	end
-	if not backed then backed = {} end
-	local fields = {}
-
-	for backer, value in pairs(wrapper) do
-		if backer:sub(1, 1) == '_' then
-			local field = backer:sub(2)
-
-			-- Check if backing field has an official setter, enabler, or override
-			if rawget(wrapper, 'set' .. backer) or backed[field] then
-				fields[#fields + 1] = { name = field, value = value }
-			end
-		end
-	end
-
-	return fields
-end
-
 ---@return string title
 ---@return string[]
 local function settings_list()
@@ -127,7 +92,7 @@ local function settings_list()
 	} do
 		out[#out + 1] = ('%s:'):format(wrapper._path:upper())
 
-		for _, field in ipairs(discover_settable_fields(wrapper)) do
+		for _, field in ipairs(U.get_dynfields(wrapper)) do
 			out[#out + 1] = ('  %s\t{%s.%s}'):format(field.name, wrapper._path, field.name)
 		end
 	end
@@ -149,10 +114,15 @@ function M:set_tab(idx)
 	return true
 end
 
-function M:set_mode(mode)
-	self._active_binds = { mode_bindlist(mode) }
-	self.pager.mode = mode
-	M.super.set_mode(self, mode)
+function M:_on_mode_change(ev)
+	if ev.event == 'ModeChangedPre' then
+		self.pager.enabled = false
+	else
+		self.pager.enabled = true
+		self._active_binds = { mode_bindlist(ev.mode) }
+		self:set_tab(self._tab) -- regenerate content in case we're on keybindings
+	end
+	M.super._on_mode_change(self, ev)
 	return false
 end
 
@@ -160,10 +130,8 @@ function M:set_enabled(val)
 	if val == self._enabled then return true end
 	if val then
 		local mode = sai.mode
-		self.mode = mode
-
+		self._active_binds = { mode_bindlist(mode) }
 		self.tab = 1
-
 		--- 100px
 		if mode ~= 'gallery' then self.sai[mode].scale = 100 / sai[mode].get_image().width end
 	end

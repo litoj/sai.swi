@@ -2,18 +2,22 @@
 local U = require 'sai.lib.utils'
 local X = require 'sai.bridge.xkb'
 
+---@class sai.lib.keybind_processor.bindcfg: bindcfg
+---@field _traced? boolean
+
+---@class sai.lib.keybind_processor.bindmap: {[string]: sai.lib.keybind_processor.bindcfg}
+
 ---@class sai.lib.keybind_processor: keybind_processor
 ---@field _path string path to the module for error processing
----@field _mappings bind_map|{[string]:{_traced:boolean}}
+---@field _mappings sai.lib.keybind_processor.bindmap
 ---Function to set a mapping directly without updating the active mappings.
 ---Nil action gets replaced with the default handler for unbound keys
 ---@field warn_on_duplicates boolean
 local M = {
 	---How to handle unassigned xkb key combinations.
 	---Default custom handler tries to solve common layout differences (toggled shift)
-	---@protected
 	---@type fun(key: string)|false
-	_on_unassigned = false,
+	_on_unassigned = false, ---@protected
 }
 
 -- TODO: make modebase translate multimaps (`cd`) correctly and use sig USR1 for fallback
@@ -33,6 +37,7 @@ function M:_rawunmap(bind) end
 ---@param bind string
 ---@param cfg bindcfg?
 function M:_setmap(bind, cfg)
+	---@diagnostic disable-next-line: assign-type-mismatch
 	self._mappings[bind] = cfg or nil
 	if not cfg then
 		self:_rawunmap(bind)

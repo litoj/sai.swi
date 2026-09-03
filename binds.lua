@@ -42,6 +42,33 @@ function M.default()
 			end
 		end
 	end
+	for _, m in ipairs { v, s, g } do ---@cast m sai.api.viewer
+		-- clear the native bindings of all mapped keypad keys
+		-- so that we rely on the fallback function rather than hardcoded identical defaults
+		for _, b in ipairs {
+			'KP_Enter',
+			'KP_Space',
+			'KP_Tab',
+			'KP_Insert',
+			'KP_Delete',
+			'KP_Home',
+			'KP_End',
+			'KP_Prior',
+			'KP_Next',
+			'KP_Left',
+			'KP_Up',
+			'KP_Right',
+			'KP_Down',
+			'KP_Add',
+			'KP_Subtract',
+			'KP_Multiply',
+			'KP_Divide',
+			'KP_Decimal',
+			'KP_Equal',
+		} do
+			if not m._mappings[b] then m:_rawunmap(b) end
+		end
+	end
 
 	-- Custom keybind for our own help mode
 	map(

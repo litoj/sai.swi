@@ -1,19 +1,17 @@
 ---@diagnostic disable: invisible
 ---@module 'sai.lib.pager'
 
-local e = sai.eventloop
 local backer = require 'sai.lib.backer'
+local reconfigurer = require 'sai.lib.reconfigurer'
 local U = require 'sai.lib.utils'
 
----@class sai.lib.pager
+---@class sai.lib.pager: sai.mode.custom
 ---Activation toggle. Configure all the preceding definition fields before enabling.
 ---@field page integer
 ---@field page_size integer Readonly - useful to advance by all visible lines instead of fixed page
 ---@field total_pages integer Readonly
 ---@field line integer
 -- setup options
----@field enabled boolean
----@field mode appmode_t|false in which mode should we set the data (false to use current mode)
 ---@field location block_position_t where should we output to
 ---@field title string title in the non-scrollable header
 ---@field lines string[] the output to be paged
@@ -24,9 +22,6 @@ local M = {
 	-- Live config
 	escaping = false, ---Should lines be checked for sai.text escape sequences or set as pure text
 	_enabled = false, ---@protected
-	---@see sai.lib.pager.mode
-	---@type appmode_t|false
-	_mode = false, ---@protected
 	---@see sai.lib.pager.location
 	---@type block_position_t
 	_location = 'topleft', ---@protected
@@ -43,7 +38,6 @@ local M = {
 	_total_pages = 1, ---@protected
 
 	-- Private state
-	_hooks = {}, ---@private
 	---@type mode_base.text|false
 	_mode_text = false, ---@private
 	---@type extended_text_template[]|false
@@ -57,7 +51,23 @@ local M = {
 }
 
 ---@return sai.lib.pager
-function M:new() return backer.new(U.new_object(self, M)) end
+function M:new()
+	-- Listen for WinResized and OptionSet updates to recalculate per_page and re-render pager
+	local function recal(_) self:_recalibrate(true, false) end
+	self.eventloop = reconfigurer.new_evloop()
+	self.eventloop {
+		{
+			event = 'WinResized',
+			callback = recal,
+		},
+		{
+			event = 'OptionSet',
+			pattern = { 'sai.text.size', 'sai.text.line_spacing' },
+			callback = recal,
+		},
+	}
+	return backer.new(U.new_object(self, M))
+end
 
 ---@private
 function M:_prepare_renderer()
@@ -225,69 +235,40 @@ end
 --- Setup handlers
 
 ---@protected
----@param mode appmode_t
-function M:set_mode(mode)
-	self:_on_dst_change(mode, self._location)
-	return false
-end
-
----@protected
 ---@param val block_position_t
 function M:set_location(val)
 	if val == self._location then return false end
-	self:_on_dst_change(self._mode, val)
+	self:_on_dst_change(val)
 	return true
 end
 
 ---@private
----@param mode appmode_t
 ---@param loc block_position_t
-function M:_on_dst_change(mode, loc)
+function M:_on_dst_change(loc)
 	if self._original_text then
 		self._mode_text[self._location] = self._original_text
 		self._original_text = false
 	end
 
-	self._mode = mode
 	self._location = loc
 
 	if self._enabled then
-		self._mode_text = sai[mode or sai.mode].text
+		self._mode_text = sai[sai.mode].text
 		self._original_text = self._mode_text[self._location]
 		self:render(true)
 	end
 end
 
 ---@protected
+---@param val boolean
 function M:set_enabled(val)
-	if val == self._enabled then return false end
+	if val == self._enabled then return end
 
-	if val then
-		self:_recalibrate(true, true)
-		self._enabled = true
-		self:_on_dst_change(self._mode, self._location)
+	if val then self:_recalibrate(true, true) end
+	self._enabled = val
+	self.eventloop(val)
+	self:_on_dst_change(self._location)
 
-		-- Listen for WinResized and OptionSet updates to recalculate per_page and re-render pager
-		local function recal(_) self:_recalibrate(true, false) end
-		self._hooks = {
-			e.subscribe {
-				event = 'WinResized',
-				callback = recal,
-			},
-			e.subscribe {
-				event = 'OptionSet',
-				pattern = { 'sai.text.size', 'sai.text.line_spacing' },
-				callback = recal,
-			},
-		}
-	else
-		self._enabled = false
-		for _, v in ipairs(self._hooks) do
-			e.unsubscribe { id = v }
-		end
-
-		self:_on_dst_change(self._mode, self._location)
-	end
 	return true
 end
 

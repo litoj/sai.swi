@@ -30,8 +30,6 @@ local M = {
 	_cursor_icon = '▎',
 
 	-- Live config
-	---@type appmode_t|false
-	_mode = false, ---@protected
 	---@type block_position_t|'status'
 	_location = 'status', ---@protected
 
@@ -59,7 +57,7 @@ function M:on_confirm(result) end
 ---@param fn string|fun(self:self)
 function M:_rawmap(b, cfg, fn)
 	-- minimize number of overrides
-	if not self._enabled or (cfg.kind == 'input' and not self._mode_api._mappings[b]) then return end
+	if not self._enabled or (not cfg.cb and not self._mode_api._mappings[b]) then return end
 
 	M.super._rawmap(self, b, cfg, fn)
 end
@@ -77,7 +75,7 @@ function M:new()
 					cb = function() self._on_unassigned(char) end,
 					trace = self._path,
 					_traced = true,
-					kind = 'private',
+					kind = 'input',
 				}
 			else
 				maps[key] = { cb = false, trace = self._path, _traced = true, kind = 'input' }
@@ -143,6 +141,8 @@ end
 ---Insert a string at the cursor position
 ---@param text string
 function M:insert(text)
+	-- coerce invalid bytes to '?': their presence would make utf8.len() return nil and crash the cursor math
+	text = utf8(text)
 	local from, to = self._col, self._visual or self._col
 	self._visual = false
 	if from > to then
@@ -223,6 +223,8 @@ end
 ---Updates and renders text, moving the cursor to stay relative to text following it
 ---@param val string
 function M:set_text(val)
+	-- coerce invalid bytes to '?': their presence would make utf8.len() return nil and crash the cursor math
+	val = utf8(val)
 	local len, oldlen = utf8.len(val), utf8.len(self._text)
 	if self._visual then self._visual = math.min(self._visual, len + 1) end
 	if self._col > len or self._col > oldlen then
@@ -275,51 +277,39 @@ function M:get_line()
 	end
 end
 
----@protected
----@param mode appmode_t
-function M:set_mode(mode)
-	local om = self._mode
-	M.super.set_mode(self, mode)
-	self._mode = om -- set the mode back so that we know what to change
-	self:_on_dst_change(mode, self._location)
-	return false
-end
-
 ---@param val block_position_t|'status'
 function M:set_location(val)
 	if val == self._location then return false end
-	self:_on_dst_change(self._mode, val)
+	self:_on_dst_change(val)
 	return false
 end
 
 ---@private
----@param mode appmode_t
 ---@param loc block_position_t|'status'
-function M:_on_dst_change(mode, loc)
+function M:_on_dst_change(loc)
 	if self._raw_update then
 		if self._location == 'status' then
 			self.sai.text.status_timeout = nil
 			self._raw_update ''
 		else
 			self.sai.text.enabled = nil
-			local smt = sai[self._mode or sai.mode].text
+			local smt = sai[sai.mode].text
 			smt[self._location] = smt[self._location]
 		end
 	end
 
-	self._mode = mode
 	self._location = loc
 
 	if self._enabled then
 		if self._location == 'status' then
 			self.sai.text.status_timeout = 0
-			self._raw_update = sai.notify
+			self._raw_update = function(x) sai.text.status = x end
 		else
 			self.sai.text.enabled = true
 			-- get the api to use without setting a fixed mode (allows different mode when re-enabled)
 			-- TODO: unify the text api also for status and use just mode_text
 			---@diagnostic disable-next-line: assign-type-mismatch
-			self._raw_update = swayimg[self._mode or sai.mode]
+			self._raw_update = swayimg[sai.mode]
 		end
 
 		self:render()
@@ -333,7 +323,8 @@ function M:get_confirmed() return nil end
 function M:set_enabled(val)
 	if val == self._enabled then return false end
 	M.super.set_enabled(self, val)
-	self:_on_dst_change(self._mode, self._location)
+
+	self:_on_dst_change(self._location)
 	if val then
 		rawset(self, 'confirmed', nil)
 	else
