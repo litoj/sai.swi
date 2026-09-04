@@ -62,7 +62,7 @@ local function new_go(api, api_name)
 					event = 'OptionSet',
 					mode = api_name,
 					match = 'sai.imagelist.size',
-					data = sai.imagelist.size(),
+					data = sai.imagelist.size,
 				}
 			end
 		end,

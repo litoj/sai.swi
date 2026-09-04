@@ -332,13 +332,10 @@ function sai.eventloop.takeover_subscribe(cfg) end
 ---@field recursive boolean Recursive directory reading
 ---@field adjacent boolean Open adjacent files from the same directory
 ---@field fsmon boolean Allow filesystem monitoring for changes and updating images
+---@field size integer
 sai.imagelist = {}
 
 do
-	---Get size of image list.
-	---@return integer # Number of entries in the image list
-	function sai.imagelist.size() end
-
 	---Add entry to the image list.
 	---@param paths string|string[] Paths to add
 	function sai.imagelist.add(paths) end
@@ -361,11 +358,8 @@ do
 	---Helper for working with marks on images
 	---Changes to the size get emitted as OptionSet(`sai.imagelist.marked.size`)
 	---@class sai.imagelist.marked
+	---@field size integer
 	sai.imagelist.marked = {}
-
-	---Get number of marked images.
-	---@return integer
-	function sai.imagelist.marked.size() end
 
 	---Toggle the marked state of the current entry.
 	---@param state boolean|'toggle'
@@ -508,8 +502,8 @@ end
 ---| "keep_width"  # Keep zoom level relative to image width
 ---| "keep_height" # Keep zoom level relative to image height
 ---| "keep_size"   # Keep zoom level relative to average of width and height
----| "keep_fit"    # Keep zoom level relative to
----| "keep_fill"   # Keep zoom level relative to image height
+---| "keep_fit"    # Keep zoom level relative to larger side of the image
+---| "keep_fill"   # Keep zoom level relative to shorter side of the image
 
 ---@class sai.viewer.panner Move around the image with ready-to-map functions
 ---@field default_size integer Default size of the step to make (in pixels)

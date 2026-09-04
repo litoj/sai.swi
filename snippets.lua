@@ -27,7 +27,7 @@ end
 function M.load_dir_if_single()
 	local function check_n_load()
 		local l = sai.imagelist
-		if l.size() ~= 1 then return end
+		if l.size ~= 1 then return end
 		local dir = l.get_current().path:match '.+/'
 
 		-- find follows symlinks (-L): symlinked files are added, symlinked dirs are not

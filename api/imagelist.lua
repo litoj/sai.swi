@@ -2,17 +2,18 @@
 
 local e = require 'sai.api.eventloop'
 local U = require 'sai.lib.utils'
+local proxy = require 'sai.api.proxy'
 
 local api = swayimg.imagelist
 
----@type sai.imagelist
+---@class sai.api.imagelist: sai.imagelist
 ---@diagnostic disable-next-line: missing-fields
 local M = { super = api, _path = 'sai.imagelist', marked = {} }
 
 local mlist = {}
 local msize = 0
 
----@type sai.imagelist.marked
+---@class sai.api.imagelist.marked: sai.imagelist.marked
 local marked = M.marked
 local last_lsize = api.size
 
@@ -39,7 +40,11 @@ local function set_mark(x, enabled)
 	e.trigger { event = 'OptionSet', match = 'sai.imagelist.marked.size', data = msize }
 end
 
-function M.size() return api.size end
+---@protected
+function M:set_size() error 'cannot set imagelist.size' end
+---@protected
+function M:get_size() return api.size end
+
 function M.remove(x)
 	local ci = M.get_current()
 	if x == ci.path then e.trigger { event = 'ImgChangedPre', match = swayimg.mode, data = ci } end
@@ -65,10 +70,14 @@ end
 
 function M.get_current() return sai[swayimg.mode].get_image() or U.dummy_image end
 
-function marked.size()
+---@protected
+function marked:set_size() error 'cannot set imagelist.marked.size' end
+---@protected
+function marked:get_size()
 	local lsize = api.size
 	if lsize ~= last_lsize then
 		mlist = {}
+		local omsize = msize
 		msize = 0
 		for _, v in ipairs(api.get()) do
 			if v.mark then
@@ -77,7 +86,7 @@ function marked.size()
 			end
 		end
 		last_lsize = lsize
-		e.trigger { event = 'OptionSet', match = 'sai.imagelist.marked.size', data = msize }
+		if msize ~= omsize then e.trigger { event = 'OptionSet', match = 'sai.imagelist.marked.size', data = msize } end
 		e.trigger { event = 'OptionSet', match = 'sai.imagelist.size', data = last_lsize }
 	end
 	return msize
@@ -91,7 +100,7 @@ e.subscribe {
 	callback = function(ev)
 		-- if there is a chance that images disappeared, then check for imagelist size changes
 		if ev.data.cmd:find('rm', 1, true) or ev.data.cmd:find('mv', 1, true) then --
-			sai.defer_fn(marked.size, 100)
+			sai.defer_fn(marked.get_size, 100)
 		end
 	end,
 }
@@ -114,4 +123,5 @@ function marked.get()
 	return t
 end
 
-return require('sai.api.proxy').new(M)
+proxy.new(marked)
+return proxy.new(M)
