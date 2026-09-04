@@ -74,7 +74,7 @@ function M:new()
 		return old
 	end
 
-	self.unmap = function(b) M:_setmap(X.userbind_to_xkb(b)) end
+	self.unmap = function(b) self:_setmap(X.userbind_to_xkb(b)) end
 
 	local function pretty_trace(trace) return U.pretty_trace('keybind_processor.+map', trace) end
 

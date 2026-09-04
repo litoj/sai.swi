@@ -76,6 +76,8 @@ local function mk_hook(cfg)
 	return cfg
 end
 
+---@param hook sai.eventloop.hook
+---@return hook_cfg
 function M.subscribe(hook)
 	if not hook.callback then error('missing callback in: ' .. tostring(hook)) end
 	if M.debug_subscribe then print_debug('subscribe', hook) end
@@ -137,29 +139,28 @@ local function matcher(ev, ptn_map)
 			return
 		end
 
-		local plist = ptn_map['*']
-		ptn_map['*'] = nil
 		local ptns = mk_ptn_tbl(ev.pattern or '^') -- defaults to match everything
 		for match, hooks in pairs(ptn_map) do -- test all fixed-text matches
-			local ok = ptns[match]
-			if ok == nil then -- find a match
-				for _, ptn in ipairs(ptns) do -- test against all ev patterns
-					if match:find(ptn) then
-						ok = true
-						break
+			if match ~= '*' then
+				local ok = ptns[match]
+				if ok == nil then -- find a match
+					for _, ptn in ipairs(ptns) do -- test against all ev patterns
+						if match:find(ptn) then
+							ok = true
+							break
+						end
+					end
+				end
+
+				if ok then
+					for i, h in ipairs(hooks) do
+						coroutine.yield(h, match, i)
 					end
 				end
 			end
-
-			if ok then
-				for i, h in ipairs(hooks) do
-					coroutine.yield(h, match, i)
-				end
-			end
 		end
-		ptn_map['*'] = plist
 
-		for i, h in ipairs(plist or {}) do
+		for i, h in ipairs(ptn_map['*'] or {}) do
 			for _, p in ipairs(h.pattern) do
 				for _, v in ipairs(ptns) do -- test against all ev patterns
 					if p:find(v) then

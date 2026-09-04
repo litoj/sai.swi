@@ -1,38 +1,62 @@
----@diagnostic disable: invisible
 ---@module 'sai.mode.help'
 
 local U = require 'sai.lib.utils'
+local e = require 'sai.api.eventloop'
+local pager = require 'sai.lib.pager'
 local binds = require('sai.binds').help
 
--- Paging object to manage scrollable output
----@class help_pager
+---Fully generated tab.
+---@class help_tab
+---@field title string
+---@field lines extended_text_template[] values can be text layer templates (see README)
+---@field escape boolean? should lines be checked for text escape sequences
+---Tab generator: called on activation and on every mode change; generates
+---all tabs straight-up - return a fresh list to add or remove tabs.
+---@alias help_tabs fun(self:sai.mode.help):help_tab[]
+
+---Generic paged help overlay with tabbed content.
 ---@class sai.mode.help: sai.mode.custom
 ---@field enabled boolean
 ---@field pager sai.lib.pager
----@field tab integer which help tab are we on
+---@field tab integer which tab are we on
+---@field tabs help_tabs
 local M = {
 	super = require 'sai.mode.custom',
-	_path = 'sai.mode.help',
 	persist_mode_change = true,
-	auto_help = true,
 
 	_tab = 1, ---@protected
-	_active_binds = { '', { '' } }, ---@protected cache
+	---@type help_tab[]
+	_tabs = {}, ---@protected cache
 
-	bind_fmt = '%20s: %s', ---Default format for keybind list and description
+	tabs = function() return {} end,
 }
 
----@diagnostic disable-next-line: missing-fields
-M.pager = require('sai.lib.pager').new {
-	_path = M._path .. '.pager',
-	_trigger = true,
-	_location = 'topleft',
-}
-
+---Create an instance (see sai.mode.key_help / sai.mode.var_help) by calling
+---`help.new { _path = ..., tabs = ... }` - the passed table becomes the instance.
+---@generic O: table
+---@param self `O` partially filled instance table: the missing fields are copied in from the module
+---@return O
 function M:new()
-	M.super.new(U.new_object(self, M))
+	U.new_object(self, M)
+	---@cast self sai.mode.help
+	self.pager = pager.new {
+		_path = self._path .. '.pager',
+		_trigger = true,
+		_location = 'topleft',
+	}
+
+	M.super.new(self)
 	binds(self)
 
+	self.sai.eventloop.subscribe {
+		event = 'User',
+		pattern = { 'ModePush', 'ModePop' },
+		callback = function(ev)
+			if ev.data == self then return end
+			self:_on_mode_change(ev)
+		end,
+	}
+	-- make the image a small backdrop for the help text
 	self.sai.viewer.default_scale = 'keep_width'
 	self.sai.slideshow.default_scale = 'keep_width'
 	self.sai.text.enabled = true
@@ -47,100 +71,54 @@ function M:new()
 	return self
 end
 
-local modes = { 'gallery', 'viewer', 'slideshow' }
-
----@return string title
----@return string[] lines
-local function mode_bindlist(mode, fmt_str)
-	mode = mode or sai.mode
-	---@diagnostic disable-next-line: param-type-mismatch
-	return ('%s%s Binds'):format(mode:sub(1, 1):upper(), mode:sub(2)), U.str_bindlist(sai[mode], fmt_str or M.bind_fmt)
-end
-
----@return string title
----@return string[] lines
-local function complete_bindlist()
-	local mode_order = {}
-	local mode = sai.mode
-	for _, m in ipairs(modes) do -- do all other modes except the active
-		if mode ~= m then mode_order[#mode_order + 1] = m end
-	end
-
-	local out = {}
-	for _, m in ipairs(mode_order) do
-		local name, lines = mode_bindlist(m)
-		out[#out + 1] = ('%s: %d bindings'):format(name, #lines)
-		for _, line in ipairs(lines) do
-			out[#out + 1] = '  ' .. line
-		end
-	end
-
-	return 'All Binds', out
-end
-
----@return string title
----@return string[]
-local function settings_list()
-	local out = {}
-	for _, wrapper in ipairs {
-		sai,
-		sai.text,
-		sai.imagelist,
-		sai.gallery,
-		sai.viewer,
-		sai.slideshow,
-	} do
-		out[#out + 1] = ('%s:'):format(wrapper._path:upper())
-
-		for _, field in ipairs(U.get_dynfields(wrapper)) do
-			out[#out + 1] = ('  %s\t{%s.%s}'):format(field.name, wrapper._path, field.name)
-		end
-	end
-
-	M.pager.escaping = true
-	return 'Settings', out
-end
-
-local tab_generators = { function() return unpack(M._active_binds) end, settings_list, complete_bindlist }
 function M:set_tab(idx)
-	self._tab = (idx - 1) % #tab_generators + 1
+	local tabs = self.tabs(self)
+	if not tabs[1] then return false end
+	self._tabs = tabs
+	self._tab = (idx - 1) % #tabs + 1
+
+	local tab = tabs[self._tab]
 	self.pager:bulk_change(function(pager)
-		M.pager.escaping = false
-		local name, lines = tab_generators[self._tab]()
-		pager.title = ('[Help %d/%d]: %s\t'):format(self._tab, #tab_generators, name)
-		pager.lines = lines
+		pager.escaping = not not tab.escape
+		pager.title = ('[Tab %d/%d] %s\t'):format(self._tab, #tabs, tab.title)
+		pager.lines = tab.lines
 		pager.line = 1
 	end)
 	return true
 end
 
+---@param ev event.ModeChanged|event.User
 function M:_on_mode_change(ev)
-	if ev.event == 'ModeChangedPre' then
-		self.pager.enabled = false
-	else
-		self.pager.enabled = true
-		self._active_binds = { mode_bindlist(ev.mode) }
-		self:set_tab(self._tab) -- regenerate content in case we're on keybindings
+	if ev.event == 'User' then -- custom layer change (ModePush/ModePop)
+		self:set_tab(1) -- regenerate the tabs, land on the first
+		return false
 	end
-	M.super._on_mode_change(self, ev)
+	if ev.event == 'ModeChangedPre' then self.pager.enabled = false end
+	M.super._on_mode_change(self, ev) -- re-apply our binds on the new mode first
+	if ev.event == 'ModeChanged' then
+		self.pager.enabled = true
+		self:set_tab(self._tab) -- tab contents may differ per mode
+	end
 	return false
 end
 
 function M:set_enabled(val)
 	if val == self._enabled then return true end
 	if val then
+		M.super.set_enabled(self, val) -- register our bind layer first
+		self.tab = self._tab -- re-render the current tab, keep its number
+
 		local mode = sai.mode
-		self._active_binds = { mode_bindlist(mode) }
-		self.tab = 1
 		--- 100px
 		if mode ~= 'gallery' then self.sai[mode].scale = 100 / sai[mode].get_image().width end
+	else
+		self.pager.enabled = false
+		M.super.set_enabled(self, val)
+		return true
 	end
 
 	self.pager.enabled = val
-	self.super.set_enabled(self, val)
 	return true
 end
 
---- TODO: in the future: add ways to select a variable and list help and its possible values
-
-return M:new()
+return M

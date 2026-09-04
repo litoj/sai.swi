@@ -78,7 +78,7 @@ function M.print_option_changes(enable)
 		-- register after base config has been loaded
 		e.subscribe { -- Print messages on option update
 			event = 'OptionSet',
-			pattern = { '!sai.imagelist.size', '^' }, -- all main opts - not the subsubtables (text etc.)
+			pattern = { '!sai.imagelist.size', '!sai.text.status', '^' },
 			group = 'print_var_change',
 			callback = function(ev)
 				local v = ev.data

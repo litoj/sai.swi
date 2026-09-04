@@ -70,12 +70,18 @@ function M.default()
 		end
 	end
 
-	-- Custom keybind for our own help mode
+	-- Custom keybinds for our own help modes
 	map(
 		'a',
 		{ 'F1', 'question' },
-		function() require('sai.mode.help').enabled = not require('sai.mode.help').enabled end,
-		'Toggle help'
+		function() require('sai.mode.key_help').enabled = not require('sai.mode.key_help').enabled end,
+		'Toggle key help'
+	)
+	map(
+		'a',
+		'Shift+F1',
+		function() require('sai.mode.var_help').enabled = not require('sai.mode.var_help').enabled end,
+		'Toggle var help'
 	)
 	map(
 		'a',
@@ -208,7 +214,7 @@ function M.help(self)
 	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
 
 	map({ 'Right', 'Tab' }, function() self.tab = self.tab + 1 end, 'Next help tab')
-	map({ 'Left', 'Shift+Tab' }, function() self.tab = self.tab - 1 end, 'Previous help tab')
+	map({ 'Left', 'Shift+ISO_Left_Tab' }, function() self.tab = self.tab - 1 end, 'Previous help tab')
 	map({ 'Up', 'ScrollUp' }, function() self.pager.line = self.pager.line - 1 end, 'Scroll up')
 	map({ 'Down', 'ScrollDown' }, function() self.pager.line = self.pager.line + 1 end, 'Scroll down')
 	map('Prior', function() self.pager.line = self.pager.line - self.pager.page_size end, 'Page up')
@@ -269,7 +275,7 @@ function M.input(self)
 
 	---@param text string
 	---@param col integer char position to scan from
-	---@param backward boolean scan towards the text start instead
+	---@param backward? boolean scan towards the text start instead
 	---@return integer from start of the word boundary
 	---@return integer to end of the word boundary
 	local function get_word_idx(text, col, backward)
@@ -334,7 +340,7 @@ end
 
 ---@param self sai.mode.filter
 function M.filter(self)
-	self.map('Shift+Return', '\n')
+	self.map('Shift+Return', '\n', 'Newline')
 
 	-- Important actions that should be displayed in help list
 	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
@@ -345,7 +351,7 @@ end
 
 ---@param self sai.mode.cmd
 function M.cmd(self)
-	self.map('Shift+Return', '\n')
+	self.map('Shift+Return', '\n', 'Newline')
 
 	self.map('Up', function()
 		if self.text:find('\n', 1, true) then

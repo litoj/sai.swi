@@ -1,3 +1,4 @@
+---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Test runner: discovers and runs every test module in this directory.
 ---Development tool: not used during normal swayimg operation.
 ---

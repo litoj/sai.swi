@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # tests/harness.lua resolves `sai.*` requires through the parent of the
+    # checkout: the repo must be checked out into a directory named `sai`
+    defaults:
+      run:
+        working-directory: sai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: sai
+
+      - name: Install luajit
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y luajit luarocks liblua5.1-dev
+          sudo luarocks --lua-version=5.1 install lua-cjson
+
+      - name: Install stylua
+        run: |
+          curl -fsSL https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-x86_64.zip -o /tmp/stylua.zip
+          unzip -o /tmp/stylua.zip -d /tmp
+          sudo install /tmp/stylua /usr/local/bin
+
+      # the release tarball ships the binary together with its support files:
+      # add its bin dir to PATH instead of copying the binary elsewhere.
+      # pinned: the check results are verified against this exact version
+      - name: Install lua-language-server
+        env:
+          LLS_VERSION: 3.19.1
+        run: |
+          mkdir -p "$RUNNER_TEMP/luals"
+          curl -fsSL "https://github.com/LuaLS/lua-language-server/releases/download/${LLS_VERSION}/lua-language-server-${LLS_VERSION}-linux-x64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP/luals"
+          echo "$RUNNER_TEMP/luals/bin" >> "$GITHUB_PATH"
+
+      - name: stylua
+        run: stylua --check .
+
+      - name: tests
+        run: timeout 300 luajit tests/init.lua
+
+      # the swayimg api types resolve in CLI check mode only when the meta
+      # file lives inside the checked workspace (workspace.library is not
+      # loaded by --check)
+      - name: Fetch swayimg API definitions
+        run: curl -fsSL https://raw.githubusercontent.com/artemsen/swayimg/master/extra/swayimg.lua -o swayimg.lua
+
+      - name: Write .luarc.json
+        run: |
+          cat > .luarc.json <<'EOF'
+          {
+          	"runtime": { "version": "LuaJIT" },
+          	"type": { "castNumberToInteger": true, "weakNilCheck": true, "weakUnionCheck": true },
+          	"diagnostics": { "globals": ["vim"] },
+          	"workspace": { "checkThirdParty": false }
+          }
+          EOF
+
+      # require a verdict line so an lls crash cannot pass as green
+      - name: lua-language-server
+        run: |
+          lua-language-server --checkmode=global --check=. --logpath="$RUNNER_TEMP/lslog" 2>/dev/null \
+            | sed 's/\x1b\[[0-9;]*m//g' > "$RUNNER_TEMP/lsreport.txt"
+          cat "$RUNNER_TEMP/lsreport.txt"
+          grep -q 'Diagnosis complet' "$RUNNER_TEMP/lsreport.txt"
+          ! grep -qE '\[(Warning|Error)\]' "$RUNNER_TEMP/lsreport.txt"

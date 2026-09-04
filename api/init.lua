@@ -28,7 +28,7 @@ M._formats, M.set_formats = U.deep_backer({
 		padding = 5,
 		label = 0x0affffff,
 	},
-}, function(_, tbl)
+}, function(_, tbl) ---@param tbl FormatCfg all modified options
 	swayimg.format_conf = tbl
 	e.trigger { event = 'OptionSet', match = 'sai.formats', data = tbl }
 end)
@@ -49,6 +49,7 @@ function M.exit(code)
 	if not next(e.find_all(ev)) then swayimg.exit(code) end
 end
 
+local id_gen = 0
 function M.notify(msg, timeout)
 	msg = string.gsub(tostring(msg), '\t', '  ')
 	if not timeout then
@@ -56,21 +57,17 @@ function M.notify(msg, timeout)
 			swayimg.text.status = msg
 			return
 		else
-			timeout = #msg / 10
+			timeout = math.floor(#msg / 10)
 		end
 	end
 
 	local old = sai.text.status_timeout
-	-- set directly to keep the official queryable value the same
-	swayimg.text.status_timeout = timeout
+	id_gen = id_gen + 1
+	local id = id_gen
 	swayimg.text.status = msg
 	sai.defer_fn(function()
-		-- set the original value back only if it hasn't changed in between
-		if sai.text.status_timeout == timeout then
-			swayimg.text.status_timeout = old
-			-- put back the previous message
-			if old == 0 then sai.text.status = sai.text.status end
-		end
+		-- a newer notify owns the borrow now: only its restore may act
+		if id == id_gen then swayimg.text.status = old == 0 and sai.text.status or '' end
 	end, timeout * 1000)
 end
 
@@ -85,7 +82,7 @@ function M.log(msg, file)
 	end
 end
 
-local deferred_heap = require 'sai.api.deferred_heap'
+local deferred_heap = require 'sai.bridge.deferred_heap'
 ---Schedules the next callback for swayimg.defer() and reschedule itself.
 local function cb_rescheduler()
 	local next_delay = deferred_heap:time_to_next() -- what is the earliest next cb to run

@@ -1,3 +1,4 @@
+---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for sai.bridge.debug: the DAP communication between a raw client
 ---and the harness, end-to-end - each scenario spawns its own debuggee
 ---process and drives it over the socket.

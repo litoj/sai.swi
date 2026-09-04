@@ -14,13 +14,15 @@ local U = require 'sai.lib.utils'
 -- setup options
 ---@field location block_position_t where should we output to
 ---@field title string title in the non-scrollable header
----@field lines string[] the output to be paged
+---@field lines extended_text_template[] the output to be paged (templates only render with `escaping`)
 ---@field max_height number|integer max winheight to take up - 0-1 for percentage, >1 for line count
 local M = {
 	_trigger = false,
 
+	---Should lines be checked for sai.text escape sequences or set as pure text
+	escaping = false,
+
 	-- Live config
-	escaping = false, ---Should lines be checked for sai.text escape sequences or set as pure text
 	_enabled = false, ---@protected
 	---@see sai.lib.pager.location
 	---@type block_position_t
@@ -28,7 +30,7 @@ local M = {
 
 	-- Visible state
 	_title = '', ---@protected
-	---@type string[]
+	---@type extended_text_template[]
 	_lines = {}, ---@protected
 	_line = 1, ---@protected
 	_page = 1, ---@protected
@@ -38,7 +40,7 @@ local M = {
 	_total_pages = 1, ---@protected
 
 	-- Private state
-	---@type mode_base.text|false
+	---@type sai.api.mode_text|false
 	_mode_text = false, ---@private
 	---@type extended_text_template[]|false
 	_original_text = false, ---@private
@@ -91,7 +93,11 @@ function M:render(redraw_if_unchanged)
 	local ls, le = self._last_start, self._last_end
 
 	local out = self._last_render
-	out[0] = ('%s[%d/%d]'):format(self._title, self._page, self._total_pages)
+	if self._total_pages > 1 then
+		out[0] = ('%s[Page %d/%d]'):format(self._title, self._page, self._total_pages)
+	else
+		out[0] = self._title:gsub('\t$', '')
+	end
 	if ls ~= from or le ~= to then
 		if from > ls then
 			local _end = math.min(from - 1, le)
@@ -136,8 +142,9 @@ function M:render(redraw_if_unchanged)
 
 	if self.escaping then
 		self._mode_text[self._location] = out
-	else -- this is faster but doesn't allow the lines to contain escape sequences
-		---@diagnostic disable-next-line: undefined-field
+	else -- this is faster but doesn't process escape sequences
+		-- update also the cached value so that new overrides restore the text correctly
+		self._mode_text['_' .. self._location] = out
 		self._mode_text.super.text = { [self._location] = out }
 	end
 end
@@ -201,7 +208,7 @@ function M:set_title(title)
 end
 
 ---@protected
----@param lines string[]
+---@param lines extended_text_template[]
 function M:set_lines(lines)
 	self._lines = lines
 	if self._enabled then self:_recalibrate(false, true) end
@@ -228,7 +235,7 @@ function M:set_page(pagenr) return self:set_line((pagenr - 1) * self._page_size 
 ---@protected
 ---@param height integer
 function M:set_max_height(height)
-	self._height = height
+	self._max_height = height
 	self:_recalibrate(true, false)
 end
 
@@ -254,7 +261,7 @@ function M:_on_dst_change(loc)
 
 	if self._enabled then
 		self._mode_text = sai[sai.mode].text
-		self._original_text = self._mode_text[self._location]
+		self._original_text = self._mode_text[self._location] or false
 		self:render(true)
 	end
 end

@@ -35,34 +35,37 @@ local function replace_exif_vars(line, img)
 	return line
 end
 
-local function replace_sai_vars(line, vars, ev)
+function M.generate_exif_updater(line)
+	return function(img) return replace_exif_vars(line, img) or '' end
+end
+
+local function replace_sai_vars(str, vars, ev)
 	if ev then
-		line = line:gsub(('{%s}'):format(ev.match), U.to_pretty_str(ev.data))
-		if not line or #vars == 1 then return line end
+		str = str:gsub(('{%s}'):format(ev.match), U.to_pretty_str(ev.data))
+		if not str or #vars == 1 then return str end
 	end
 
 	-- process all other variables
-	for var, path in line:gmatch '({sai%.([a-z0-9._]+)})' do
+	for var, path in str:gmatch '({sai%.([a-z0-9._]+)})' do
 		local val = sai
 		for key in path:gmatch '[^.]+' do
 			val = val[key]
 			-- if type(val) == 'function' then val = val() end
 			if val == nil then return end
 		end
-		line = line:gsub(var, U.to_pretty_str(val))
+		str = str:gsub(var, U.to_pretty_str(val))
 	end
-	return line
+	return str
 end
 
-local function generate_exif_updater(line)
-	return function(img) return replace_exif_vars(line, img) or '' end
-end
-
-local function generate_var_updater(line, varpaths)
+function M.generate_var_updater(line, varpaths)
 	return {
 		event = 'OptionSet',
 		pattern = varpaths,
-		callback = function(ev) return replace_sai_vars(line, varpaths, ev):gsub('{', '{{') or '' end,
+		callback = function(ev)
+			local x = replace_sai_vars(line, varpaths, ev)
+			return x and x:gsub('\n%s*', ' '):gsub('{', '{{') or ''
+		end,
 	}
 end
 
@@ -135,9 +138,9 @@ function M:__newindex(placement, x)
 			end
 
 			if #varpaths > 0 then -- dynamic variables
-				v = generate_var_updater(v, varpaths)
+				v = M.generate_var_updater(v, varpaths)
 			elseif v:find '[^{]{[A-Z]' or v:find '^{[A-Z]' then -- exif variables
-				v = generate_exif_updater(v)
+				v = M.generate_exif_updater(v)
 			end
 		end
 

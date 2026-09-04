@@ -20,7 +20,7 @@ local M = {
 	--- Return `true` to remove.
 	---@type boolean|fun(bind:string,bindcfg:bindcfg):boolean
 	map_filter = false,
-	persist_mode_change = false, --- should mode change disable this object
+	persist_mode_change = false, --- should mode change shift this object to work in the new mode
 
 	---@type sai.api.mode_base|false
 	_mode_api = false, ---@protected
@@ -54,6 +54,9 @@ function M:_on_mode_change(ev)
 	if ev.event == 'ModeChangedPre' then -- undo keybind changes on old mode
 		M.set_enabled(self, false)
 		self._enabled = true
+		-- disabling also unsubscribed our eventloop hooks: resubscribe so that
+		-- the following ModeChanged event still reaches us
+		self.sai.eventloop(true)
 	else -- apply keybind changes to new mode
 		self._enabled = false
 		M.set_enabled(self, true)
@@ -129,6 +132,7 @@ function M:set_enabled(val)
 			self._api_on_unassigned = false
 		end
 	end
+	self._mode_api.active_mode = self
 	return true
 end
 

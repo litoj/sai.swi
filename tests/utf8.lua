@@ -1,3 +1,4 @@
+---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for sai.bridge.utf8: system module preference, download, LuaJIT-compat
 ---patching, compilation and the utf8 C module behavior. Runs in plain luajit;
 ---the first fallback download needs network access. Development tool: not used

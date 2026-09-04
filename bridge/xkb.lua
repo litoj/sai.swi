@@ -98,13 +98,13 @@ local CANCELLED = 3
 ---@return nil|string
 function M.process_next_input(keysym)
 	if keysym:find('Ctrl', 1, true) or keysym:find('Alt', 1, true) then
-		xkb.xkb_compose_state_reset(self.state)
+		xkb.xkb_compose_state_reset(composer_state)
 		return 'command'
 	end
 	keysym = xkb.xkb_keysym_from_name(keysym:match '[^+]+$', 0)
 
 	if not keysym then
-		xkb.xkb_compose_state_reset(self.state)
+		xkb.xkb_compose_state_reset(composer_state)
 		return 'waiting'
 	end
 

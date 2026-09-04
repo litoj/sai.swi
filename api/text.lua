@@ -32,11 +32,6 @@ function M:set_enabled(val)
 	end
 end
 
-function M:set_status(val)
-	self.super.status = val
-	return false
-end
-
 -- transform scale factor into a pixel value
 function M:set_line_spacing(val) self.super.spacing = math.floor((val - 1) * self._size) end
 

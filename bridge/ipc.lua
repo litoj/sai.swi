@@ -13,12 +13,13 @@ local function unpack_u32_le(s) return s:byte(1) + s:byte(2) * 256 + s:byte(3) *
 ---IPC: remote Lua code execution via Unix domain socket.
 ---@class sai.bridge.ipc
 ---@field enabled boolean starts/stops the server or client
----@field private _socket_path string
+---@field protected _socket_path string note - set at construction
+---@field private _leave_hook hook.base|false
 local M = {
 	_enabled = false, ---@protected
 	_max_msg_size = 1024 * 1024, ---@private
 	_timeout = 5, ---@private
-	_leave_hook = nil, ---@private
+	_leave_hook = false, ---@private
 }
 
 function M:set_enabled(val)
@@ -43,26 +44,23 @@ local backer_meta = {
 		if setter then
 			setter(self, val, key)
 		else
-			rawset(self, key, val)
+			error('tried to set: sai.bridge.ipc.' .. key)
 		end
 	end,
 }
 
----Server: a socket server extension - signal-driven when sai handles the
----Signal events, otherwise call `poll(0)` manually (poll-driven).
----@class sai.bridge.ipc.server : sai.bridge.ipc, sai.bridge.socket.server
+---@class sai.bridge.ipc.server: sai.bridge.ipc,sai.bridge.socket.server
 local server = {
 	super = sock.Server,
-	_signal = 'USR2', ---@protected signal for the socket io or false to disable
+	---@type 'USR1'|'USR2'|false
+	_signal = 'USR2', ---@protected signal for the socket io or false to require manual poll(0) calls
 }
 setmetatable(server, { __index = server.super })
 
----@generic O: sai.bridge.ipc.server
----@param self `O` with `_socket_path` set
----@return `O`
-function server.new(self)
-	U.new_object(self, server)
-	U.new_object(self, M)
+---Requires just _socket_path set
+---@return self
+function server:new()
+	U.new_object(U.new_object(U.new_object(self, server), M), sock.Server)
 	if type(self._socket_path) ~= 'string' or #self._socket_path == 0 then error 'IPC: path is required' end
 	return setmetatable(self, backer_meta)
 end
@@ -74,15 +72,13 @@ function server:set_enabled(val)
 	if val then
 		if type(self._socket_path) ~= 'string' then error 'IPC: socket path not set' end
 
-		self.path = self._socket_path
-		self.signal = self._signal
 		sock.Server.new(self)
 
 		M.set_enabled(self, true)
 	else
 		M.set_enabled(self, false)
 
-		if self.listen_fd >= 0 then self:stop() end
+		if self._listen_fd >= 0 then self:stop() end
 	end
 end
 
@@ -133,19 +129,16 @@ function server:on_conn(conn)
 	conn:close()
 end
 
----Client: a socket connection extension - connects, synchronous send/recv.
----@class sai.bridge.ipc.client : sai.bridge.ipc, sai.bridge.socket.conn
+---@class sai.bridge.ipc.client: sai.bridge.ipc,sai.bridge.socket.conn
 local client = {
 	super = sock.Conn,
 }
 setmetatable(client, { __index = client.super })
 
----@generic O: sai.bridge.ipc.client
----@param self `O` with `_socket_path` set
----@return `O`
-function client.new(self)
-	U.new_object(self, client)
-	U.new_object(self, M)
+---Requires just _socket_path set
+---@return self
+function client:new()
+	U.new_object(U.new_object(U.new_object(self, client), M), sock.Conn)
 	if type(self._socket_path) ~= 'string' or #self._socket_path == 0 then error 'IPC: path is required' end
 	return setmetatable(self, backer_meta)
 end
@@ -157,7 +150,7 @@ end
 ---@return string? result
 ---@return string? err
 function client:send(code)
-	if self.fd < 0 then return nil, 'not connected' end
+	if self._fd < 0 then return nil, 'not connected' end
 
 	if type(code) == 'function' then
 		local ok, dumped = pcall(string.dump, code)
@@ -189,7 +182,6 @@ function client:set_enabled(val)
 	if val then
 		if type(self._socket_path) ~= 'string' then error 'IPC: socket path not set' end
 
-		self.path = self._socket_path
 		sock.Conn.new(self)
 		self:set_timeouts(self._timeout)
 
@@ -197,13 +189,14 @@ function client:set_enabled(val)
 	else
 		M.set_enabled(self, false)
 
-		if self.fd >= 0 then self:close() end
+		if self._fd >= 0 then self:close() end
 	end
 end
 
 ---@param path string?
 ---@return sai.bridge.ipc.server
 function M.server(path)
+	---@diagnostic disable-next-line: missing-fields
 	local self = server.new {
 		_socket_path = path or ('%s/%s-%d.socket'):format( -- default path
 			os.getenv 'XDG_RUNTIME_DIR' or '/tmp',
@@ -218,6 +211,7 @@ end
 ---@param path string
 ---@return sai.bridge.ipc.client
 function M.client(path)
+	---@diagnostic disable-next-line: missing-fields
 	local self = client.new { _socket_path = path }
 	self:set_enabled(true)
 	return self

@@ -1,3 +1,4 @@
+---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for sai.api.eventloop: hook matching and the trigger/unsubscribe
 ---interaction. Runs in plain luajit with a stubbed swayimg table.
 ---Development tool: not used during normal swayimg operation.
@@ -10,6 +11,13 @@ local H = require 'harness'
 local ok, eq = H.ok, H.eq
 
 local e = require 'sai.api.eventloop'
+
+-- private event names: the matching machinery is name-agnostic and these must
+-- not collide with real subscribers of the documented events
+---@diagnostic disable: assign-type-mismatch -- the event_name_t union cannot know these deliberate private names
+---@type event_name_t, event_name_t, event_name_t, event_name_t, event_name_t
+local E1, E2, E3, E4, ELeave = 'Shift1', 'Shift2', 'Shift3', 'Shift4', 'Leave'
+---@diagnostic enable: assign-type-mismatch
 
 -- the eventloop reads the current mode and logs callback errors through
 -- these globals; stub them only for the duration of each method - other
@@ -41,78 +49,78 @@ local T = {}
 T.self_deregister_shift = stubbed(function()
 	local fired = {}
 	e.subscribe {
-		event = 'Shift1',
+		event = E1,
 		callback = function()
 			fired[#fired + 1] = 'a'
 			return true
 		end,
 	}
 	e.subscribe {
-		event = 'Shift1',
+		event = E1,
 		callback = function()
 			fired[#fired + 1] = 'b'
 			return true
 		end,
 	}
-	e.trigger { event = 'Shift1', match = 'x' }
+	e.trigger { event = E1, match = 'x' }
 	eq('both hooks fired in one trigger', 2, #fired)
 	ok('first hook fired', fired[1] == 'a')
 	ok('second hook fired despite index shift', fired[2] == 'b')
-	eq('both deregistered', 0, count 'Shift1')
+	eq('both deregistered', 0, count(E1))
 end)
 
 T.once_deregister_shift = stubbed(function()
 	local fired = {}
-	e.subscribe { event = 'Shift2', once = true, callback = function() fired[#fired + 1] = 'a' end }
-	e.subscribe { event = 'Shift2', callback = function() fired[#fired + 1] = 'b' end }
-	e.trigger { event = 'Shift2', match = 'x' }
+	e.subscribe { event = E2, once = true, callback = function() fired[#fired + 1] = 'a' end }
+	e.subscribe { event = E2, callback = function() fired[#fired + 1] = 'b' end }
+	e.trigger { event = E2, match = 'x' }
 	eq('both hooks fired in one trigger', 2, #fired)
-	e.trigger { event = 'Shift2', match = 'x' }
+	e.trigger { event = E2, match = 'x' }
 	eq('only the persistent hook refires', 3, #fired)
 	ok('persistent hook fired again', fired[3] == 'b')
-	e.unsubscribe { event = 'Shift2' }
+	e.unsubscribe { event = E2 }
 end)
 
 T.unsubscribe_other_during_trigger = stubbed(function()
 	local fired_b = false
-	local b = e.subscribe { event = 'Shift3', callback = function() fired_b = true end }
-	e.subscribe { event = 'Shift3', callback = function() e.unsubscribe { id = b } end }
-	e.trigger { event = 'Shift3', match = 'x' }
+	local b = e.subscribe { event = E3, callback = function() fired_b = true end }
+	e.subscribe { event = E3, callback = function() e.unsubscribe { id = b } end }
+	e.trigger { event = E3, match = 'x' }
 	ok('unsubscribed hook still fired (snapshot)', fired_b)
 	local found_b = false
-	for h in pairs(e.find_all { event = 'Shift3', match = 'x' }) do
+	for h in pairs(e.find_all { event = E3, match = 'x' }) do
 		if h == b then found_b = true end
 	end
 	ok('but is gone after the trigger', not found_b)
-	e.unsubscribe { event = 'Shift3' }
+	e.unsubscribe { event = E3 }
 end)
 
 T.exit_pattern = stubbed(function()
 	-- like SwiLeavePre cleanup hooks: N self-deregistering hooks must all
 	-- run on a single trigger, leaving none behind
 	for _ = 1, 5 do
-		e.subscribe { event = 'Leave', callback = function() return true end }
+		e.subscribe { event = ELeave, callback = function() return true end }
 	end
-	e.trigger { event = 'Leave', match = '0' }
-	eq('no hooks left after one trigger', 0, count 'Leave')
+	e.trigger { event = ELeave, match = '0' }
+	eq('no hooks left after one trigger', 0, count(ELeave))
 end)
 
 T.match_filtering = stubbed(function()
 	local hits = 0
-	e.subscribe { event = 'Shift4', match = 'go', callback = function() hits = hits + 1 end }
-	e.trigger { event = 'Shift4', match = 'other' }
+	e.subscribe { event = E4, match = 'go', callback = function() hits = hits + 1 end }
+	e.trigger { event = E4, match = 'other' }
 	eq('no match, no fire', 0, hits)
-	e.trigger { event = 'Shift4', match = 'go' }
+	e.trigger { event = E4, match = 'go' }
 	eq('match fires', 1, hits)
-	e.trigger { event = 'Shift4', match = 'go' }
+	e.trigger { event = E4, match = 'go' }
 	eq('without once it refires', 2, hits)
 
 	local hits_once = 0
-	e.subscribe { event = 'Shift4', match = 'go', once = true, callback = function() hits_once = hits_once + 1 end }
-	e.trigger { event = 'Shift4', match = 'go' }
-	e.trigger { event = 'Shift4', match = 'go' }
+	e.subscribe { event = E4, match = 'go', once = true, callback = function() hits_once = hits_once + 1 end }
+	e.trigger { event = E4, match = 'go' }
+	e.trigger { event = E4, match = 'go' }
 	eq('once fires exactly once', 1, hits_once)
-	e.unsubscribe { event = 'Shift4' }
+	e.unsubscribe { event = E4 }
 end)
 
 if not _G._TEST_RUNNER then

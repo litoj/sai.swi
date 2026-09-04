@@ -20,7 +20,9 @@ local binds = require 'sai.binds'
 local M = {
 	super = require 'sai.mode.custom',
 	_trigger = false, -- disable trigger to ensure text is visible even when set to `status`
-	map_filter = function(b) return not b:match '%u%l*$' end,
+	map_filter = function(b)
+		return not b:find '%u[%l%d]*$' and not b:find('Ctrl', 1, true) and not b:find('Alt', 1, true)
+	end,
 
 	-- Public, changeable at any time
 	---hook called on every text change
@@ -41,12 +43,15 @@ local M = {
 	_visual = false, ---@protected
 
 	-- TODO: make available as U.input that users can call on-demand with custom prompt
+	-- that would be just for the `status` location
 	-- TODO: convert to using lines and pager and create a textbox for line scrolling
 	-- Private state
 	---@see swayimg.viewer.text
 	---@see swayimg.text.status
 	---@type fun(loc:block_position_t, lines:string[])|fun(status:string)|false|swayimg_appmode
 	_raw_update = false, ---@private
+	---@type string|false
+	_saved_status = false, ---@private status text from before the session took over the status line
 }
 setmetatable(M, { __index = M.super })
 
@@ -284,7 +289,7 @@ function M:_on_dst_change(loc)
 	if self._raw_update then
 		if self._location == 'status' then
 			self.sai.text.status_timeout = nil
-			self._raw_update ''
+			sai.text.status = self._saved_status
 		else
 			self.sai.text.enabled = nil
 			local smt = sai[sai.mode].text
@@ -296,6 +301,7 @@ function M:_on_dst_change(loc)
 
 	if self._enabled then
 		if self._location == 'status' then
+			self._saved_status = sai.text.status_timeout == 0 and sai.text.status or ''
 			self.sai.text.status_timeout = 0
 			self._raw_update = function(x) sai.text.status = x end
 		else

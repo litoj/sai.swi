@@ -24,7 +24,6 @@ local M = {
 	_path = 'sai.mode.filter',
 	_prompt = 'Filter:\r',
 	_location = 'topleft',
-	auto_help = true,
 
 	-- Public, changeable at any time
 	update_imagelist_on_confirm = true, ---Should imagelist be set to filtered images

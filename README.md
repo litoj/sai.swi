@@ -104,7 +104,12 @@ https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
 These are modes that aren't meant to be extended or reused, they are just one singleton instance you
 can configure.
 
-- custom **help mode** that lets you see all available keybindings and live-updated settings
+- custom **key help mode** with a tab for every active bind layer - the current mode plus each
+  enabled custom mode overriding it - so you always know which keybinds come from where
+  (toggled with <kbd>F1</kbd> or <kbd>?</kbd>)
+- custom **variable help mode** with a tab for all live-updated settings plus, for every
+  active custom mode, a tab listing the variables it currently overrides
+  (toggled with <kbd>Shift+F1</kbd>)
   <img width="1256" height="764" alt="Image of help mode in the settings section" src="https://github.com/user-attachments/assets/1393488e-a0ba-4bd4-8f9a-26c314ecb112" />
 - **command mode** for live-evaluating lua code (example of extending **input mode**)
 - **two-pane mode** for comparing images (limited by the gallery scaling implementation)
@@ -132,7 +137,6 @@ can configure.
   ```lua
   local fm = require('sai.mode.filter').new {
   	_location = 'topleft',
-  	auto_help = true,
   	-- Public, changeable at any time
   	update_imagelist_on_confirm = true, ---Should imagelist be set to filtered images
   	live_imagelist = true, ---Should imagelist be updated with filtering
@@ -309,10 +313,8 @@ luajit tests/init.lua debug.breakpoints   # one method
 - make input mode into a simple utils function for requesting user input
 - unify pager and input mode
 - generalize completion in filter mode and filter mode itself (for filtering of any content)
-- repurpose help mode just for showing active keybinds, auto-update with deeper sub-modes
-  - add another mode to filter variables and view and change their live values (like mpv `gv`)
-  - create dynamic picker for which elements should be in each text corner (move the bind list)
-  - create a tab list for various categories of keybinds so that it is easier to search through
+- add another mode to filter variables and view and change their live values (like mpv `gv`)
+- create dynamic picker for which elements should be in each text corner (move the bind list)
 - make it easier to make multi-level keybinds (like vim `cd/ce/cb…`)
 - make a snippet for loading keybind config from ranger
 

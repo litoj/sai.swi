@@ -52,7 +52,7 @@
 ---@field formats FormatCfg
 ---@field initialized boolean Whether initialization has completed and config has been loaded
 ---@field pid integer Get the process ID of the swayimg instance (cached). READ-ONLY
----@field [appmode_t] mode_base
+---@field [appmode_t] sai.api.mode_base
 sai = {}
 
 ---Exit from application.
@@ -248,6 +248,14 @@ do -- Event and Hook type definitions
 	---@class hook.User.ShellCmdPost: hook.User
 	---@field match 'ShellCmdPost'
 	---@field callback fun(ev:event.User.ShellCmdPost):(boolean?)
+
+	---@class event.User.Mode: event.User
+	---@field match 'ModePush'|'ModePop'
+	---@field data sai.lib.remapper
+
+	---@class hook.User.Mode: hook.User
+	---@field match 'ModePush'|'ModePop'
+	---@field callback fun(ev:event.User.Mode):(boolean?)
 
 	---@alias sai.eventloop.event
 	---| event.ImgChanged
@@ -470,6 +478,10 @@ do
 	---Reload current view. Causes ImgChanged event.
 	---@param cb? fun() optional callback for action after the refresh
 	function mode_base.reload(cb) end
+
+	---Get information about currently displayed/selected image.
+	---@return swayimg.image # Currently displayed image
+	function mode_base.get_image() end
 end
 
 --------------------------------------------------------------------------------
@@ -536,10 +548,6 @@ end
 sai.viewer = {}
 
 do
-	---Get information about currently displayed image.
-	---@return swayimg.image # Currently displayed image
-	function sai.viewer.get_image() end
-
 	---Set absolute image scale, scaling the change around a zoom center.
 	---@param scale number Absolute value (1.0 = 100%)
 	---@param x integer X coordinate of center point, empty for window center
@@ -614,10 +622,6 @@ sai.slideshow = {}
 ---Helper table for easier mappings for switching between images
 ---@field go sai.gallery.go
 sai.gallery = {}
-
----Get information about currently selected image.
----@return swayimg.image # Currently selected image entry
-function sai.gallery.get_image() end
 
 ---Get information about image displayed at given position.
 ---@param x integer

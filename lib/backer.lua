@@ -47,16 +47,13 @@ function M.__newindex(self, idx, val)
 	end
 end
 
-function M:__tostring()
-	local lines = {}
-	for k, v in pairs(require('sai.lib.utils').get_dynfields(self)) do
-		lines[#lines + 1] = ('%s=%s,'):format(tostring(k), tostring(v))
+function M:__tostring(indent, visited)
+	local copy = {}
+	visited[copy] = visited[self]
+	for k, v in pairs(require('sai.lib.utils').get_dynvars(self)) do
+		copy[k] = v
 	end
-	if #lines <= 5 then
-		return ('{ %s }'):format(table.concat(lines, ' '))
-	else
-		return ('{\n  %s\n}'):format(table.concat(lines, '\n  '))
-	end
+	return require('sai.lib.utils').tbl_to_str(copy, indent, visited)
 end
 
 ---Add field backing logic to the current object; no `super` lookups

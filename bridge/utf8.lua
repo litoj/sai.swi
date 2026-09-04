@@ -39,7 +39,7 @@ end
 ---@field charpattern string pattern matching exactly one utf8 character
 ---@field len fun(s:string, i?:integer, j?:integer):integer? number of characters in the range; nil + position if invalid
 ---@field char fun(...:integer):string characters for the given codepoints
----@field codepoint fun(s:string, i?:integer, j?:integer):integer... codepoints of characters in the range
+---@field codepoint fun(s:string, i?:integer, j?:integer):...integer codepoints of characters in the range
 ---@field offset fun(s:string, n:integer, i?:integer):integer? byte position of the n-th character relative to i
 ---@field codes fun(s:string):fun(s:string, pos:integer):integer, integer iterator over position + codepoint pairs
 ---@field sub fun(s:string, i:integer, j?:integer):string char-aware sub()

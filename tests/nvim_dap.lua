@@ -1,3 +1,4 @@
+---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for sai.nvim_dap: a complete DAP session end-to-end, over the whole
 ---stack - a real swayimg window with the debug harness (sai.bridge.debug)
 ---driven by a headless nvim running nvim-dap. Exercises breakpoint hits in

@@ -19,7 +19,7 @@ local M = {
 	_help_bind_fmt = '%s\t%s', ---@protected
 
 	-- runtime vars - may be changed by the user any time
-	auto_help = false, --- should help_pager be automatically enabled while mode is active
+	auto_help = true, --- should help_pager be automatically enabled while mode is active
 }
 setmetatable(M, { __index = M.super })
 
@@ -46,11 +46,11 @@ end
 function M:new()
 	U.new_object(self, M)
 	if self._path then
-		local name = self._path:gsub('^sai%.', '')
+		local name = self._path:gsub('^sai%.', ''):gsub('mode%.', '')
 		---@diagnostic disable-next-line: missing-fields
 		self.help_pager = pager.new {
 			_path = self._path .. '.help_pager',
-			_title = name:sub(1, 1):upper() .. name:sub(2) .. ' binds:\t',
+			_title = U.pretty_name(name):gsub('%.', ' ') .. ' binds:',
 			_location = 'topright',
 		}
 	end

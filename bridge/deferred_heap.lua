@@ -1,4 +1,28 @@
----@module 'sai.api.deferred_heap'
+---@module 'sai.bridge.deferred_heap'
+
+local ffi = require 'ffi'
+
+-- os.time() has whole-second resolution: a due time recorded just before a
+-- second boundary lands up to 1s early, so every re-arm of the single
+-- swayimg.defer slot (each push re-aims at the earliest item) can fire
+-- callbacks far too soon. The monotonic clock gives exact milliseconds.
+-- ffi.cdef is process-global: a re-require (like the test runner dropping
+-- the module cache) must not declare the struct a second time
+if not pcall(ffi.typeof, 'struct sai_monotonic_ts') then
+	ffi.cdef [[
+	struct sai_monotonic_ts { long tv_sec; long tv_nsec; };
+	int clock_gettime(int clk_id, struct sai_monotonic_ts *tp);
+	]]
+end
+local CLOCK_MONOTONIC = 1
+-- lls cannot resolve cdef'd struct fields on cdata
+local ts = ffi.new 'struct sai_monotonic_ts'
+---@cast ts any
+local function now_ms()
+	ffi.C.clock_gettime(CLOCK_MONOTONIC, ts)
+	-- tonumber: int64 cdata does not auto-convert for math.floor
+	return tonumber(ts.tv_sec) * 1000 + math.floor(tonumber(ts.tv_nsec) / 1e6)
+end
 
 --- Min-heap for keeping track of the next deferred cb to be excuted
 ---@private
@@ -10,7 +34,7 @@ local M = {}
 ---@param ms number milliseconds from now until execution
 ---@param cb function callback to execute
 function M:push(ms, cb)
-	local exec_time = os.time() * 1000 + ms -- estimate intended time of execution
+	local exec_time = now_ms() + ms -- estimate intended time of execution
 	local i = #self + 1
 	self[i] = { time = exec_time, cb = cb }
 
@@ -54,7 +78,7 @@ end
 ---@return integer? ms_remaining until next execution, or nil if empty
 function M:time_to_next()
 	if #self == 0 then return nil end
-	local now = os.time() * 1000
+	local now = now_ms()
 	local remaining = self[1].time - now
 	return math.max(0, remaining)
 end

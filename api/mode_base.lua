@@ -7,33 +7,28 @@ local kp = require 'sai.lib.keybind_processor'
 
 ---@class sai.api.mode_base: mode_base, sai.lib.keybind_processor
 ---@field super swayimg_appmode
----@field _active_binders sai.lib.keybind_processor[] for help mode awareness of various bind layers
+---@field active_mode sai.lib.remapper
+---@field _active_modes sai.lib.remapper[] active custom modes (bind layers), maintained by sai.lib.remapper
 ---@field private _mc_map {[string]:function[]} multi-click map TODO: generalize for any key combo
 local M = { warn_on_duplicates = true, multiclick_delay = 175 }
 
----@return {_path:string, _mappings: sai.lib.keybind_processor.bindmap }}[]
-function M:get_active_bindsets()
-	local bindsets = {}
-	local all = {}
-	for k, v in self._mappings do
-		all[k] = v
-	end
-	for i = #self._active_binders, 1, -1 do
-		local binder = self._active_binders[i]
-		local mappings = {}
-		for k, v in pairs(binder._mappings) do
-			local used = all[k]
-			-- recognize only if it is this mapping and if this is a mapping, not un-mapping
-			if used and used.cb == v.cb then
-				all[k] = nil
-				if used.cb then mappings[k] = v end
+function M:set_active_mode(val)
+	if val._enabled then
+		table.insert(self._active_modes, val)
+		e.trigger { event = 'User', match = 'ModePush', data = val }
+	else
+		for k, v in ipairs(self._active_modes) do
+			if v == val then
+				table.remove(self._active_modes, k)
+				break
 			end
 		end
-		bindsets[#bindsets + 1] = { _path = binder._path, _mappings = mappings }
+		e.trigger { event = 'User', match = 'ModePop', data = val }
 	end
-	bindsets[#bindsets + 1] = { _path = self._path, _mappings = all } -- the rest is the main mode
-	return bindsets
+	return false
 end
+
+function M:get_active_mode() return self._active_modes[#self._active_modes] or self end
 
 function M:set_on_unassigned(fn)
 	self._on_unassigned = fn
@@ -107,7 +102,7 @@ function M.new(self, api_name)
 	local api = self.super ---@diagnostic disable-line: undefined-field
 	---@diagnostic disable: inject-field
 	self._path = 'sai.' .. api_name
-	self._active_binders = {}
+	self._active_modes = {}
 	for k, v in pairs(M) do
 		self[k] = v
 	end

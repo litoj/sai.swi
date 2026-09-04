@@ -100,12 +100,14 @@ function U.deep_backer(defaults, on_set)
 	end
 	---@diagnostic disable-next-line: undefined-field
 	function meta:__call(val) self.__super { [self.__name] = val } end
-	function meta:__tostring()
+	---@diagnostic disable-next-line: redundant-parameter
+	function meta:__tostring(indent, visited)
 		local copy = {}
+		visited[copy] = visited[self]
 		for k, v in pairs(self) do
 			if k:sub(1, 1) == '_' and k:sub(2, 2) ~= '_' then copy[k:sub(2)] = v end
 		end
-		return tostring(copy)
+		return U.tbl_to_str(copy, indent, visited)
 	end
 
 	local self = setmetatable({}, { __index = meta.__index, __newindex = meta.__newindex, __call = on_set })
@@ -123,7 +125,7 @@ U.max_tbl_len = 80
 ---@param indent string?
 function U.tbl_to_str(t, indent, visited)
 	local m = getmetatable(t)
-	if m and m.__tostring then return m.__tostring(t) end
+	if m and m.__tostring then return m.__tostring(t, indent, visited) end
 	indent = (indent or '') .. '  '
 	visited = visited or { [t] = 'root' }
 	local s = {}
@@ -147,6 +149,14 @@ function U.tbl_to_str(t, indent, visited)
 		s[#s + 1] = (type(k) == 'string' and '%s=%s' or '[%s]=%s'):format(tostring(k), tostring(v))
 		space = space - #s[#s]
 	end
+	table.sort(s, function(a, b) -- if number-indexed (`[xxx]`), then go first
+		if a:byte() == 91 then
+			if not b:byte() == 91 then return true end
+		elseif b:byte() == 91 then
+			return false
+		end
+		return a < b
+	end)
 	if space <= 0 then
 		return ('{\n%s%s}'):format(indent, table.concat(s, ',\n' .. indent))
 	else
@@ -193,7 +203,9 @@ function U.ordered_binds(api)
 			if not binds[v] then
 				binds[v] = {
 					bind = {},
-					info = v.desc or (type(v.cb) == 'string' and v.cb) or v.trace,
+					-- first trace line only: the call site is the informative part,
+					-- the rest is the internal chain that just eats pager space
+					info = v.desc or (type(v.cb) == 'string' and v.cb) or v.trace:match '^[^\n]+',
 					-- quality of the source information
 					qual = v.kind == 'default' and 0 or (v.desc and 1) or (type(v.cb) == 'string' and 2) or 3,
 				}
@@ -225,6 +237,87 @@ function U.str_bindlist(api, fmt_str)
 		out[#out + 1] = (fmt_str):format(table.concat(k.bind, ', '), k.info:gsub('[\t\n]', ' '))
 	end
 	return out
+end
+
+---Human-readable mode or bind/var layer name from its module path.
+---@param path string?
+---@return string
+function U.pretty_name(path)
+	local name = (path or 'unknown'):gsub('^sai%.mode%.', ''):gsub('^sai%.', ''):gsub('_', ' ')
+	return (name:gsub('%a+', function(w) return w:sub(1, 1):upper() .. w:sub(2) end))
+end
+
+---Split the currently effective binds of a mode api into per-layer bind sets:
+---each active custom mode gets the binds it overrides, the main mode gets the rest.
+---Topmost layer first, main mode last.
+---@param mode sai.api.mode_base
+---@return {_path:string, _mappings:sai.lib.keybind_processor.bindmap}[]
+function U.get_active_bindsets(mode)
+	local bindsets = {}
+	local all = {}
+	for k, v in pairs(mode.get_mappings()) do
+		all[k] = v
+	end
+	for i = #mode._active_modes, 1, -1 do
+		local binder = mode._active_modes[i]
+		local mappings = {}
+		for k, v in pairs(binder._mappings) do
+			local used = all[k]
+			-- recognize only if it is this mapping and if this is a mapping, not un-mapping
+			if used and used.cb == v.cb then
+				all[k] = nil
+				if used.cb then mappings[k] = v end
+			end
+		end
+		bindsets[#bindsets + 1] = { _path = binder._path, _mappings = mappings }
+	end
+	---@diagnostic disable-next-line: invisible
+	bindsets[#bindsets + 1] = { _path = mode._path, _mappings = all } -- the rest is the main mode
+	return bindsets
+end
+
+---@param wrapper sai.lib.backer API object to inspect
+---@param filter? fun(name:string,value:any):boolean|{[string]:0|false} map of banned values or a filter fn
+---@return {name:string,value:any}[] fields List of settable fields with their current values
+function U.get_dynvars(wrapper, filter)
+	if type(filter) ~= 'function' then
+		local tbl = filter or {}
+		filter = function(k) return tbl[k] == nil end
+	end
+	local backed
+	---@diagnostic disable-next-line: invisible
+	for k, v in pairs(rawget(wrapper, 'super') or {}) do
+		if type(k) == 'userdata' then -- the raw cpp api has fieldmethods hidden in an object
+			backed = v
+			break
+		end
+	end
+	if not backed then backed = {} end
+	local fields = {}
+
+	for backing_field, value in pairs(wrapper) do
+		if backing_field:sub(1, 1) == '_' then
+			local field = backing_field:sub(2)
+
+			-- Check if backing field has an official setter, enabler, or override
+			if (rawget(wrapper, 'set' .. backing_field) or backed[field]) and filter(backing_field, value) then
+				fields[#fields + 1] = { name = field, value = value }
+			end
+		end
+	end
+	table.sort(fields, function(a, b) return tostring(a.name) < tostring(b.name) end)
+
+	return fields
+end
+
+---@param mode_api sai.api.mode_base
+---@return sai.lib.remapper[]
+function U.get_active_modes(mode_api)
+	local modes = {}
+	for i = #mode_api._active_modes, 1, -1 do
+		modes[#modes + 1] = mode_api._active_modes[i]
+	end
+	return modes
 end
 
 ---Nicely format the requested value to human readable rational numbers.
@@ -309,40 +402,6 @@ function U.fuzzy_find(str, match, max_misses)
 	end
 
 	if si <= max_misses then return s, si end
-end
-
----@param wrapper sai.api.proxy API object to inspect
----@param filter? fun(name:string,value:any):boolean|{[string]:0|false} map of banned values or a filter fn
----@return {name:string,value:any}[] fields List of settable fields with their current values
-function U.get_dynfields(wrapper, filter)
-	if type(filter) ~= 'function' then
-		local tbl = filter or {}
-		filter = function(k) return tbl[k] == nil end
-	end
-	local backed
-	---@diagnostic disable-next-line: invisible
-	for k, v in pairs(rawget(wrapper, 'super') or {}) do
-		if type(k) == 'userdata' then -- the raw cpp api has fieldmethods hidden in an object
-			backed = v
-			break
-		end
-	end
-	if not backed then backed = {} end
-	local fields = {}
-
-	for backing_field, value in pairs(wrapper) do
-		if backing_field:sub(1, 1) == '_' then
-			local field = backing_field:sub(2)
-
-			-- Check if backing field has an official setter, enabler, or override
-			if (rawget(wrapper, 'set' .. backing_field) or backed[field]) and filter(backing_field, value) then
-				fields[#fields + 1] = { name = field, value = value }
-			end
-		end
-	end
-	table.sort(fields, function(a, b) return tostring(a.name) < tostring(b.name) end)
-
-	return fields
 end
 
 return U

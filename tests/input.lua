@@ -1,3 +1,4 @@
+---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for sai.mode.input: char-based (utf8) cursor semantics and the
 ---invariant that the text state and the rendered output are always valid
 ---utf8, no matter the operation order. Runs in plain luajit with stubbed

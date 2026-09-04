@@ -1,5 +1,8 @@
 ---@module 'sai.lib.reconfigurer'
 
+local e = require 'sai.api.eventloop'
+local U = require 'sai.lib.utils'
+
 ---@overload fun(apply:fun(self:sai.lib.reconfigurer)|boolean)
 ---@class sai.lib.reconfigurer: sai.api.proxy
 ---@field protected _cfg {mode:string,fb:{[string]:string}} TODO: simplify
@@ -23,6 +26,13 @@ local M = {
 ---@field protected _new {[hook_cfg]:1} hooks to register
 ---@field protected _old {[hook_cfg]:1} removed hooks to put back when the override gets disabled
 ---@field protected _filter {[sai.eventloop.filter.opts]:1} params to unsub existing events by
+
+---Compact one-line description of a hook or an unsubscribe filter entry.
+local function hook_str(h)
+	local ev = type(h.event) == 'table' and table.concat(h.event, ',') or h.event or '*'
+	local sel = h.match or h.pattern or h.group or h.id
+	return ('%s=%s'):format(ev, tostring(sel or ''))
+end
 
 local elmeta = {
 	__index = function(_, idx) error('sai.lib.reconfigurer.eventloop does not support index: ' .. idx) end,
@@ -60,11 +70,21 @@ local elmeta = {
 			self._old = {}
 		end
 	end,
+
+	__tostring = function(self)
+		local hooks, filters = {}, {}
+		for h in pairs(self._new) do
+			hooks[#hooks + 1] = hook_str(h)
+		end
+		for f in pairs(self._filter) do
+			filters[#filters + 1] = hook_str(f)
+		end
+		return U.tbl_to_str { hooks = hooks, filters = filters }
+	end,
 }
 
 ---@return sai.lib.reconfigurer.eventloop
 function M.new_evloop()
-	local e = sai.eventloop
 	---@type sai.lib.reconfigurer.eventloop
 	---@diagnostic disable-next-line: missing-fields
 	local self = { _enabled = false, _new = {}, _old = {}, _filter = {} }
@@ -87,7 +107,9 @@ function M.new_evloop()
 
 	self.find_all = function(f)
 		local h = e._hooks
-		---@diagnostic disable-next-line: inject-field
+		-- the registry swap is the whole point: let find_all see only this
+		-- preset's hooks, in a plain id-keyed table the typed registry is not
+		---@diagnostic disable-next-line: inject-field, assign-type-mismatch
 		e._hooks = self._new
 		local ret = e.find_all(f)
 		---@diagnostic disable-next-line: inject-field
@@ -214,6 +236,19 @@ function M:__call(enable)
 	for k, v in pairs(self) do
 		if k:sub(1, 1) ~= '_' and type(v) == 'table' and k ~= 'super' then v(enable) end
 	end
+end
+
+function M:__tostring()
+	---@type {[string]:any}
+	local dump = {}
+	for k, v in pairs(self._vars) do
+		dump[k] = v.new
+	end
+	-- same traversal as __call: the nested sub-configs, not the internal state
+	for k, v in pairs(self) do
+		if k:sub(1, 1) ~= '_' and type(v) == 'table' and k ~= 'super' then dump[k] = v end
+	end
+	return U.tbl_to_str(dump)
 end
 
 return M

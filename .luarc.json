@@ -1,0 +1,6 @@
+{
+	"runtime": { "version": "LuaJIT" },
+	"type": { "castNumberToInteger": true, "weakNilCheck": true, "weakUnionCheck": true },
+	"diagnostics": { "globals": ["vim"], "disable": [] },
+	"workspace": { "checkThirdParty": false }
+}

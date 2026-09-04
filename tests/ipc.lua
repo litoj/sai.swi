@@ -1,3 +1,4 @@
+---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for sai.bridge.ipc: the IPC communication between separate processes,
 ---end-to-end over the unix socket.
 ---Development tool: not used during normal swayimg operation.
@@ -115,9 +116,9 @@ T.config = scenario(function()
 	-- scenarios below; here only the config semantics
 	local s2 = ipc.server '/tmp/sai_ipc_test_x2.sock'
 	s2._signal = 'USR1'
-	ok('signal set to USR1', rawget(s2, '_signal') == 'USR1')
+	ok('signal set to USR1', s2._signal == 'USR1')
 	s2._signal = false
-	ok('signal set to false', rawget(s2, '_signal') == false)
+	ok('signal set to false', s2._signal == false)
 	s2.enabled = false
 
 	ok('server missing path', not pcall(ipc.server))
@@ -134,7 +135,7 @@ T.poll_driven = scenario(function()
 		server_script(
 			table.concat({
 				('local serv = ipc.server(%q)'):format(sock),
-				"rawset(serv, '_signal', false)",
+				'serv._signal = false',
 				'serv.enabled = false',
 				'serv.enabled = true',
 			}, '\n'),

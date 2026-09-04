@@ -221,7 +221,7 @@ local function send_all(data)
 end
 
 local function parse_frames(conn)
-	local buf = conn.buffer
+	local buf = conn._buffer
 	while true do
 		local hend = buf:find('\r\n\r\n', 1, true)
 		if not hend then break end
@@ -242,7 +242,7 @@ local function parse_frames(conn)
 			end
 		end
 	end
-	conn.buffer = buf
+	conn._buffer = buf
 	if #buf > 1024 * 1024 then
 		log_err 'input overflow'
 		handle_disconnect()
@@ -581,7 +581,7 @@ end
 -- the harness server: a socket server extension
 local dbg_srv = {
 	super = sock.Server,
-	arm_conns = true,
+	_arm_conns = true,
 }
 setmetatable(dbg_srv, { __index = dbg_srv.super })
 
@@ -814,8 +814,8 @@ function M.start(opts)
 	S.break_on_exception = S.exc_default
 
 	S.srv = dbg_srv.new {
-		path = S.path,
-		signal = S.signal,
+		_socket_path = S.path,
+		_signal = S.signal,
 	}
 	S.state = 'listening'
 

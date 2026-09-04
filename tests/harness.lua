@@ -1,3 +1,4 @@
+---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Shared test harness for the tests in this directory.
 ---Development tool: not used during normal swayimg operation.
 ---
