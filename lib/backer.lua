@@ -48,10 +48,11 @@ function M.__newindex(self, idx, val)
 end
 
 function M:__tostring(indent, visited)
+	visited = visited or { [self] = self._path }
 	local copy = {}
 	visited[copy] = visited[self]
-	for k, v in pairs(require('sai.lib.utils').get_dynvars(self)) do
-		copy[k] = v
+	for _, field in ipairs(require('sai.lib.utils').get_dynvars(self)) do
+		copy[field.name] = field.value
 	end
 	return require('sai.lib.utils').tbl_to_str(copy, indent, visited)
 end

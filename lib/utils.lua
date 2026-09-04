@@ -102,6 +102,7 @@ function U.deep_backer(defaults, on_set)
 	function meta:__call(val) self.__super { [self.__name] = val } end
 	---@diagnostic disable-next-line: redundant-parameter
 	function meta:__tostring(indent, visited)
+		visited = visited or { [self] = 'root' }
 		local copy = {}
 		visited[copy] = visited[self]
 		for k, v in pairs(self) do
@@ -125,9 +126,9 @@ U.max_tbl_len = 80
 ---@param indent string?
 function U.tbl_to_str(t, indent, visited)
 	local m = getmetatable(t)
-	if m and m.__tostring then return m.__tostring(t, indent, visited) end
 	indent = (indent or '') .. '  '
 	visited = visited or { [t] = 'root' }
+	if m and m.__tostring then return m.__tostring(t, indent, visited) end
 	local s = {}
 	local space = U.max_tbl_len
 	for k, v in pairs(t) do

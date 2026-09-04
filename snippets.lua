@@ -198,8 +198,8 @@ function M.cycle_position()
 end
 
 function M.two_pane_mode(key)
-	local super = require 'sai.mode.custom'
-	---@class tp: sai.mode.custom
+	local super = require 'sai.lib.remapper'
+	---@class tp: sai.lib.remapper
 	local tp = { _path = 'snippets.two_pane_mode' }
 	function tp:set_enabled(val)
 		if self._enabled == val then return end

@@ -93,11 +93,11 @@ https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
 
 ### Custom modes
 
-- easily make temporary changes to anything in the api
-- all changes are active only while the custom mode is enabled - see `snippets.two_pane_mode`
-- make variable changes and optinally allow the user to adjust the user to adjust them
+- temporary changes to the api through `sai.lib.remapper` instances - see `snippets.two_pane_mode`
+- variable changes, with the option to let the user adjust them
 - automatic event subscriptions and deletions
-- define custom keybinds with automatic help page displaying the keybinds
+- custom keybinds, automatically listed in a **key help mode** tab (no control
+  keybinds; <kbd>F1</kbd> gives the full mode)
 
 #### Sealed modes
 
@@ -310,11 +310,13 @@ luajit tests/init.lua debug.breakpoints   # one method
 
 ### TODOs
 
+- way to fake partially enabled text layer (disable all besides the active one)
+  - when disabled, enable text layer but hide all textfield layers with `{}`
+- clever state restoring by deciding what to override and what to keep based on active modes order
 - make input mode into a simple utils function for requesting user input
 - unify pager and input mode
 - generalize completion in filter mode and filter mode itself (for filtering of any content)
 - add another mode to filter variables and view and change their live values (like mpv `gv`)
-- create dynamic picker for which elements should be in each text corner (move the bind list)
 - make it easier to make multi-level keybinds (like vim `cd/ce/cb…`)
 - make a snippet for loading keybind config from ranger
 

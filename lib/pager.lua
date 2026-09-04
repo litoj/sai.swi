@@ -5,7 +5,7 @@ local backer = require 'sai.lib.backer'
 local reconfigurer = require 'sai.lib.reconfigurer'
 local U = require 'sai.lib.utils'
 
----@class sai.lib.pager: sai.mode.custom
+---@class sai.lib.pager: sai.lib.remapper
 ---Activation toggle. Configure all the preceding definition fields before enabling.
 ---@field page integer
 ---@field page_size integer Readonly - useful to advance by all visible lines instead of fixed page

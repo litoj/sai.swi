@@ -6,10 +6,15 @@ local kp = require 'sai.lib.keybind_processor'
 local backer = require 'sai.lib.backer'
 local reconfigurer = require 'sai.lib.reconfigurer'
 
----Keybind override: temporarily replace keybindings in current mode.
----Implements the same map/unmap interface as mode_base.
+---Keybind override: temporarily replace keybindings and settings of the
+---current mode. Implements the same map/unmap interface as mode_base.
+---Supports also eventloop auto registration and deregistration +
+--- - `find_all` gets just your mode changes
+--- - `unsubscribe` temporarily disables filtered events or permanently removes mode event by id
 ---@class sai.lib.remapper: sai.lib.keybind_processor, sai.lib.backer
 ---@field enabled? boolean
+---@field auto_help boolean display sai.mode.key_help while the mode is active
+---@field map fun(bind:string|string[],fn:fun(self:self),desc:string?)
 ---Unbound key handler with auto-injected _self_
 ---On set() the function will get wrapped with _self_, so the value on get() will differ
 ---@field on_unassigned fun(self:sai.lib.remapper, bind:string)
@@ -21,6 +26,7 @@ local M = {
 	---@type boolean|fun(bind:string,bindcfg:bindcfg):boolean
 	map_filter = false,
 	persist_mode_change = false, --- should mode change shift this object to work in the new mode
+	auto_help = true, --- should key_help be automatically displayed while the mode is active
 
 	---@type sai.api.mode_base|false
 	_mode_api = false, ---@protected
@@ -63,8 +69,17 @@ function M:_on_mode_change(ev)
 	end
 end
 
----@param _ nil action cannot differ from config in remapper
-function M:_rawmap(b, cfg, _)
+local fndbg = debug.getinfo
+
+---Inject the mode instance into single-argument callbacks.
+---@param fn string|fun(self:self)? action to wrap
+function M:_rawmap(b, cfg, fn)
+	if cfg and not cfg._wrapped then
+		---@diagnostic disable-next-line: inject-field
+		cfg._wrapped = true
+		if type(fn) == 'function' and fndbg(fn, 'u').nparams == 1 then cfg.cb = function() fn(self) end end
+	end
+
 	if self._enabled then
 		self._omaps[b] = self._mode_api._mappings[b] or false
 		self._mode_api:_setmap(b, cfg)

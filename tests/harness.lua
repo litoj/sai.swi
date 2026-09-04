@@ -58,9 +58,14 @@ H.abs_path = abs_path
 
 local passed, failed, skipped = 0, 0, 0
 
+-- output is only inspected on failure: print the per-assertion noise (PASS
+-- lines, method headers) only when explicitly asked to (VERBOSE=1)
+local verbose = os.getenv 'VERBOSE' ~= nil
+H.verbose = verbose
+
 function H.pass(name)
 	passed = passed + 1
-	print('PASS ' .. name)
+	if verbose then print('PASS ' .. name) end
 end
 
 function H.fail(name, extra)
@@ -171,7 +176,7 @@ function H.run(T, filter)
 	end
 	table.sort(names)
 	for _, name in ipairs(names) do
-		print('--- ' .. name .. ' ---')
+		if verbose then print('--- ' .. name .. ' ---') end
 		local ok, err = pcall(T[name], H)
 		if not ok then H.fail(name .. ' crashed', err) end
 	end

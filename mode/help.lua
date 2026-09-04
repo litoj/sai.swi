@@ -15,13 +15,13 @@ local binds = require('sai.binds').help
 ---@alias help_tabs fun(self:sai.mode.help):help_tab[]
 
 ---Generic paged help overlay with tabbed content.
----@class sai.mode.help: sai.mode.custom
+---@class sai.mode.help: sai.lib.remapper
 ---@field enabled boolean
 ---@field pager sai.lib.pager
 ---@field tab integer which tab are we on
 ---@field tabs help_tabs
 local M = {
-	super = require 'sai.mode.custom',
+	super = require 'sai.lib.remapper',
 	persist_mode_change = true,
 
 	_tab = 1, ---@protected
@@ -80,7 +80,8 @@ function M:set_tab(idx)
 	local tab = tabs[self._tab]
 	self.pager:bulk_change(function(pager)
 		pager.escaping = not not tab.escape
-		pager.title = ('[Tab %d/%d] %s\t'):format(self._tab, #tabs, tab.title)
+		-- without the mode's own binds there is no way to switch tabs
+		pager.title = self._enabled and ('[Tab %d/%d] %s\t'):format(self._tab, #tabs, tab.title) or (tab.title .. '\t')
 		pager.lines = tab.lines
 		pager.line = 1
 	end)
@@ -113,7 +114,7 @@ function M:set_enabled(val)
 		if mode ~= 'gallery' then self.sai[mode].scale = 100 / sai[mode].get_image().width end
 	else
 		self.pager.enabled = false
-		M.super.set_enabled(self, val)
+		M.super.set_enabled(self, val) -- the ModePop hook re-derives the display
 		return true
 	end
 

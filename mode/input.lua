@@ -9,7 +9,7 @@ local binds = require 'sai.binds'
 ---A text input mode that captures key events for text entry.
 ---Configure hooks and parameters before enabling.
 ---All positions are in characters (utf8-aware); the text itself is always valid utf8.
----@class sai.mode.input: sai.mode.custom
+---@class sai.mode.input: sai.lib.remapper
 ---@field text string state of user input (always valid utf8)
 ---@field col integer cursor position (1-based insert position, in characters)
 ---@field line integer cursor line (1-based)
@@ -18,7 +18,7 @@ local binds = require 'sai.binds'
 ---@field map fun(bind:string|string[],key_or_fn:string|fun(self:self),desc:string?)
 ---@field protected confirmed boolean? has input been confirmed or aborted, useful for disabling logic
 local M = {
-	super = require 'sai.mode.custom',
+	super = require 'sai.lib.remapper',
 	_trigger = false, -- disable trigger to ensure text is visible even when set to `status`
 	map_filter = function(b)
 		return not b:find '%u[%l%d]*$' and not b:find('Ctrl', 1, true) and not b:find('Alt', 1, true)

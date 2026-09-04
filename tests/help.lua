@@ -90,7 +90,7 @@ T.key_help_lifecycle = with_env(function(h)
 	h.eq('registered as bind layer of the current mode', 1, #sai.viewer._active_modes)
 	h.ok('binds applied to the raw api', raw_binds['viewer:Escape'] ~= nil)
 	h.eq('pager in the right pane', 'topright', key_help.pager.location)
-	h.ok('help_pager not enabled for the mode', not key_help.help_pager._enabled)
+	h.ok('no display self-recursion', key_help.auto_help == false)
 
 	h.contains('pager title', key_help.pager.title, 'Key Help')
 	h.contains('first tab is the topmost bind layer', key_help.pager.title, 'Key Help')
@@ -189,8 +189,50 @@ T.key_help_dynamic_layers = with_env(function(h)
 	key_help.enabled = false
 end)
 
+T.key_help_auto_display = with_env(function(h)
+	local custom = require 'sai.lib.remapper'
+	local layer = custom.new { _path = 'sai.mode.test_layer' }
+	layer.map('F13', function() end, 'do the thing')
+
+	h.ok('no display before the mode', not key_help.pager._enabled)
+	layer.enabled = true
+	h.ok('displayed for the mode', key_help.pager._enabled)
+	h.ok('strict: help mode not enabled', not key_help._enabled)
+	h.eq('no help bind layer registered', 1, #sai.viewer._active_modes)
+	h.contains('the mode own tab shown', key_help.pager.title, 'Test Layer')
+	h.ok('no tab block without the control binds', not key_help.pager.title:find('Tab', 1, true))
+	h.contains('mode binds listed', table.concat(key_help.pager.lines, '\n'), 'do the thing')
+
+	-- F1 full mode over the display, then back to the strict display
+	key_help.enabled = true
+	h.ok('full mode takes over', key_help._enabled)
+	h.contains('tab block back with the control binds', key_help.pager.title, 'Tab')
+	key_help.enabled = false
+	h.ok('display restored after the full mode', key_help.pager._enabled)
+	h.ok('strict again', not key_help._enabled)
+	h.ok('no tab block again', not key_help.pager.title:find('Tab', 1, true))
+
+	local layer2 = custom.new { _path = 'sai.mode.test_layer2' }
+	layer2.map('F14', function() end, 'other thing')
+	layer2.enabled = true
+	h.contains('push retargets the display', key_help.pager.title, 'Test Layer2')
+	layer2.enabled = false
+	h.contains('pop falls back to the previous mode', key_help.pager.title, 'Test Layer')
+
+	-- a mode without auto_help on top turns the display off
+	local quiet = custom.new { _path = 'sai.mode.test_layer', auto_help = false }
+	quiet.map('F15', function() end, 'quiet thing')
+	quiet.enabled = true
+	h.ok('auto_help false: no display', not key_help.pager._enabled)
+	quiet.enabled = false
+	h.ok('display back with the layer gone', key_help.pager._enabled)
+
+	layer.enabled = false
+	h.ok('display off after the last mode', not key_help.pager._enabled)
+end)
+
 T.var_help_dynamic_layers = with_env(function(h)
-	local custom = require 'sai.mode.custom'
+	local custom = require 'sai.lib.remapper'
 	local layer = custom.new { _path = 'sai.mode.test_layer' }
 	layer.sai.text.size = 42 -- an override to list in the varset sublist
 
@@ -287,6 +329,29 @@ T.var_help_mode_varsets = with_env(function(h)
 
 	var_help.enabled = false
 	key_help.enabled = false
+end)
+
+T.cmd_auto_display = with_env(function(h)
+	sai.text.enabled = false -- the text overlay is off in the user config
+	-- the full-mode disable below cmd restores binds out of order: fix the
+	-- stale viewer mapping afterwards
+	local escape = sai.viewer._mappings['Escape']
+	local cmd = require('sai.mode.cmd').new {}
+
+	key_help.enabled = true
+	h.ok('full mode on', key_help._enabled)
+	cmd.enabled = true
+	h.ok('overlay on with the display', sai.text.enabled == true)
+	key_help.enabled = false
+	h.ok('display re-derived', key_help.pager._enabled)
+	h.ok('overlay healed', sai.text.enabled == true)
+	h.contains('the mode own tab shown', key_help.pager.title, 'Cmd')
+	h.ok('strict again', not key_help._enabled)
+
+	cmd.enabled = false
+	h.ok('display off with the last mode', not key_help.pager._enabled)
+	h.ok('overlay reverted with the display', sai.text.enabled == false)
+	sai.viewer._mappings['Escape'] = escape
 end)
 
 if not _G._TEST_RUNNER then

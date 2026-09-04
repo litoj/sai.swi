@@ -187,6 +187,8 @@ swayimg.on_window_resize(function()
 		}
 
 		require('sai.binds').default()
+		-- eager: key_help's eventloop hook powers the auto help display
+		require 'sai.mode.key_help'
 	end
 end)
 

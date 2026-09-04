@@ -80,14 +80,20 @@ end
 -- a system-provided module must take precedence over the compiled one
 function T.system_preferred(h)
 	local sys = package.loaded['lua-utf8']
-	if not sys then h.skip 'no system module installed' end
+	if not sys then
+		h.skip 'no system module installed'
+		return
+	end
 	h.ok('bridge returns the system module', M == sys)
 end
 
 -- with the system module hidden, the bridge must fall back to its own build
 function T.fallback_build(h)
 	local sys = package.loaded['lua-utf8']
-	if not sys then h.skip 'no system module: fallback already tested above' end
+	if not sys then
+		h.skip 'no system module: fallback already tested above'
+		return
+	end
 
 	-- LuaJIT caches 'lua-utf8' under the dash-suffix name 'utf8' too, and the
 	-- 'utf8' probe can even pick up this very test file: both names must be hidden

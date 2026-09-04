@@ -56,6 +56,7 @@ function M:on_text_change(text)
 	end
 end
 
+-- FIXME: still broken and doesn't easily show previous hist items for >1
 function M:hist_next()
 	for i = self._hist_pos - 1, 1, -1 do
 		if self._history[i]:find(self._hist_matcher, 1, true) then

@@ -56,6 +56,10 @@ e.subscribe {
 	callback = function() work(4, 'signal') end,
 }
 
+-- a custom command mode: the dap test breaks on its text layer enablement
+cmd = require('sai.mode.cmd'):new()
+cmd.location = 'topright'
+
 require('sai.bridge.ipc').server(%q)
 
 print 'E2E_READY'
@@ -79,7 +83,7 @@ print(res or ('ERR ' .. tostring(err)))
 c.enabled = false
 ]]
 
-local function driver_src(pid, bp_line)
+local function driver_src(pid, bp_line, text_bp_line)
 	local dbg_sock = ('%s/sai-debug-%d.sock'):format(os.getenv 'XDG_RUNTIME_DIR' or '/tmp', pid)
 	local header = table.concat({
 		('local e2e = %q'):format(e2e),
@@ -88,6 +92,7 @@ local function driver_src(pid, bp_line)
 		('local ipc_sock = %q'):format(ipc_sock),
 		('local pid = %d'):format(pid),
 		('local bp_line = %d'):format(bp_line),
+		('local text_bp_line = %d'):format(text_bp_line),
 		('local dap_root = %q'):format(dap_root),
 		('local nio_root = %q'):format(nio_root),
 		'',
@@ -233,7 +238,7 @@ local function ipc_marker(name)
 	return ([=[local f = io.open('%s/%s', 'w') f:write 'served' f:close()]=]):format(e2e, name)
 end
 
-local function assert_stop(tag)
+local function assert_stop(tag, name, line, path)
 	if not wait_stopped() then
 		fail(tag .. ' stopped')
 		return nil
@@ -244,9 +249,11 @@ local function assert_stop(tag)
 		fail(tag .. ' frame present')
 		return nil
 	end
-	eq(tag .. ' frame name', 'work', frame.name)
-	eq(tag .. ' frame line', bp_line, frame.line)
-	eq(tag .. ' frame path', config_path, frame.source and frame.source.path)
+	-- name: false skips the check - proxy-invoked setters report the local
+	-- they were called through ('fn'), not the defined method name
+	if name ~= false then eq(tag .. ' frame name', name or 'work', frame.name) end
+	eq(tag .. ' frame line', line or bp_line, frame.line)
+	eq(tag .. ' frame path', path or config_path, frame.source and frame.source.path)
 	return frame
 end
 
@@ -270,6 +277,13 @@ local function main()
 	vim.cmd('edit ' .. config_path)
 	local buf = vim.api.nvim_get_current_buf()
 	bps.set({}, buf, bp_line)
+
+	-- registered up front: nvim-dap does not push bps.set() changes for
+	-- buffers of a session that is already running; resolve() mirrors the
+	-- debuggee's realpath of the symlinked config dir
+	local text_path = vim.fn.resolve(swi_config .. '/swayimg/sai/api/text.lua')
+	vim.cmd('edit ' .. text_path)
+	bps.set({}, vim.api.nvim_get_current_buf(), text_bp_line)
 
 	local discovered = false
 	for _, s in ipairs(sdap.sockets()) do
@@ -350,6 +364,23 @@ local function main()
 	frame = assert_stop 'final'
 	ok('final completed', run_to_completion 'RESULT final 3')
 
+	-- the locals view must survive sai proxy objects: a __tostring error in
+	-- the pretty printer used to drop the whole variables/evaluate response,
+	-- leaving the locals empty and tables unprintable. Enabling the text
+	-- layer breaks in its setter
+	ipc_exec("sai.text.enabled = true\nprint 'CMD_READY'\nio.stdout:flush()")
+	frame = assert_stop('text layer', false, text_bp_line, text_path)
+	if frame then
+		local names = locals(frame)
+		ok('text locals present', names.self ~= nil and names.val ~= nil)
+		eq('text val', 'true', names.val)
+		ok('text locals printed', (names.self or ''):find('size=24', 1, true) ~= nil)
+		ok('sai.text printed', (evaluate(frame, 'sai.text') or ''):find('size=24', 1, true) ~= nil)
+		local swt = evaluate(frame, 'swayimg.text')
+		ok('swayimg.text printed', swt ~= nil and #swt > 20 and swt:find('visible', 1, true) ~= nil)
+	end
+	ok('text layer completed', run_to_completion 'CMD_READY')
+
 	ok('all results in log', log_has 'RESULT init 103' and log_has 'RESULT ipc 6'
 		and log_has 'RESULT signal 10' and log_has 'RESULT defer 15'
 		and log_has 'RESULT concurrent 21' and log_has 'RESULT final 3')
@@ -417,12 +448,20 @@ local function run_session(images)
 	local _, nl = config_src:sub(1, offset):gsub('\n', '\n')
 	local bp_line = nl + 1
 
-	H.write_file(driver_path, driver_src(pid, bp_line))
+	-- the text layer setter: first line of the set_enabled body
+	local text_src = assert(H.read_file(H.sai_dir .. '/api/text.lua'))
+	local toffset = assert(text_src:find('if val == true', 1, true))
+	local _, tnl = text_src:sub(1, toffset):gsub('\n', '\n')
+	local text_bp_line = tnl + 1
+
+	H.write_file(driver_path, driver_src(pid, bp_line, text_bp_line))
 	local out = H.sh(('timeout 60 nvim --headless -u %s < /dev/null'):format(driver_path))
 	H.write_file(e2e .. '/nvim.log', out)
 
 	for line in out:gmatch '[^\r\n]+' do
-		if line:match '^PASS ' or line:match '^FAIL ' or line:match '%d+ passed, %d+ failed' then print(line) end
+		if line:match '^FAIL ' or line:match '%d+ passed, %d+ failed' or (line:match '^PASS ' and H.verbose) then
+			print(line)
+		end
 	end
 
 	local driver_failed = 0
