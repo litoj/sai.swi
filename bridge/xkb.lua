@@ -38,11 +38,12 @@ xkb = U.lazyload(function()
 end)
 
 ---@param k string|integer the xkb keystring
----@return string utf8_char
+---@return string? utf8_char
 function M.xkb_to_utf8(k)
 	local toi = math.floor
 	local ch = string.char
 	k = xkb.xkb_keysym_to_utf32(type(k) == 'string' and xkb.xkb_keysym_from_name(k, 0) or k)
+	if k == 0 then return end
 
 	if k < 0x80 then
 		return ch(k)
@@ -130,8 +131,7 @@ function M.process_next_input(keysym)
 
 	-- normal text/sym - no compose sequence
 	local text = M.xkb_to_utf8(keysym)
-	if text ~= '\0' then return 'text', text end
-	return 'command'
+	return text and 'text' or 'command', text
 end
 
 --- Key formatting ---
@@ -213,17 +213,22 @@ function M.userbind_to_xkb(bind)
 end
 
 function M.short_key_name(bind)
-	bind = bind:gsub('Alt[+-]', 'A-'):gsub('Shift[+-]', 'S-'):gsub('Ctrl[+-]', 'C-')
-	if bind:match 'ISO_Left_Tab$' then
-		bind = bind:gsub('S-(.*)ISO_Left_Tab', '%1')
-	else
-		local key = bind:match '[^+-]*.$'
-		local found = M.rev_key_map[key] or M.xkb_to_utf8(key)
-		bind = bind:sub(1, -#key - 1) .. (found or key)
-		if found then return ('<%s>'):format(bind) end
-	end
-	if bind:match '-.' then bind = ('<%s>'):format(bind) end
-	return bind
+	bind = bind:gsub('Alt[+-]', 'A-'):gsub('Shift[+-]', 'S-'):gsub('Ctrl[+-]', 'C-'):gsub('ISO_Left_Tab$', 'Tab')
+
+	local key = bind:match '[^+-]*.$'
+	if #bind == 1 and key:match '[%d%l]' then return key end
+	-- non-printable keysyms (Home, F1…, Tab…) map to a control char or '\0' via
+	-- xkb_to_utf8, which would truncate or mangle the rendered string - so keep
+	-- the readable xkb name for anything below a printable char (space)
+	local short_key = M.rev_key_map[key]
+	if not short_key and key ~= 'Tab' then short_key = M.xkb_to_utf8(key) end
+	short_key = short_key or key
+	local prefix = bind:sub(1, -#key - 1)
+	-- a capitalized word name (End, Home, Del, Tab) reads unambiguously on its own;
+	-- anything else (a single char, an abbreviation, a function key) is bracketed so
+	-- the shortened form cannot be mistaken for literal text
+	if short_key:match '^%u%l' then return prefix .. short_key end
+	return ('<%s%s>'):format(prefix, short_key)
 end
 
 return M

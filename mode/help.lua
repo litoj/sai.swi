@@ -105,12 +105,12 @@ end
 function M:set_enabled(val)
 	if val == self._enabled then return true end
 	if val then
-		M.super.set_enabled(self, val) -- register our bind layer first
-		self.tab = self._tab -- re-render the current tab, keep its number
-
 		local mode = sai.mode
 		--- 100px
 		if mode ~= 'gallery' then self.sai[mode].scale = 100 / sai[mode].get_image().width end
+
+		M.super.set_enabled(self, val) -- register our bind layer first
+		self.tab = self._tab -- re-render the current tab, keep its number
 	else
 		self.pager.enabled = false
 		M.super.set_enabled(self, val) -- the ModePop hook re-derives the display

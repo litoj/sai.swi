@@ -353,6 +353,36 @@ T.cmd_auto_display = with_env(function(h)
 	sai.viewer._mappings['Escape'] = escape
 end)
 
+T.key_help_short_binds = with_env(function(h)
+	sai.mode = 'viewer' -- earlier tests may have left another mode active
+	sai.viewer.map('Ctrl+q', function() end, 'short test')
+	key_help.enabled = true
+
+	-- gather every tab line so the bind is found regardless of which layer it lands in
+	local function all_lines()
+		local s = {}
+		for _, tab in ipairs(key_help:tabs()) do
+			s[#s + 1] = table.concat(tab.lines, '\n')
+		end
+		return table.concat(s, '\n')
+	end
+
+	key_help.short_binds = false
+	local full = all_lines()
+	h.contains('full form keeps Ctrl+', full, 'Ctrl+q')
+	h.ok('full form is not shortened', not full:find('<C-q>', 1, true))
+
+	-- public option, changeable at any time: next render picks it up
+	key_help.short_binds = true
+	local short = all_lines()
+	h.contains('short form uses C-', short, '<C-q>')
+	h.ok('short form drops the full Ctrl+', not short:find('Ctrl+q', 1, true))
+
+	key_help.short_binds = false
+	key_help.enabled = false
+	sai.viewer.unmap 'Ctrl+q'
+end)
+
 if not _G._TEST_RUNNER then
 	_G._TEST_RUNNER = true
 	H.run(T)

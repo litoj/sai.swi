@@ -107,6 +107,8 @@ can configure.
 - custom **key help mode** with a tab for every active bind layer - the current mode plus each
   enabled custom mode overriding it - so you always know which keybinds come from where
   (toggled with <kbd>F1</kbd> or <kbd>?</kbd>)
+  - `require('sai.mode.key_help').short_binds = true` shows binds in the compact form
+    (`C-x`, `A-y`…) instead of the full xkb names
 - custom **variable help mode** with a tab for all live-updated settings plus, for every
   active custom mode, a tab listing the variables it currently overrides
   (toggled with <kbd>Shift+F1</kbd>)

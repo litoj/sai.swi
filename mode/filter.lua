@@ -378,7 +378,14 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 		if self.live_imagelist and #self._ordered_filtered_paths > 0 then
 			l.remove(keys_not_in(self._images, self._filtered))
 		end
+
+		if self.live_pager then self.list_pager.enabled = true end
+		if self.tag_completion then self.completion.enabled = true end
 	else -- val == false
+		-- the pagers sit above the input layer on the text stack, so pop them first
+		self.completion.enabled = false
+		self.list_pager.enabled = false
+
 		if
 			self.live_imagelist
 			and (not self.confirmed or not self.update_imagelist_on_confirm)
@@ -400,9 +407,6 @@ function M:set_enabled(val) -- TODO: better handling of mode switching
 
 		M.super.set_enabled(self, false)
 	end
-
-	if self.live_pager or not val then self.list_pager.enabled = val end
-	if self.tag_completion and not val then self.completion.enabled = false end
 
 	return false
 end

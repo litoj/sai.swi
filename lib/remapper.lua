@@ -23,7 +23,7 @@ local M = {
 	warn_on_duplicates = true, --- for keybind_processor
 	--- Filter of existing mappings for which should be kept and which disabled while mode is enabled
 	--- Return `true` to remove.
-	---@type boolean|fun(bind:string,bindcfg:bindcfg):boolean
+	---@type false|fun(bind:string,bindcfg:bindcfg):boolean
 	map_filter = false,
 	persist_mode_change = false, --- should mode change shift this object to work in the new mode
 	auto_help = true, --- should key_help be automatically displayed while the mode is active
@@ -111,20 +111,19 @@ end
 function M:set_enabled(val)
 	if val == self._enabled then return false end
 	self._enabled = val
-	self.sai(val) -- also changes mode to the desired one so keymaps ger applied correctly
 
 	if val then
-		---@diagnostic disable-next-line: assign-type-mismatch
-		self._mode_api = sai[sai.mode] -- key mode dynamic if not set by the user
+		self.sai(val) -- also changes mode to the desired one so keymaps get applied correctly
+		self._mode_api = sai[sai.mode]
 
-		if self.map_filter then -- unmap all keybinds
-			local fn = self.map_filter == true and function() return true end or self.map_filter
+		if self.map_filter then -- unmap existing keybinds by filter
+			local fn = self.map_filter
 			for b, cfg in pairs(self._mode_api._mappings) do
+				---@diagnostic disable-next-line: need-check-nil
 				if fn(b, cfg) then M._rawmap(self, b) end
 			end
 		end
-
-		for b, cfg in pairs(self._mappings) do
+		for b, cfg in pairs(self._mappings) do -- enable all override mappings
 			self:_rawmap(b, cfg, cfg.cb)
 		end
 
@@ -133,19 +132,20 @@ function M:set_enabled(val)
 			self._mode_api.on_unassigned = self._on_unassigned
 		end
 	else
-		-- also override anything that is there back to the original
-		for b, cfg in pairs(self._omaps) do
-			self._mode_api:_setmap(b, cfg)
-		end
-		self._omaps = {}
-
-		if self._on_unassigned then
+		if self._api_on_unassigned then
 			-- reset only if our value hasn't been overwritten
 			if self._mode_api._on_unassigned == self._on_unassigned then
 				self._mode_api.on_unassigned = self._api_on_unassigned
 			end
 			self._api_on_unassigned = false
 		end
+
+		for b, cfg in pairs(self._omaps) do -- restore original mappings
+			self._mode_api:_setmap(b, cfg)
+		end
+		self._omaps = {}
+
+		self.sai(val)
 	end
 	self._mode_api.active_mode = self
 	return true

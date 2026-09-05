@@ -231,11 +231,18 @@ end
 
 ---@param api sai.lib.keybind_processor
 ---@param fmt_str string? how to separate keybind list from the action
-function U.str_bindlist(api, fmt_str)
+---@param key_fmt? fun(key:string):string convert each raw xkb bind to its display form
+function U.str_bindlist(api, fmt_str, key_fmt)
 	fmt_str = fmt_str or '%20s: %s'
 	local out = {}
 	for _, k in ipairs(U.ordered_binds(api)) do
-		out[#out + 1] = (fmt_str):format(table.concat(k.bind, ', '), k.info:gsub('[\t\n]', ' '))
+		local keys = k.bind --- freshly built by ordered_binds, safe to map in place
+		if key_fmt then
+			for i, key in ipairs(keys) do
+				keys[i] = key_fmt(key)
+			end
+		end
+		out[#out + 1] = (fmt_str):format(table.concat(keys, ', '), k.info:gsub('[\t\n]', ' '))
 	end
 	return out
 end

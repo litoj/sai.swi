@@ -1,18 +1,19 @@
 ---@module 'sai.mode.key_help'
 
 local U = require 'sai.lib.utils'
+local X = require 'sai.bridge.xkb'
 local e = require 'sai.api.eventloop'
 local reconfigurer = require 'sai.lib.reconfigurer'
 
 ---Key help overlay: a tab with the binds of every active bind layer of the current mode.
 ---@class sai.mode.key_help: sai.mode.help
----@field bind_fmt string Default format for keybind list and description
 ---@field private _display_cfg sai.lib.reconfigurer|sai.api.text text overlay override for the auto help display
 local M = {
 	super = require 'sai.mode.help',
 	_path = 'sai.mode.key_help',
-	bind_fmt = '%s\t%s',
+	bind_fmt = '%s\t%s', --- format for keybind list and description
 	-- bind_fmt = '%20s: %s',
+	short_binds = false, --- show binds in the short form (C-x, A-y…) instead of full xkb names
 	auto_help = false, --- the binds are listed in the tabs instead
 	---@type sai.lib.remapper|false
 	_displayed_mode = false, ---@private the mode shown by the auto help display
@@ -29,7 +30,7 @@ function M:tabs()
 			local api = { get_mappings = function() return bindset._mappings end }
 			tabs[#tabs + 1] = {
 				title = U.pretty_name(bindset._path),
-				lines = U.str_bindlist(api, self.bind_fmt),
+				lines = U.str_bindlist(api, self.bind_fmt, self.short_binds and X.short_key_name or nil),
 			}
 		end
 	end
@@ -68,10 +69,10 @@ function M:_display(activator)
 	end
 	if not activator or not activator.auto_help then
 		self._displayed_mode = false
+		self.pager.enabled = false
 		-- revert only while our value is applied: a full-mode disable may
 		-- have restored the correct base already
 		if sai.text.enabled then self._display_cfg(false) end
-		self.pager.enabled = false
 		return false
 	end
 

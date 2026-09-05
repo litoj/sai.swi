@@ -323,13 +323,17 @@ function M:get_confirmed() return nil end
 ---@protected
 function M:set_enabled(val)
 	if val == self._enabled then return false end
-	M.super.set_enabled(self, val)
 
-	self:_on_dst_change(self._location)
 	if val then
+		M.super.set_enabled(self, val)
+		self:_on_dst_change(self._location)
 		rawset(self, 'confirmed', nil)
 	else
+		self._enabled = false -- fake the disable to make _on_dst_change skip the re-arm
+		self:_on_dst_change(self._location)
+		self._enabled = true
 		self._raw_update = false
+		M.super.set_enabled(self, val)
 	end
 
 	return false
