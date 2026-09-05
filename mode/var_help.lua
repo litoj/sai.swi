@@ -105,13 +105,12 @@ end
 ---All tabs, generated straight-up (see sai.mode.help).
 function M:tabs()
 	local tabs = {
-		{ title = 'Settings', lines = self:settings_list(), escape = true },
+		{ title = 'Settings', lines = self:settings_list() },
 	}
 	for _, mode in ipairs(U.get_active_modes(sai[sai.mode])) do
 		tabs[#tabs + 1] = {
 			title = U.pretty_name(mode._path),
 			lines = self:varset_lines(mode),
-			escape = true,
 		}
 	end
 	return tabs

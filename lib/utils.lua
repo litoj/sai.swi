@@ -318,6 +318,9 @@ function U.get_dynvars(wrapper, filter)
 	return fields
 end
 
+---The text block positions: per-mode in the app, see types.lua `block_position_t`
+U.block_positions = { 'topleft', 'topright', 'bottomleft', 'bottomright' }
+
 ---@param mode_api sai.api.mode_base
 ---@return sai.lib.remapper[]
 function U.get_active_modes(mode_api)

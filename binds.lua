@@ -213,8 +213,8 @@ end
 function M.help(self)
 	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
 
-	map({ 'Right', 'Tab' }, function() self.tab = self.tab + 1 end, 'Next help tab')
-	map({ 'Left', 'Shift+ISO_Left_Tab' }, function() self.tab = self.tab - 1 end, 'Previous help tab')
+	map('Tab', function() self.tab = self.tab + 1 end, 'Next help tab')
+	map('Shift+ISO_Left_Tab', function() self.tab = self.tab - 1 end, 'Previous help tab')
 	map({ 'Up', 'ScrollUp' }, function() self.pager.line = self.pager.line - 1 end, 'Scroll up')
 	map({ 'Down', 'ScrollDown' }, function() self.pager.line = self.pager.line + 1 end, 'Scroll down')
 	map('Prior', function() self.pager.line = self.pager.line - self.pager.page_size end, 'Page up')

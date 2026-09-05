@@ -3,11 +3,9 @@
 local U = require 'sai.lib.utils'
 local X = require 'sai.bridge.xkb'
 local e = require 'sai.api.eventloop'
-local reconfigurer = require 'sai.lib.reconfigurer'
 
 ---Key help overlay: a tab with the binds of every active bind layer of the current mode.
 ---@class sai.mode.key_help: sai.mode.help
----@field private _display_cfg sai.lib.reconfigurer|sai.api.text text overlay override for the auto help display
 local M = {
 	super = require 'sai.mode.help',
 	_path = 'sai.mode.key_help',
@@ -69,19 +67,11 @@ function M:_display(activator)
 	end
 	if not activator or not activator.auto_help then
 		self._displayed_mode = false
-		self.pager.enabled = false
-		-- revert only while our value is applied: a full-mode disable may
-		-- have restored the correct base already
-		if sai.text.enabled then self._display_cfg(false) end
+		self.pager.enabled = false -- the pager restores the text layer with itself
 		return false
 	end
 
 	self._displayed_mode = activator
-	self._display_cfg(true)
-	if not sai.text.enabled then
-		-- a full-mode disable reverted our value: re-assert it with a fresh base capture
-		self._display_cfg.enabled = true
-	end
 	-- land on the activator's own tab when it has one
 	local title = activator._path and U.pretty_name(activator._path)
 	local idx = 1
@@ -92,15 +82,9 @@ function M:_display(activator)
 		end
 	end
 	if not self:set_tab(idx) then return true end -- nothing to show yet: keep the pager hidden
-	self.pager.enabled = true
+	self.pager.enabled = true -- brings the text layer up with itself
 	return true
 end
-
--- display overlay: sai.text only, separate from the full mode's overrides
--- so their base captures never interleave
----@diagnostic disable-next-line: assign-type-mismatch
-M._display_cfg = reconfigurer.new { super = sai.text }
-M._display_cfg.enabled = true
 
 M.super.new(M)
 rawset(M.pager, '_location', 'topright') -- the right pane, var_help takes the left one

@@ -14,13 +14,11 @@ local U = require 'sai.lib.utils'
 -- setup options
 ---@field location block_position_t where should we output to
 ---@field title string title in the non-scrollable header
----@field lines extended_text_template[] the output to be paged (templates only render with `escaping`)
+---@field lines extended_text_template[] the output to be paged, always processed as text layer templates
 ---@field max_height number|integer max winheight to take up - 0-1 for percentage, >1 for line count
+---@field sai_text sai.lib.reconfigurer our text override: writes the content through it, it restores the original blocks with itself
 local M = {
 	_trigger = false,
-
-	---Should lines be checked for sai.text escape sequences or set as pure text
-	escaping = false,
 
 	-- Live config
 	_enabled = false, ---@protected
@@ -40,10 +38,6 @@ local M = {
 	_total_pages = 1, ---@protected
 
 	-- Private state
-	---@type sai.api.mode_text|false
-	_mode_text = false, ---@private
-	---@type extended_text_template[]|false
-	_original_text = false, ---@private
 	---@type string[]
 	_last_render = {}, ---@private
 	_last_start = -1, ---@private
@@ -67,7 +61,29 @@ function M:new()
 			pattern = { 'sai.text.size', 'sai.text.line_spacing' },
 			callback = recal,
 		},
+		{
+			-- appmode changes: bracket our text override around the flip so the
+			-- blocks restore into the old mode and re-blank into the new one.
+			-- Needed only while a standalone display holds the pager up: the help
+			-- mode brackets its own pager through enable/disable, and then this
+			-- hook no-ops.
+			event = { 'ModeChangedPre', 'ModeChanged' },
+			callback = function(ev)
+				if ev.event == 'ModeChangedPre' then
+					if not self._enabled then return end
+					self.sai_text(false) -- the vars restore the blocks into the old mode
+				elseif self._enabled then
+					self.sai_text(true) -- re-blank the new mode's blocks
+					self:render(true)
+				end
+			end,
+		},
 	}
+
+	-- the pager owns the text layer: locations and the enable/disable, nothing else
+	self.sai_text = reconfigurer.new { super = sai.text }
+	self.sai_text.enabled = true
+
 	return backer.new(U.new_object(self, M))
 end
 
@@ -140,13 +156,9 @@ function M:render(redraw_if_unchanged)
 		return
 	end
 
-	if self.escaping then
-		self._mode_text[self._location] = out
-	else -- this is faster but doesn't process escape sequences
-		-- update also the cached value so that new overrides restore the text correctly
-		self._mode_text['_' .. self._location] = out
-		self._mode_text.super.text = { [self._location] = out }
-	end
+	-- the one write path: through our override, so the original block stays
+	-- tracked for the restore and the templates always get processed
+	self.sai_text[self._location] = out
 end
 
 ---@private
@@ -252,18 +264,12 @@ end
 ---@private
 ---@param loc block_position_t
 function M:_on_dst_change(loc)
-	if self._original_text then
-		self._mode_text[self._location] = self._original_text
-		self._original_text = false
-	end
+	-- release the old location's var: its restore puts the original block back
+	if self._enabled and loc ~= self._location then self.sai_text[self._location] = nil end
 
 	self._location = loc
 
-	if self._enabled then
-		self._mode_text = sai[sai.mode].text
-		self._original_text = self._mode_text[self._location] or false
-		self:render(true)
-	end
+	if self._enabled then self:render(true) end
 end
 
 ---@protected
@@ -271,10 +277,14 @@ end
 function M:set_enabled(val)
 	if val == self._enabled then return end
 
-	if val then self:_recalibrate(true, true) end
+	if val then
+		self.sai_text(true) -- the layer up first: the block clearing must precede our renders
+		self:_recalibrate(true, true)
+	end
 	self._enabled = val
 	self.eventloop(val)
-	self:_on_dst_change(self._location)
+	if val then self:_on_dst_change(self._location) end
+	if not val then self.sai_text(false) end -- the vars restore the blocks
 
 	return true
 end

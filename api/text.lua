@@ -1,6 +1,6 @@
 ---@diagnostic disable: invisible
 ---@module 'sai.api.text'
----@class sai.api.text: sai.text
+---@class sai.api.text: sai.text, sai.api.proxy
 local M = {
 	super = swayimg.text,
 	_path = 'sai.text',
@@ -45,5 +45,21 @@ function M:set_size(val)
 end
 
 function M:set_foreground(val) self.super.color = val end
+
+local function set_location(_, val, location)
+	sai[swayimg.mode].text[location] = val
+	return false
+end
+local function get_location(_, location) return sai[swayimg.mode].text[location] end
+
+-- the text blocks are per-mode in the app: purely redirect them to the
+-- current mode's text api, never cache anything on this global layer
+---@param v extended_text_template[]
+for _, v in pairs { 'topleft', 'topright', 'bottomleft', 'bottomright' } do
+	---@diagnostic disable-next-line: assign-type-mismatch
+	M['set_' .. v] = set_location
+	---@diagnostic disable-next-line: assign-type-mismatch
+	M['get_' .. v] = get_location
+end
 
 return require('sai.api.proxy').new(M)

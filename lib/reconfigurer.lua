@@ -5,7 +5,7 @@ local U = require 'sai.lib.utils'
 
 ---@overload fun(apply:fun(self:sai.lib.reconfigurer)|boolean)
 ---@class sai.lib.reconfigurer: sai.api.proxy
----@field protected _cfg {mode:string,fb:{[string]:string}}|boolean TODO: simplify
+---@field protected _special {[string]:sai.lib.reconfigurer.special} custom behaviour of the api's special fields
 ---@field protected _avail fun(idx:string):boolean
 ---@field protected _enabled boolean
 local M = {
@@ -124,15 +124,135 @@ function M.new_evloop(self)
 	return setmetatable(self, elmeta)
 end
 
-local viewer_fb = {
-	position = 'default_position',
-	scale = 'default_scale',
+---State of one overridden field, stored in _vars by field name
+---@class sai.lib.reconfigurer.override
+---@field new any value the override wants to set
+---@field old any? value captured when the override first took the field over; nil when it never got applied
+---@field timeout? number restore decision of the sai.text.status special: the original status_timeout at takeover time
+
+---Special field behaviour: some overrides cannot be expressed as a plain
+---value swap, so a field can register functions around the swap.
+---@class sai.lib.reconfigurer.special
+---@field avail? fun(self:sai.lib.reconfigurer):boolean is the field settable in the current state
+---@field restore_wanted? fun(self:sai.lib.reconfigurer, override:sai.lib.reconfigurer.override):boolean may the plain swap write the override's old value back (default: yes)
+---@field apply? fun(self:sai.lib.reconfigurer, override:sai.lib.reconfigurer.override) runs after the override got applied
+---@field restore? fun(self:sai.lib.reconfigurer, override:sai.lib.reconfigurer.override, old:any) runs after the override got restored; old is nil when there was nothing to restore
+
+---Restore the default a view field derives from: our own default override
+---when we have one, else re-set the current value so the api re-derives from it
+---@param self sai.lib.reconfigurer
+---@param field string name of the default_* field
+local function restore_default(self, field)
+	local default_override = self._vars[field]
+	if default_override and default_override.old ~= nil then
+		self.super[field] = default_override.old
+	else
+		self.super[field] = self.super[field]
+	end
+end
+
+local function view_field(mode, default)
+	return {
+		-- the current view can only be changed while in its mode
+		avail = function() return sai.mode == mode end,
+		-- nothing of ours to restore: re-derive the view from its default
+		restore = function(self, _, old)
+			if old == nil then restore_default(self, default) end
+		end,
+	}
+end
+
+-- the text layer is one shared flag: the trees holding it on must keep it on
+-- even when one of them restores its own off state
+---@type {[sai.lib.reconfigurer]:boolean}
+local layer_holders = setmetatable({}, { __mode = 'k' })
+
+---A block var of ours is either our own content, or an emptier: an empty value
+---put over a stale block when taking the layer over. The emptier may only undo
+---its own blank - content another owner rendered into the block since must
+---survive us.
+---@param location block_position_t
+---@return sai.lib.reconfigurer.special
+local function block_field(location)
+	return {
+		restore_wanted = function(self, override)
+			return next(override.new or {}) ~= nil or not next(self.super[location] or {})
+		end,
+	}
+end
+
+---Custom field behaviour per api, see sai.lib.reconfigurer.special
+local special_fields = {
+	['sai.viewer'] = {
+		position = view_field('viewer', 'default_position'),
+		scale = view_field('viewer', 'default_scale'),
+	},
+	['sai.slideshow'] = {
+		position = view_field('slideshow', 'default_position'),
+		scale = view_field('slideshow', 'default_scale'),
+	},
+	['sai.text'] = {
+		status = {
+			-- decide on the restore at takeover time: a later status_timeout
+			-- change must not reclassify an already borrowed status
+			apply = function(self, override)
+				local timeout_var = self._vars.status_timeout
+				override.timeout = timeout_var and timeout_var.old or self.super.status_timeout
+			end,
+			-- a timed status expires on its own: restoring its text would
+			-- re-display an already gone message, so only a permanent one survives
+			restore = function(self, override, old)
+				if old == nil or override.timeout == 0 then return end
+				self.super.status = ''
+			end,
+		},
+		enabled = {
+			-- taking the layer over from a disabled one: the blocks nobody
+			-- overrides hold stale text that would flash once it turns on
+			apply = function(self, override)
+				-- we hold the layer on from now on, see the restore below
+				if override.new == true then layer_holders[self] = true end
+				if override.old ~= false or override.new ~= true then return end
+
+				for _, location in ipairs(U.block_positions) do
+					local var = self._vars[location]
+					if
+						not (var and next(var.new or {})) -- our own content: keep it
+						and next(self.super[location] or {})
+					then -- non-empty: stale
+						self[location] = {} -- emptier: restore() removes it again
+					end
+				end
+			end,
+			-- remove the emptiers so they cannot re-apply on a later enable:
+			-- the user may have enabled the text layer themselves in the meantime
+			restore = function(self, override, old)
+				layer_holders[self] = nil
+				-- we turned the layer on but other holders still need it: the
+				-- plain swap above already restored it to off, bring it back up
+				if old == false and next(layer_holders) then self.super.enabled = true end
+				if old ~= false then return end -- nothing was emptied
+
+				for _, location in ipairs(U.block_positions) do
+					local emptier = self._vars[location]
+					-- only the emptiers: our own content vars must survive
+					if emptier and not next(emptier.new or {}) then
+						-- undo our blank, but never over content another owner
+						-- rendered into the block since
+						if not next(self.super[location] or {}) and emptier.old ~= nil then
+							self.super[location] = emptier.old
+						end
+						self._vars[location] = nil
+					end
+				end
+			end,
+		},
+	},
 }
-local checked_mode_opts = {
-	-- ['sai.gallery'] = { mode = 'gallery', fb = {} },
-	['sai.viewer'] = { mode = 'viewer', fb = viewer_fb },
-	['sai.slideshow'] = { mode = 'slideshow', fb = viewer_fb },
-}
+
+for _, location in ipairs(U.block_positions) do
+	special_fields['sai.text'][location] = block_field(location)
+end
 
 -- TODO: make a separate global setting for custom mode name and obj to allow F1 be generic and work
 -- for truly every mode + also show only settings for that mode -> no more tabs
@@ -144,25 +264,26 @@ function M:new()
 	if self.super._path == 'sai.eventloop' then return M.new_evloop(self) end
 
 	---@cast self sai.lib.reconfigurer
-	for k, v in pairs(M) do
-		if k:sub(1, 2) ~= '__' and k:sub(1, 3) ~= 'new' then self[k] = v end
+	for name, method in pairs(M) do
+		if name:sub(1, 2) ~= '__' and name:sub(1, 3) ~= 'new' then self[name] = method end
 	end
 	self._vars = {}
-	self._cfg = checked_mode_opts[self.super._path] or false
-	self._avail = self._cfg --
-			and function(idx) return self._cfg.fb[idx] == nil or self._cfg.mode == sai.mode end
-		or function() return true end
+	self._special = special_fields[self.super._path] or {}
+	self._avail = function(field)
+		local special = self._special[field]
+		return not special or not special.avail or special.avail(self)
+	end
 
 	if self.super._path == 'sai' then
 		self.eventloop = M.new_evloop()
 		self.eventloop.subscribe {
 			event = { 'ModeChangedPre', 'ModeChanged' },
 			callback = function(ev)
-				local vars = rawget(self, ev.mode)
+				local mode_cfg = rawget(self, ev.mode)
 				-- enable/disable the vars in the active mode
 				-- because some vars may not be changeable while in other modes (viewer.scale, position...)
 				-- FIXME: enabling is now for all modes, meaning scale etc won't get written when in gallery
-				if vars and self._enabled then vars(ev.event == 'ModeChanged') end
+				if mode_cfg and self._enabled then mode_cfg(ev.event == 'ModeChanged') end
 			end,
 		}
 	end
@@ -170,31 +291,42 @@ function M:new()
 	return setmetatable(self, M)
 end
 
-function M:__index(idx)
-	local subapi = rawget(self.super, idx)
-	if not getmetatable(subapi) then return self._vars[idx] end
+function M:__index(field)
+	local subapi = rawget(self.super, field)
+	if not getmetatable(subapi) then return self._vars[field] end
 
-	rawset(self, idx, M.new { super = subapi, _enabled = self._enabled })
-	return self[idx]
+	rawset(self, field, M.new { super = subapi, _enabled = self._enabled })
+	return self[field]
 end
-function M:__newindex(idx, val)
-	if val == nil then -- reset the var
-		if self._enabled and self._avail(idx) and self._vars[idx].old ~= nil then
-			self.super[idx] = self._vars[idx].old
+function M:__newindex(field, value)
+	if value == nil then -- reset the var
+		local override = self._vars[field]
+		if override and self._enabled and self._avail(field) and override.old ~= nil then
+			local special = self._special[field]
+			if not special or not special.restore_wanted or special.restore_wanted(self, override) then
+				self.super[field] = override.old
+			end
+
+			if special and special.restore then special.restore(self, override, override.old) end
 		end
 
-		self._vars[idx] = nil
+		self._vars[field] = nil
 	else
-		local x = self._vars[idx]
-		if not x then
-			x = {}
-			self._vars[idx] = x
+		local override = self._vars[field]
+		if not override then
+			override = {}
+			self._vars[field] = override
 		end
 
-		x.new = val
-		if self._enabled and self._avail(idx) then
-			x.old = self.super[idx]
-			self.super[idx] = val
+		override.new = value
+		if self._enabled and self._avail(field) then
+			-- capture only on the first write: later value updates must not
+			-- overwrite the original we have to restore to
+			if override.old == nil then override.old = self.super[field] end
+			self.super[field] = value
+
+			local special = self._special[field]
+			if special and special.apply then special.apply(self, override) end
 		end
 	end
 end
@@ -205,51 +337,50 @@ function M:__call(enable)
 	self._enabled = enable
 
 	if enable then
-		for k, v in pairs(self._vars) do
-			if self._avail(k) then
-				if v.old == nil then v.old = self.super[k] end
-				self.super[k] = v.new
+		for field, override in pairs(self._vars) do
+			if self._avail(field) then
+				if override.old == nil then override.old = self.super[field] end
+				self.super[field] = override.new
+
+				local special = self._special[field]
+				if special and special.apply then special.apply(self, override) end
 			end
 		end
 	else
 		local update = self.save_user_changes
-		local fb = self._cfg and self._cfg.fb or ''
-		for k, v in pairs(self._vars) do
-			if self._avail(k) then
-				if v.old ~= nil then
-					if update then v.new = self.super[k] end
-					self.super[k] = v.old
-				else
-					k = fb[k] -- name of the fallback key
-					if k and self._avail(k) then
-						if (self._vars[k] or {}).old ~= nil then
-							self.super[k] = self._vars[k].old
-						else
-							self.super[k] = self.super[k]
-						end
-					end
+		for field, override in pairs(self._vars) do
+			if self._avail(field) then
+				local special = self._special[field]
+				if
+					override.old ~= nil
+					and (not special or not special.restore_wanted or special.restore_wanted(self, override))
+				then
+					if update then override.new = self.super[field] end
+					self.super[field] = override.old
 				end
-				v.old = nil
+
+				if special and special.restore then special.restore(self, override, override.old) end
+				override.old = nil
 			end
 		end
 	end
 
 	-- cascade updates
 	-- TODO: what if sai.formats gets changed?
-	for k, v in pairs(self) do
-		if k:sub(1, 1) ~= '_' and type(v) == 'table' and k ~= 'super' then v(enable) end
+	for name, sub_config in pairs(self) do
+		if name:sub(1, 1) ~= '_' and type(sub_config) == 'table' and name ~= 'super' then sub_config(enable) end
 	end
 end
 
 function M:__tostring()
 	---@type {[string]:any}
 	local dump = {}
-	for k, v in pairs(self._vars) do
-		dump[k] = v.new
+	for field, override in pairs(self._vars) do
+		dump[field] = override.new
 	end
 	-- same traversal as __call: the nested sub-configs, not the internal state
-	for k, v in pairs(self) do
-		if k:sub(1, 1) ~= '_' and type(v) == 'table' and k ~= 'super' then dump[k] = v end
+	for name, sub_config in pairs(self) do
+		if name:sub(1, 1) ~= '_' and type(sub_config) == 'table' and name ~= 'super' then dump[name] = sub_config end
 	end
 	return U.tbl_to_str(dump)
 end

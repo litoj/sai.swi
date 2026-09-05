@@ -46,12 +46,8 @@ local M = {
 	-- that would be just for the `status` location
 	-- TODO: convert to using lines and pager and create a textbox for line scrolling
 	-- Private state
-	---@see swayimg.viewer.text
-	---@see swayimg.text.status
-	---@type fun(loc:block_position_t, lines:string[])|fun(status:string)|false|swayimg_appmode
-	_raw_update = false, ---@private
-	---@type string|false
-	_saved_status = false, ---@private status text from before the session took over the status line
+	---@type fun(lines:string[])|fun(status:string)|false
+	_raw_update = false, ---@private armed writer: block renders go through our sai.text override
 }
 setmetatable(M, { __index = M.super })
 
@@ -134,7 +130,7 @@ function M:render()
 		for l in display:gmatch '([^\n]*)\n?' do
 			lines[#lines + 1] = l
 		end
-		self._raw_update.text = { [self._location] = lines }
+		self._raw_update(lines)
 	end
 end
 
@@ -289,12 +285,12 @@ end
 function M:_on_dst_change(loc)
 	if self._raw_update then
 		if self._location == 'status' then
+			self.sai.text.status = nil
 			self.sai.text.status_timeout = nil
-			sai.text.status = self._saved_status
 		else
+			-- the var's restore puts the original block back
+			self.sai.text[self._location] = nil
 			self.sai.text.enabled = nil
-			local smt = sai[sai.mode].text
-			smt[self._location] = smt[self._location]
 		end
 	end
 
@@ -302,15 +298,17 @@ function M:_on_dst_change(loc)
 
 	if self._enabled then
 		if self._location == 'status' then
-			self._saved_status = sai.text.status_timeout == 0 and sai.text.status or ''
+			-- take the status over: permanent for us, restored on disable
+			-- only when it was permanent before (see the sai.text special)
 			self.sai.text.status_timeout = 0
+			self.sai.text.status = ''
 			self._raw_update = function(x) sai.text.status = x end
 		else
+			-- blanks the blocks when the layer was off (see the sai.text
+			-- special); our writes go through the same override, so the
+			-- original block stays tracked for the restore
 			self.sai.text.enabled = true
-			-- get the api to use without setting a fixed mode (allows different mode when re-enabled)
-			-- TODO: unify the text api also for status and use just mode_text
-			---@diagnostic disable-next-line: assign-type-mismatch
-			self._raw_update = swayimg[sai.mode]
+			self._raw_update = function(lines) self.sai.text[self._location] = lines end
 		end
 
 		self:render()

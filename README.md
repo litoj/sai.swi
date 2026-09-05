@@ -96,8 +96,8 @@ https://github.com/user-attachments/assets/5b1e5b56-7f84-4525-b490-6ff0ff6a30be
 - temporary changes to the api through `sai.lib.remapper` instances - see `snippets.two_pane_mode`
 - variable changes, with the option to let the user adjust them
 - automatic event subscriptions and deletions
-- custom keybinds, automatically listed in a **key help mode** tab (no control
-  keybinds; <kbd>F1</kbd> gives the full mode)
+- custom keybinds, automatically listed in a **key help mode** tab (no control keybinds;
+  <kbd>F1</kbd> gives the full mode)
 
 #### Sealed modes
 
@@ -105,13 +105,12 @@ These are modes that aren't meant to be extended or reused, they are just one si
 can configure.
 
 - custom **key help mode** with a tab for every active bind layer - the current mode plus each
-  enabled custom mode overriding it - so you always know which keybinds come from where
-  (toggled with <kbd>F1</kbd> or <kbd>?</kbd>)
-  - `require('sai.mode.key_help').short_binds = true` shows binds in the compact form
-    (`C-x`, `A-y`…) instead of the full xkb names
-- custom **variable help mode** with a tab for all live-updated settings plus, for every
-  active custom mode, a tab listing the variables it currently overrides
-  (toggled with <kbd>Shift+F1</kbd>)
+  enabled custom mode overriding it - so you always know which keybinds come from where (toggled
+  with <kbd>F1</kbd> or <kbd>?</kbd>)
+  - `require('sai.mode.key_help').short_binds = true` shows binds in the compact form (`C-x`,
+    `A-y`…) instead of the full xkb names
+- custom **variable help mode** with a tab for all live-updated settings plus, for every active
+  custom mode, a tab listing the variables it currently overrides (toggled with <kbd>Shift+F1</kbd>)
   <img width="1256" height="764" alt="Image of help mode in the settings section" src="https://github.com/user-attachments/assets/1393488e-a0ba-4bd4-8f9a-26c314ecb112" />
 - **command mode** for live-evaluating lua code (example of extending **input mode**)
 - **two-pane mode** for comparing images (limited by the gallery scaling implementation)
@@ -260,8 +259,8 @@ require 'sai.api.globals'
     `.cpp` source
   - `sai.bridge.utf8` provides the utf8 module as in Lua 5.3+: a system installation (e.g. the
     `lua51-luautf8` package, including its `find`/`gmatch`/`gsub` extras) is used when present,
-    otherwise the stock Lua 5.3 C source is downloaded (patched for LuaJIT) and compiled on first `require`;
-    the callable form `utf8(s)` coerces any string into a valid utf8 string
+    otherwise the stock Lua 5.3 C source is downloaded (patched for LuaJIT) and compiled on first
+    `require`; the callable form `utf8(s)` coerces any string into a valid utf8 string
 - `lib/`: pure-Lua utilities extending the possibilities for building your own scripts and plugins
 - `mode/`: custom modes ready to go or to be extended
 
@@ -314,6 +313,12 @@ luajit tests/init.lua debug.breakpoints   # one method
 
 - way to fake partially enabled text layer (disable all besides the active one)
   - when disabled, enable text layer but hide all textfield layers with `{}`
+  - pass sai faker (or real) to every component (or it creates its own reconfigurer by default)
+    - that way one mode puts all its overrides into just one place that gets applied at once in the
+      right order
+  - use active_modes to determine which mode is above which other one and on disable of a mid-mode,
+    if a mode above has changed the same var, then don't restore it, but set the backed value to the
+    mode backer above
 - clever state restoring by deciding what to override and what to keep based on active modes order
 - make input mode into a simple utils function for requesting user input
 - unify pager and input mode

@@ -8,7 +8,6 @@ local binds = require('sai.binds').help
 ---@class help_tab
 ---@field title string
 ---@field lines extended_text_template[] values can be text layer templates (see README)
----@field escape boolean? should lines be checked for text escape sequences
 ---Tab generator: called on activation and on every mode change; generates
 ---all tabs straight-up - return a fresh list to add or remove tabs.
 ---@alias help_tabs fun(self:sai.mode.help):help_tab[]
@@ -58,7 +57,6 @@ function M:new()
 	-- make the image a small backdrop for the help text
 	self.sai.viewer.default_scale = 'keep_width'
 	self.sai.slideshow.default_scale = 'keep_width'
-	self.sai.text.enabled = true
 	local gspace = sai.gallery.thumb_size + sai.gallery.padding_size
 	self.sai.gallery(function(g)
 		g.thumb_size = gspace / 3
@@ -78,7 +76,6 @@ function M:set_tab(idx)
 
 	local tab = tabs[self._tab]
 	self.pager:bulk_change(function(pager)
-		pager.escaping = not not tab.escape
 		-- without the mode's own binds there is no way to switch tabs
 		pager.title = self._enabled and ('[Tab %d/%d] %s\t'):format(self._tab, #tabs, tab.title) or (tab.title .. '\t')
 		pager.lines = tab.lines

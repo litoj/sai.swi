@@ -298,7 +298,6 @@ T.var_help_lifecycle = with_env(function(h)
 	h.contains('pager title', var_help.pager.title, 'Settings')
 	h.contains('settings tab first', var_help.pager.title, 'Settings')
 	h.ok('settings lines listed', #var_help.pager.lines >= 6)
-	h.ok('text escape sequences enabled for the templates', var_help.pager.escaping == true)
 
 	var_help.tab = var_help.tab + 1
 	h.contains('own overrides listed as a varset tab', var_help.pager.title, 'Var Help')
@@ -318,7 +317,6 @@ T.var_help_mode_varsets = with_env(function(h)
 	h.contains('key_help varset tab', var_help.pager.title, 'Key Help')
 	h.ok('key_help overrides listed', #var_help.pager.lines > 0)
 	h.contains('var lines show fixed override values', rendered(var_help.pager), 'default_scale\tkeep_width')
-	h.ok('varset tabs keep escape sequences', var_help.pager.escaping == true)
 	local key_help_varset = rendered(var_help.pager)
 	h.contains('nested pager vars listed', key_help_varset, '  pager:')
 	h.contains('nested pager field shown', key_help_varset, '    enabled\ttrue')
@@ -350,6 +348,47 @@ T.cmd_auto_display = with_env(function(h)
 	cmd.enabled = false
 	h.ok('display off with the last mode', not key_help.pager._enabled)
 	h.ok('overlay reverted with the display', sai.text.enabled == false)
+	sai.viewer._mappings['Escape'] = escape
+end)
+
+T.cmd_auto_display_block_location = with_env(function(h)
+	sai.text.enabled = false -- the text overlay is off in the user config
+	local escape = sai.viewer._mappings['Escape']
+	local filter = require('sai.mode.cmd').new { _path = 'test.filter' }
+	filter._location = 'topleft' -- the filter shape: a text block, not the status
+
+	filter.enabled = true
+	h.ok('layer up with the mode', sai.text.enabled == true)
+	h.ok('block armed', #sai.viewer.text.topleft > 0)
+
+	key_help.enabled = true -- F1: the full mode over the display
+	key_help.enabled = false
+	h.ok('display re-derived', key_help.pager._enabled)
+
+	h.eq('layer healed', true, sai.text.enabled)
+	h.ok('our block survived', #sai.viewer.text.topleft > 0)
+	h.ok('user blocks restored', #sai.viewer.text.bottomleft > 0)
+
+	filter.enabled = false
+	sai.viewer._mappings['Escape'] = escape
+end)
+
+T.cmd_block_cleanup_on_disable = with_env(function(h)
+	sai.text.enabled = true -- the user config has the overlay on
+	local escape = sai.viewer._mappings['Escape']
+	local filter = require('sai.mode.cmd').new { _path = 'test.filter' }
+	filter._location = 'topleft' -- the filter shape: a text block, not the status
+
+	key_help.enabled = true -- the auto help display holds the layer up
+	sai.text.topleft = {} -- the user's topleft is empty
+
+	filter.enabled = true
+	h.ok('block armed', #sai.viewer.text.topleft > 0)
+	filter.enabled = false
+	h.ok('empty block restored', #sai.viewer.text.topleft == 0)
+	h.eq('layer kept by the display', true, sai.text.enabled)
+
+	key_help.enabled = false
 	sai.viewer._mappings['Escape'] = escape
 end)
 
