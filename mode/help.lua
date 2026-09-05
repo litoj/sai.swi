@@ -1,7 +1,6 @@
 ---@module 'sai.mode.help'
 
 local U = require 'sai.lib.utils'
-local e = require 'sai.api.eventloop'
 local pager = require 'sai.lib.pager'
 local binds = require('sai.binds').help
 

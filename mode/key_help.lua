@@ -44,7 +44,8 @@ function M:set_tab(idx)
 		if ret then
 			local tab = self._tabs[self._tab]
 			-- without the mode's own binds there is no way to switch tabs
-			pager.title = self._enabled and ('%s [Tab %d/%d]'):format(tab.title, self._tab, #self._tabs) or tab.title
+			pager.title = self._enabled and ('%s [Tab %d/%d]'):format(tab.title, self._tab, #self._tabs)
+				or (tab.title .. ' [binds]')
 		end
 	end)
 	return ret

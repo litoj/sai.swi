@@ -13,6 +13,7 @@ local tabled = U.tabled
 local M = {
 	---@type {[event_name_t]:{[string]:hook_cfg[]}}
 	_hooks = {}, ---@private
+	_path = 'sai.eventloop', ---@protected
 	debug_trigger = false,
 	debug_subscribe = false,
 } -- TODO: could improve deleting perf by having a {[hook_id]:counter}

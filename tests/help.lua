@@ -84,7 +84,6 @@ local T = {}
 
 T.key_help_lifecycle = with_env(function(h)
 	sai.viewer.map('F13', function() end) -- no desc: must fall back to the simplified trace
-	local f13cfg = sai.viewer._mappings['F13']
 	key_help.enabled = true
 	h.ok('mode enabled', key_help._enabled)
 	h.eq('registered as bind layer of the current mode', 1, #sai.viewer._active_modes)

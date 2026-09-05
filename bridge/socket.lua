@@ -207,9 +207,11 @@ local Server = {
 }
 
 ---Hook: called per accepted connection, after the socket layer drained it.
+---@diagnostic disable-next-line: unused-local
 function Server:on_conn(conn) end
 
 ---Hook: called on io of an armed connection.
+---@diagnostic disable-next-line: unused-local
 function Server:on_data(conn) end
 
 ---Hook: signal dispatch; also runs after the fds were finally armed.

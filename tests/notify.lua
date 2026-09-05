@@ -12,8 +12,6 @@ local dir = debug.getinfo(1, 'S').source:match '^@(.*)/'
 if not dir:match '^/' then dir = (os.getenv 'PWD' or '.') .. '/' .. dir end
 package.path = dir .. '/?.lua;' .. package.path
 
-local H = require 'harness'
-
 local old_swi, old_sai = _G.swayimg, rawget(_G, 'sai')
 
 -- drop the api stack other test modules may have loaded: their super tables

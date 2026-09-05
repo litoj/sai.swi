@@ -1,6 +1,6 @@
 {
 	"runtime": { "version": "LuaJIT" },
 	"type": { "castNumberToInteger": true, "weakNilCheck": true, "weakUnionCheck": true },
-	"diagnostics": { "globals": ["vim"], "disable": [] },
-	"workspace": { "checkThirdParty": false }
+	"diagnostics": { "globals": ["vim"], "disable": [], "severity": { "unused-local": "Warning", "unused-vararg": "Warning" } },
+	"workspace": { "checkThirdParty": false, "library": ["/usr/share/swayimg/swayimg.lua", "/usr/local/share/swayimg/swayimg.lua"] }
 }

@@ -58,6 +58,7 @@ setmetatable(M, { __index = M.super })
 ---Default confirmation behaviour, meant for overriding
 ---@param result string|false
 ---@return boolean? disable_mode should mode be disabled (default: true)
+---@diagnostic disable-next-line: unused-local
 function M:on_confirm(result) end
 
 ---@param fn string|fun(self:self)

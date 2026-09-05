@@ -333,6 +333,88 @@ io.stdout:flush()
 	client_close(c)
 end)
 
+-- a client holding frame/variable references from a previous stop must get
+-- visible errors after the freeze reset them - never empty lists or
+-- evaluations against the wrong frame (which silently wipe UI state)
+T.stale_refs = scenario(function()
+	write_debuggee [[
+local function work(n)
+	local acc = 0
+	for i = 1, n do
+		acc = acc + i
+	end
+	return acc
+end
+
+local total = work(4)
+print('RESULT ' .. total)
+io.stdout:flush()
+]]
+
+	local bp_line = find_line 'acc = acc + i'
+
+	start_debuggee()
+	local c = client_new(sock)
+	handshake(c)
+	request_ok(c, 'setBreakpoints', {
+		source = { path = script_path },
+		breakpoints = { { line = bp_line } },
+	})
+	request_ok(c, 'configurationDone')
+	wait_stopped(c, 'breakpoint')
+
+	local r = request_ok(c, 'stackTrace', { threadId = 1 })
+	local old_frame_id = r.body.stackFrames[1].id
+	r = request_ok(c, 'scopes', { frameId = old_frame_id })
+	local old_scope_ref = r.body.scopes[1].variablesReference
+	r = request_ok(c, 'evaluate', { expression = 'acc', frameId = old_frame_id })
+	eq('evaluate at stop', '0', r.body.result)
+
+	-- advance to the next stop: the freeze resets the reference maps
+	request_ok(c, 'continue')
+	wait_stopped(c, 'breakpoint')
+
+	local function request_fail(command, args)
+		local resp = request(c, command, args)
+		if not resp then
+			fail('request ' .. command .. ': no response')
+		elseif resp.success ~= false then
+			fail('request ' .. command .. ': expected an error, got success')
+		end
+		return resp
+	end
+
+	request_fail('scopes', { frameId = old_frame_id })
+	request_fail('variables', { variablesReference = old_scope_ref })
+	request_fail('evaluate', { expression = 'acc', frameId = old_frame_id })
+	request_fail('setVariable', { variablesReference = old_scope_ref, name = 'acc', value = '0' })
+
+	-- fresh references still work and the ids never get reused across stops
+	r = request_ok(c, 'stackTrace', { threadId = 1 })
+	local new_frame_id = r.body.stackFrames[1].id
+	ok('frame ids not reused', new_frame_id > old_frame_id)
+	r = request_ok(c, 'scopes', { frameId = new_frame_id })
+	local scope_ref = r.body.scopes[1].variablesReference
+	ok('variable refs not reused', scope_ref > old_scope_ref)
+
+	-- expressions that LuaJIT would also compile as statements must still
+	-- return their value, not silently drop it
+	r = request_ok(c, 'evaluate', { expression = 'type(acc)', frameId = new_frame_id })
+	eq('evaluate call returns value', 'number', r.body.result)
+	r = request_ok(c, 'evaluate', { expression = 'acc ~= nil', frameId = new_frame_id })
+	eq('evaluate comparison returns value', 'true', r.body.result)
+	-- statements still run through the fallback: globals persist across
+	-- evaluations (locals cannot be assigned this way - env copies only)
+	r = request_ok(c, 'evaluate', { expression = '_G.stamp = 5', frameId = new_frame_id })
+	r = request_ok(c, 'evaluate', { expression = 'stamp', frameId = new_frame_id })
+	eq('evaluate statement works', '5', r.body.result)
+
+	request_ok(c, 'disconnect')
+	ok('terminated event', wait_event(c, 'terminated') ~= nil)
+
+	client_close(c)
+end)
+
 T.hit_log = scenario(function()
 	write_debuggee [[
 local function work(n)

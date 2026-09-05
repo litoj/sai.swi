@@ -7,53 +7,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  # all toolchain installation lives here; the check jobs below restore it
-  # from the artifact, so every job sees the exact same pinned tool set
-  install:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Assemble toolchain
-        env:
-          # pinned: the lint results are verified against this exact version
-          LLS_VERSION: 3.19.1
-        run: |
-          sudo apt-get update -q
-          # libxkbcommon-dev: ffi.load('xkbcommon') resolves to libxkbcommon.so,
-          # which only the dev package provides (the runtime lib is .so.0)
-          # libluajit-5.1-dev: headers for compiling the bridge .so modules
-          # (the luajit package is runtime-only; liblua5.1-dev's headers are
-          # not on the -I/usr/include/luajit-2.1 search path used by compile_so)
-          sudo apt-get install -y luajit libluajit-5.1-dev luarocks liblua5.1-dev libxkbcommon-dev
-          sudo luarocks --lua-version=5.1 install lua-cjson
-
-          mkdir -p tools/bin tools/lib tools/include
-          sudo cp /usr/bin/luajit tools/bin/
-          # -L: the artifact archive does not carry the dev symlinks
-          sudo cp -L /usr/lib/x86_64-linux-gnu/libluajit-5.1.so.2 tools/lib/
-          sudo cp -L /usr/lib/x86_64-linux-gnu/libxkbcommon.so.0 tools/lib/
-          sudo cp -L /usr/lib/x86_64-linux-gnu/libxkbcommon.so tools/lib/
-          sudo cp /usr/local/lib/lua/5.1/cjson.so tools/lib/
-          sudo cp -r /usr/include/luajit-2.1 tools/include/
-
-          curl -fsSL https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-x86_64.zip -o /tmp/stylua.zip
-          unzip -o /tmp/stylua.zip -d tools/bin
-
-          # the luals tarball ships the binary together with its support
-          # files: keep the whole tree, only bin/ goes on PATH
-          mkdir -p tools/luals
-          curl -fsSL "https://github.com/LuaLS/lua-language-server/releases/download/${LLS_VERSION}/lua-language-server-${LLS_VERSION}-linux-x64.tar.gz" \
-            | tar -xz -C tools/luals
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: tools
-          path: tools
-
   tests:
-    needs: install
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     # tests/harness.lua resolves `sai.*` requires through the parent of the
     # checkout: the repo must be checked out into a directory named `sai`
     defaults:
@@ -63,83 +19,44 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: sai
-      - uses: actions/download-artifact@v8
-        with:
-          name: tools
-          path: tools
-      - name: Restore toolchain
+      # the nvim_dap job installs the same set: the runner image pins the
+      # distro packages, so both jobs see the same toolchain
+      # lua-cjson: 5.1-abi module, loadable by luajit
+      # libxkbcommon-dev: ffi.load('xkbcommon') resolves to libxkbcommon.so,
+      # which only the dev package provides (the runtime lib is .so.0)
+      # libluajit-5.1-dev: headers for compiling the bridge .so modules
+      - name: Install luajit toolchain
         run: |
-          chmod +x "$GITHUB_WORKSPACE/tools/bin/"*
-          echo "$GITHUB_WORKSPACE/tools/bin" >> "$GITHUB_PATH"
-          # compile_so hardcodes the luajit include path
-          sudo cp -r "$GITHUB_WORKSPACE/tools/include/luajit-2.1" /usr/include/
-      # LD_LIBRARY_PATH: the luajit binary's lib + ffi.load('xkbcommon');
-      # LUA_CPATH: cjson (the env var overrides the default cpath, which is
-      # fine - the bridge .so files load via package.loadlib, not require)
+          sudo apt-get update -qq
+          sudo apt-get install -yqq luajit libluajit-5.1-dev libxkbcommon-dev lua-cjson
       - name: tests
-        env:
-          LD_LIBRARY_PATH: ${{ github.workspace }}/tools/lib
-          LUA_CPATH: ${{ github.workspace }}/tools/lib/?.so
         run: timeout 300 luajit tests/init.lua
 
-  stylua:
-    needs: install
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    defaults:
-      run:
-        working-directory: sai
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          path: sai
-      - uses: actions/download-artifact@v8
-        with:
-          name: tools
-          path: tools
-      - name: Restore toolchain
+      - name: Download stylua
         run: |
-          chmod +x "$GITHUB_WORKSPACE/tools/bin/stylua"
-          echo "$GITHUB_WORKSPACE/tools/bin" >> "$GITHUB_PATH"
+          curl -fsSL https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-x86_64.zip -o /tmp/stylua.zip
+          unzip -o /tmp/stylua.zip -d "$RUNNER_TEMP/stylua-bin"
+          echo "$RUNNER_TEMP/stylua-bin" >> "$GITHUB_PATH"
       - name: stylua
         run: stylua --check .
 
-  luals:
-    needs: install
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    defaults:
-      run:
-        working-directory: sai
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          path: sai
-      - uses: actions/download-artifact@v8
-        with:
-          name: tools
-          path: tools
-      - name: Restore toolchain
+      - name: Download lua-language-server
+        env:
+          # pinned: the lint results are verified against this exact version
+          LLS_VERSION: 3.19.1
         run: |
-          chmod +x "$GITHUB_WORKSPACE/tools/luals/bin/lua-language-server"
-          echo "$GITHUB_WORKSPACE/tools/luals/bin" >> "$GITHUB_PATH"
+          # the tarball ships the binary together with its support files:
+          # keep the whole tree, only bin/ goes on PATH
+          curl -fsSL "https://github.com/LuaLS/lua-language-server/releases/download/${LLS_VERSION}/lua-language-server-${LLS_VERSION}-linux-x64.tar.gz" \
+            | tar -xz -C "$RUNNER_TEMP"
+          chmod +x "$RUNNER_TEMP/bin/lua-language-server"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
 
-      # the swayimg api types resolve in CLI check mode only when the meta
-      # file lives inside the checked workspace (workspace.library is not
-      # loaded by --check)
+      # --check does not load workspace.library entries: the definitions
+      # must live inside the checked workspace (the .luarc.json library
+      # paths only serve local editor sessions)
       - name: Fetch swayimg API definitions
         run: curl -fsSL https://raw.githubusercontent.com/artemsen/swayimg/master/extra/swayimg.lua -o swayimg.lua
-
-      - name: Write .luarc.json
-        run: |
-          cat > .luarc.json <<'EOF'
-          {
-          	"runtime": { "version": "LuaJIT" },
-          	"type": { "castNumberToInteger": true, "weakNilCheck": true, "weakUnionCheck": true },
-          	"diagnostics": { "globals": ["vim"] },
-          	"workspace": { "checkThirdParty": false }
-          }
-          EOF
 
       # require a verdict line so an lls crash cannot pass as green
       - name: lua-language-server
@@ -154,7 +71,6 @@ jobs:
   # backend runs in memory on the gpu-less runner (pixman software
   # rendering, no input devices) - its documented purpose is client testing
   nvim_dap:
-    needs: install
     runs-on: ubuntu-latest
     timeout-minutes: 30
     defaults:
@@ -164,14 +80,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: sai
-      - uses: actions/download-artifact@v8
-        with:
-          name: tools
-          path: tools
-      - name: Restore toolchain
+      - name: Config dir symlink
         run: |
-          chmod +x "$GITHUB_WORKSPACE/tools/bin/"*
-          echo "$GITHUB_WORKSPACE/tools/bin" >> "$GITHUB_PATH"
           # the test spawns processes that resolve `sai.*` through the
           # swayimg config dir: mirror the local ~/.config/swayimg/sai layout
           mkdir -p "$HOME/.config"
@@ -182,11 +92,13 @@ jobs:
           # pinned: nvim-dap/nvim-nio require a recent nvim, apt's is too old
           NVIM_VERSION: v0.12.5
         run: |
-          sudo apt-get update -q
+          sudo apt-get update -qq
           # weston: headless wayland session; libjpeg-dev: the generated test
-          # images; the rest: swayimg build dependencies (master, like the
-          # api definitions the luals job checks against)
-          sudo apt-get install -y weston imagemagick \
+          # images; luajit + lua-cjson: the test harness (as in the tests job);
+          # the rest: swayimg build dependencies (master, like the api
+          # definitions the luals check runs against)
+          sudo apt-get install -yqq weston imagemagick \
+            luajit lua-cjson \
             meson ninja-build \
             libwayland-dev wayland-protocols \
             libxkbcommon-dev libfontconfig-dev libfreetype-dev libluajit-5.1-dev libjpeg-dev
@@ -222,11 +134,7 @@ jobs:
           if [ ! -S "$XDG_RUNTIME_DIR/wayland-0" ]; then cat /tmp/weston.log; exit 1; fi
           echo "WAYLAND_DISPLAY=wayland-0" >> "$GITHUB_ENV"
 
-      # env as in the tests job: swayimg's embedded luajit honors LUA_CPATH
       - name: tests
-        env:
-          LD_LIBRARY_PATH: ${{ github.workspace }}/tools/lib
-          LUA_CPATH: ${{ github.workspace }}/tools/lib/?.so
         run: timeout 300 luajit tests/init.lua nvim_dap
 
       - name: Weston session log

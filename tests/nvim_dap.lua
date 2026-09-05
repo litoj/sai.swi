@@ -12,7 +12,7 @@ if not dir:match '^/' then dir = (os.getenv 'PWD' or '.') .. '/' .. dir end
 package.path = dir .. '/?.lua;' .. package.path
 
 local H = require 'harness'
-local ok, eq = H.ok, H.eq
+local ok = H.ok
 
 local home = os.getenv 'HOME'
 local e2e = '/tmp/sai_e2e'
@@ -33,6 +33,7 @@ package.path = swi_config .. '/swayimg/?.lua;' .. package.path
 require 'sai.api.globals'
 
 local dbg = require 'sai.bridge.debug'
+sai.text.enabled = false
 dbg.start { log = %q }
 print 'DBG_READY'
 io.stdout:flush()
@@ -191,6 +192,42 @@ end
 local function evaluate(frame, expr)
 	local result = sync('evaluate', { expression = expr, frameId = frame.id })
 	return result and result.result
+end
+
+-- structural expansion of an expression: name -> value map of the
+-- variables the debuggee reports for it
+local function members(frame, expr)
+	local result = sync('evaluate', { expression = expr, frameId = frame.id })
+	local ref = result and result.variablesReference
+	if not ref or ref == 0 then return {} end
+	result = sync('variables', { variablesReference = ref })
+	local out = {}
+	for _, v in ipairs((result and result.variables) or {}) do
+		out[v.name] = v.value
+	end
+	return out
+end
+
+-- one verdict per object: every expected entry is checked in a loop and
+-- the mismatches are collected into a single failure message. A boolean
+-- expected value is a presence spec - functions and proxies render to
+-- volatile values, only the key itself is stable
+local function eq_object(tag, expected, actual)
+	local diffs = {}
+	for k, v in pairs(expected) do
+		if v == true or v == false then
+			if (actual[k] ~= nil) ~= v then
+				diffs[#diffs + 1] = ('%s: expected %s'):format(k, v and 'present' or 'absent')
+			end
+		elseif actual[k] ~= v then
+			diffs[#diffs + 1] = ('%s: expected %s got %s'):format(k, tostring(v), tostring(actual[k]))
+		end
+	end
+	if #diffs > 0 then
+		fail(tag, table.concat(diffs, '; '))
+	else
+		pass(tag)
+	end
 end
 
 local function locals(frame)
@@ -364,20 +401,59 @@ local function main()
 	frame = assert_stop 'final'
 	ok('final completed', run_to_completion 'RESULT final 3')
 
-	-- the locals view must survive sai proxy objects: a __tostring error in
-	-- the pretty printer used to drop the whole variables/evaluate response,
-	-- leaving the locals empty and tables unprintable. Enabling the text
-	-- layer breaks in its setter
-	ipc_exec("sai.text.enabled = true\nprint 'CMD_READY'\nio.stdout:flush()")
+	-- deep verification of the proxy objects: expand them structurally
+	-- (name -> value) instead of parsing formatted strings. The locals view
+	-- must survive sai proxies: a __tostring error in the pretty printer used
+	-- to drop the whole variables/evaluate response, leaving the locals
+	-- empty. The text layer starts disabled; the help mode launch re-enables
+	-- it, stopping in the setter
+	-- the F1 action from the default binds, on a text layer that started
+	-- disabled: the help-mode launch re-enables it through the reconfigurer,
+	-- stopping in the setter
+	ipc_exec("require('sai.mode.key_help').enabled = true\nprint 'CMD_READY'\nio.stdout:flush()")
 	frame = assert_stop('text layer', false, text_bp_line, text_path)
 	if frame then
-		local names = locals(frame)
-		ok('text locals present', names.self ~= nil and names.val ~= nil)
-		eq('text val', 'true', names.val)
-		ok('text locals printed', (names.self or ''):find('size=24', 1, true) ~= nil)
-		ok('sai.text printed', (evaluate(frame, 'sai.text') or ''):find('size=24', 1, true) ~= nil)
-		local swt = evaluate(frame, 'swayimg.text')
-		ok('swayimg.text printed', swt ~= nil and #swt > 20 and swt:find('visible', 1, true) ~= nil)
+		-- self is the proxy local: its rendering surviving the transport
+		-- is the whole point of this phase
+		eq_object('text locals', { self = true, val = 'true' }, locals(frame))
+
+		-- sai.text: the class defaults as the config left them. _enabled
+		-- is still false mid-setter - the rawset of the new value happens
+		-- only after set_enabled returns
+		eq_object('sai.text', {
+			_size = '24',
+			_font = 'monospace',
+			_status_timeout = '3',
+			_enabled = 'false',
+			set_enabled = true,
+			set_size = true,
+			super = true,
+		}, members(frame, 'sai.text'))
+
+		-- the luabridge namespace: pairs lists only the deprecated
+		-- functions, the properties are served by __index and never show
+		-- up in the listing - the expected map drives a direct read of
+		-- each property the listing did not provide
+		local expected_swt = {
+			show = true,
+			hide = true,
+			set_size = true,
+			set_font = true,
+			-- the only property with a real getter; mid-set the
+			-- enablement assignment has not run yet (it is the bp line)
+			visible = 'false',
+			-- write-only properties: the getters return nullptr -> nil
+			size = 'nil',
+			font = 'nil',
+			status = 'nil',
+			status_timeout = 'nil',
+			timeout = 'nil',
+		}
+		local swt = members(frame, 'swayimg.text')
+		for k, v in pairs(expected_swt) do
+			if swt[k] == nil and v ~= false then swt[k] = evaluate(frame, 'swayimg.text.' .. k) end
+		end
+		eq_object('swayimg.text', expected_swt, swt)
 	end
 	ok('text layer completed', run_to_completion 'CMD_READY')
 
@@ -427,7 +503,7 @@ end
 local T = {}
 
 local function run_session(images)
-	local _, failed_before = H.counts()
+	H.counts()
 	os.execute('rm -rf ' .. e2e)
 	os.execute('mkdir -p ' .. e2e .. '/swayimg')
 

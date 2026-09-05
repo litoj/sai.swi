@@ -26,11 +26,13 @@ local M = {
 ---@param bind string
 ---@param cfg bindcfg
 ---@param action fun()
+---@diagnostic disable-next-line: unused-local
 function M:_rawmap(bind, cfg, action) end
 
 ---Must be overriden by inheriting class
 ---@protected
 ---@param bind string
+---@diagnostic disable-next-line: unused-local
 function M:_rawunmap(bind) end
 
 ---@private

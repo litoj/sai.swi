@@ -5,10 +5,9 @@ local U = require 'sai.lib.utils'
 
 ---@overload fun(apply:fun(self:sai.lib.reconfigurer)|boolean)
 ---@class sai.lib.reconfigurer: sai.api.proxy
----@field protected _cfg {mode:string,fb:{[string]:string}} TODO: simplify
+---@field protected _cfg {mode:string,fb:{[string]:string}}|boolean TODO: simplify
 ---@field protected _avail fun(idx:string):boolean
 ---@field protected _enabled boolean
----@field [string] sai.lib.reconfigurer|any
 local M = {
 	save_user_changes = false, --- update setting override values to currrent state before restoring
 }
@@ -83,14 +82,18 @@ local elmeta = {
 	end,
 }
 
+---@param self sai.lib.reconfigurer.eventloop|sai.lib.reconfigurer?
 ---@return sai.lib.reconfigurer.eventloop
-function M.new_evloop()
+function M.new_evloop(self)
 	---@type sai.lib.reconfigurer.eventloop
 	---@diagnostic disable-next-line: missing-fields
-	local self = { _enabled = false, _new = {}, _old = {}, _filter = {} }
+	self = self or { _enabled = false }
+	---@diagnostic disable: invisible
+	self._new = {}
+	self._old = {}
+	self._filter = {}
 
 	self.subscribe = function(h)
-		---@diagnostic disable: invisible
 		self._new[h] = 1
 		if self._enabled then e.subscribe(h) end
 		return h
@@ -137,13 +140,13 @@ local checked_mode_opts = {
 ---@param self {super:sai.lib.backer}
 ---@return self
 function M:new()
+	self._enabled = self._enabled or false
+	if self.super._path == 'sai.eventloop' then return M.new_evloop(self) end
+
 	---@cast self sai.lib.reconfigurer
 	for k, v in pairs(M) do
-		if k:sub(1, 2) ~= '__' then self[k] = v end
+		if k:sub(1, 2) ~= '__' and k:sub(1, 3) ~= 'new' then self[k] = v end
 	end
-	self.new = nil
-	self.new_evloop = nil
-	self._enabled = self._enabled or false
 	self._vars = {}
 	self._cfg = checked_mode_opts[self.super._path] or false
 	self._avail = self._cfg --

@@ -174,9 +174,11 @@ end
 ---Evaluates `code` in the context of the frame `level` (relative to `eval_in`
 ---itself: `debug.getinfo(level)` from here must return the target frame).
 local function eval_in(level, code)
-	local fn, err = loadstring(code, '=(dap eval)')
+	-- expression first: LuaJIT compiles bare expressions like `f(x)` or
+	-- `a ~= b` as chunks too, silently discarding their result (or erroring)
+	local fn, err = loadstring('return ' .. code, '=(dap eval)')
 	if not fn then
-		fn, err = loadstring('return ' .. code, '=(dap eval)')
+		fn, err = loadstring(code, '=(dap eval)')
 	end
 	if not fn then return nil, err end
 	setfenv(fn, frame_env(level and level + 1))
@@ -420,7 +422,7 @@ function handlers.scopes(req)
 	local args = tbl(req.arguments)
 	local level = S.frames[args.frameId]
 	if not level then
-		respond(req, { scopes = {} })
+		respond_err(req, 'unknown frameId: ' .. tostring(args.frameId))
 		return
 	end
 	respond(req, {
@@ -449,6 +451,10 @@ end
 function handlers.variables(req)
 	local args = tbl(req.arguments)
 	local ref = S.vars_ref[args.variablesReference]
+	if ref == nil then
+		respond_err(req, 'unknown variablesReference: ' .. tostring(args.variablesReference))
+		return
+	end
 	local vars = {}
 	if type(ref) == 'number' then
 		local i = 1
@@ -496,6 +502,10 @@ end
 function handlers.evaluate(req)
 	local args = tbl(req.arguments)
 	local level = args.frameId and S.frames[args.frameId]
+	if args.frameId and not level then
+		respond_err(req, 'unknown frameId: ' .. tostring(args.frameId))
+		return
+	end
 	-- `/nat` marks native-code evaluation in debuggers like C or C++; Lua
 	-- has no native/interpreted split, so just strip the prefix
 	local expr = (tostring(args.expression or ''):gsub('^/nat%s*', ''))
@@ -535,6 +545,9 @@ function handlers.setVariable(req)
 		end
 	elseif type(ref) == 'table' then
 		ref[args.name] = val
+	else
+		respond_err(req, 'unknown variablesReference: ' .. tostring(args.variablesReference))
+		return
 	end
 	local body = { value = val_str(val), type = type(val), variablesReference = 0 }
 	if type(val) == 'table' then body.variablesReference = new_var_ref(val) end
@@ -565,7 +578,11 @@ local function dispatch(msg)
 	local h = handlers[msg.command]
 	if h then
 		local ok, err = pcall(h, msg)
-		if not ok then log_err('handler error: ' .. tostring(err)) end
+		if not ok then
+			-- the client would wait forever for the missing response
+			log_err('handler error: ' .. tostring(err))
+			respond_err(msg, tostring(err))
+		end
 	else
 		respond(msg, {})
 	end
@@ -616,8 +633,10 @@ function dbg_srv:on_io()
 end
 
 local function freeze(reason, text)
+	-- drop the previous stop's frame/var references but keep the id
+	-- counters running: reusing ids would let a stale request from before
+	-- the resume silently resolve to the new stop's unrelated frame
 	S.frames, S.vars_ref = {}, {}
-	S.frame_id, S.vars_id = 1, 1
 	S.in_freeze = true
 	S.running = false
 	event('stopped', { reason = reason, threadId = 1, text = text })

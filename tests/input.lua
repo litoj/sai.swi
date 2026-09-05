@@ -93,7 +93,7 @@ function T.delete_and_selection(h)
 	h.ok('state valid after range delete', not violations(self, get()))
 end
 
-function T.line_info(h)
+function T.line_info()
 	local self = new_input()
 	self:insert 'aé\nbö'
 	local lines = self:get_lines_info()
