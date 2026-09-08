@@ -7,6 +7,8 @@
 local ffi = require 'ffi'
 local bit = require 'bit'
 local U = require 'sai.lib.utils'
+-- pid_t/getpid: the fallback for processes without the api global
+require 'sai.bridge.cdef'
 
 ffi.cdef [[
 typedef unsigned short sa_family_t;
@@ -61,7 +63,7 @@ end
 
 local function arm_fd(fd, signal, nonblocking)
 	local sig = signal == 'USR1' and SIGUSR1 or SIGUSR2
-	ffi.C.fcntl(fd, F_SETOWN, ffi.new('int', sai.pid))
+	ffi.C.fcntl(fd, F_SETOWN, ffi.new('int', ffi.C.getpid()))
 	ffi.C.fcntl(fd, F_SETSIG, ffi.new('int', sig))
 	local flags = O_ASYNC
 	if nonblocking then flags = bit.bor(flags, O_NONBLOCK) end

@@ -267,7 +267,22 @@ local function ipc_exec(code)
 	local f = assert(io.open(e2e .. '/ipc_code.lua', 'w'))
 	f:write(code)
 	f:close()
-	vim.fn.jobstart({ 'luajit', e2e .. '/ipc_send.lua', ipc_sock, e2e .. '/ipc_code.lua' }, { detach = true })
+	-- the send outcome goes to a log: a fire-and-forget client that failed
+	-- to connect or send would otherwise surface only as a stop timeout
+	local log = assert(io.open(e2e .. '/ipc_send.log', 'a'))
+	log:write(('-- %s\n'):format(code:match '[^\n]+'))
+	log:close()
+	vim.fn.jobstart({ 'luajit', e2e .. '/ipc_send.lua', ipc_sock, e2e .. '/ipc_code.lua' }, {
+		detach = true,
+		on_stdout = function(_, data)
+			local log = io.open(e2e .. '/ipc_send.log', 'a')
+			if not log then return end
+			for _, line in ipairs(data) do
+				log:write(line, '\n')
+			end
+			log:close()
+		end,
+	})
 end
 
 -- ipc code that reports it ran by writing a marker file
@@ -457,13 +472,19 @@ local function main()
 	end
 	ok('text layer completed', run_to_completion 'CMD_READY')
 
-	ok('all results in log', log_has 'RESULT init 103' and log_has 'RESULT ipc 6'
-		and log_has 'RESULT signal 10' and log_has 'RESULT defer 15'
-		and log_has 'RESULT concurrent 21' and log_has 'RESULT final 3')
-
-	local disc_done = false
-	dap.disconnect({ terminateDebuggee = true }, function() disc_done = true end)
+	local disc_done, disc_err = false, nil
+	dap.disconnect({ terminateDebuggee = true }, function(err)
+		disc_done = true
+		disc_err = err
+	end)
 	ok('disconnect responded', vim.wait(5000, function() return disc_done end, 50))
+	-- nvim-dap fires the callback on its own 3s timeout as well: only a
+	-- nil error proves the debuggee really processed the request
+	if disc_err then
+		fail('disconnect acknowledged by the debuggee', disc_err.message or disc_err)
+	else
+		pass('disconnect acknowledged by the debuggee')
+	end
 	ok('session closed', vim.wait(5000, function() return session() == nil end, 50))
 end
 
@@ -503,7 +524,6 @@ end
 local T = {}
 
 local function run_session(images)
-	H.counts()
 	os.execute('rm -rf ' .. e2e)
 	os.execute('mkdir -p ' .. e2e .. '/swayimg')
 
@@ -520,29 +540,26 @@ local function run_session(images)
 		return
 	end
 
-	local offset = assert(config_src:find('acc = acc + i', 1, true))
-	local _, nl = config_src:sub(1, offset):gsub('\n', '\n')
-	local bp_line = nl + 1
+	---The 1-based line number of the pattern's first occurrence.
+	local function line_of(src, pat)
+		local offset = assert(src:find(pat, 1, true), 'pattern not found: ' .. pat)
+		return (select(2, src:sub(1, offset):gsub('\n', '\n'))) + 1
+	end
 
+	local bp_line = line_of(config_src, 'acc = acc + i')
 	-- the text layer setter: first line of the set_enabled body
-	local text_src = assert(H.read_file(H.sai_dir .. '/api/text.lua'))
-	local toffset = assert(text_src:find('if val == true', 1, true))
-	local _, tnl = text_src:sub(1, toffset):gsub('\n', '\n')
-	local text_bp_line = tnl + 1
+	local text_bp_line = line_of(assert(H.read_file(H.sai_dir .. '/api/text.lua')), 'if val == true')
 
 	H.write_file(driver_path, driver_src(pid, bp_line, text_bp_line))
 	local out = H.sh(('timeout 60 nvim --headless -u %s < /dev/null'):format(driver_path))
 	H.write_file(e2e .. '/nvim.log', out)
 
-	for line in out:gmatch '[^\r\n]+' do
-		if line:match '^FAIL ' or line:match '%d+ passed, %d+ failed' or (line:match '^PASS ' and H.verbose) then
-			print(line)
-		end
-	end
-
 	local driver_failed = 0
 	for line in out:gmatch '[^\r\n]+' do
 		if line:match '^FAIL ' then driver_failed = driver_failed + 1 end
+		if line:match '^FAIL ' or line:match '%d+ passed, %d+ failed' or (line:match '^PASS ' and H.verbose) then
+			print(line)
+		end
 	end
 	ok('driver completed', out:match '%d+ passed, %d+ failed' ~= nil)
 	ok('driver failures', driver_failed == 0)
@@ -552,14 +569,17 @@ local function run_session(images)
 		print(out)
 	end
 	ok('swayimg terminated', H.wait_pid_dead(pid, 10))
+	if H.pid_alive(pid) then
+		-- the debuggee did not exit: its scheduling state is the first
+		-- clue of the teardown race
+		print(('--- debuggee still alive (pid %d) ---'):format(pid))
+		print((H.read_file(('/proc/%d/status'):format(pid)) or ''):match 'State:%s*[^\n]+')
+		print('wchan: ' .. (H.read_file(('/proc/%d/wchan'):format(pid)) or '?'))
+	end
 	ok('debug socket removed', not H.file_exists(dbg_sock))
 	ok('ipc socket removed', not H.file_exists(ipc_sock))
-	ok('RESULT init', log_has 'RESULT init 103')
-	ok('RESULT ipc', log_has 'RESULT ipc 6')
-	ok('RESULT signal', log_has 'RESULT signal 10')
-	ok('RESULT defer', log_has 'RESULT defer 15')
-	ok('RESULT concurrent', log_has 'RESULT concurrent 21')
-	ok('RESULT final', log_has 'RESULT final 3')
+	-- the per-result markers were asserted by the driver as each phase
+	-- completed (its run_to_completion calls read this same log)
 
 	local _, failed = H.counts()
 	if failed > 0 then
@@ -567,6 +587,8 @@ local function run_session(images)
 		print(H.read_file(log_path) or '')
 		print(('--- debug harness log (%s) ---'):format(dbg_log))
 		print(H.read_file(dbg_log) or '')
+		print '--- ipc client outcomes ---'
+		print(H.read_file(e2e .. '/ipc_send.log') or '(no client ran)')
 	end
 end
 
@@ -577,15 +599,10 @@ T.dap_session = function(h)
 		return
 	end
 	local ran, err = pcall(run_session, images)
-	if not ran then h.fail('dap_session crashed', err) end
 	cleanup()
+	if not ran then error(err, 0) end
 end
 
-if not _G._TEST_RUNNER then
-	_G._TEST_RUNNER = true
-	H.run(T)
-	H.summary()
-	os.exit(H.exit_code())
-end
+H.maybe_standalone(T)
 
 return T

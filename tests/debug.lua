@@ -17,12 +17,11 @@ local ffi = require 'ffi'
 -- the raw client below needs the socket cdefs
 require 'sai.bridge.socket'
 
-local tmp = '/tmp/sai_debug_test'
-local sock = tmp .. '.sock'
-local script_path = tmp .. '_script.lua'
-local log_path = tmp .. '_script.log'
-local dbg_log_path = tmp .. '_dbg.log'
-local pid_path = tmp .. '_script.pid'
+local fx = H.proc_fixture('debug', 'DBG_READY')
+-- the aliases carry the real paths into the DAP payloads below
+local sock, script_path, log_path = fx.sock, fx.script, fx.log
+local dbg_log_path = '/tmp/sai_debug_dbg.log'
+fx.track(dbg_log_path)
 
 local AF_UNIX, SOCK_STREAM = 1, 1
 local POLLIN, MSG_NOSIGNAL = 0x1, 0x4000
@@ -79,8 +78,9 @@ local function client_pump(c, timeout)
 end
 
 local function expect(c, pred, timeout)
-	local deadline = os.time() + (timeout or 10)
-	while os.time() < deadline do
+	-- H.now: microsecond clock, unlike os.time's whole-second resolution
+	local deadline = H.now() + (timeout or 10)
+	while H.now() < deadline do
 		for i, m in ipairs(c.msgs) do
 			if pred(m) then return table.remove(c.msgs, i) end
 		end
@@ -132,14 +132,6 @@ local function drain(c)
 	end
 end
 
-local function cleanup()
-	os.remove(script_path)
-	os.remove(log_path)
-	os.remove(dbg_log_path)
-	os.remove(pid_path)
-	os.remove(sock)
-end
-
 local function read_log() return H.read_file(log_path) end
 
 local function find_line(pattern)
@@ -157,37 +149,29 @@ local function find_line(pattern)
 end
 
 local function start_debuggee()
-	os.remove(sock)
-	H.spawn('luajit ' .. script_path, log_path, pid_path)
-	local ready = H.wait_for(function() return (read_log() or ''):find('DBG_READY', 1, true) ~= nil end, 15)
-	if not ready then error('debuggee did not start:\n' .. (read_log() or '')) end
+	if not fx.spawn('luajit ' .. script_path) then error('debuggee did not start:\n' .. (read_log() or ''), 0) end
 end
 
-local function kill_debuggee() H.kill(tonumber((H.read_file(pid_path) or ''):match '%d+')) end
-
-local function wait_log(pattern, timeout)
-	return H.wait_for(function() return (read_log() or ''):find(pattern, 1, true) ~= nil end, timeout)
-end
+local function wait_log(pattern, timeout) return fx.wait_log(pattern, timeout) end
 
 local function write_debuggee(user_code)
-	local script = table.concat({
-		("package.path = %q .. '/?.lua;' .. package.path"):format(H.swayimg_dir),
-		-- plain luajit: mock the sai env the harness runs in',
-		'local noop = function() end',
-		'_G.sai = {',
-		'\tdefer_fn = function(cb) cb() end,',
-		'\texit = function(code) os.exit(code) end,',
-		'\tlog = function(m) print(m) end,',
-		'\tnotify = function() end,',
-		'\teventloop = { subscribe = function() return {} end, unsubscribe = noop },',
-		'}',
-		"local dbg = require 'sai.bridge.debug'",
-		('local sock = dbg.start { path = %q, log = %q }'):format(sock, dbg_log_path),
-		"print('DBG_READY ' .. sock)",
-		'io.stdout:flush()',
-		'dbg.wait_attached()',
-		user_code,
-	}, '\n') .. '\n'
+	-- plain luajit: mock the sai env the harness runs in
+	local script = ([==[
+package.path = %q .. '/?.lua;' .. package.path
+local noop = function() end
+_G.sai = {
+	defer_fn = function(cb) cb() end,
+	exit = function(code) os.exit(code) end,
+	log = function(m) print(m) end,
+	notify = function() end,
+	eventloop = { subscribe = function() return {} end, unsubscribe = noop },
+}
+local dbg = require 'sai.bridge.debug'
+local sock = dbg.start { path = %q, log = %q }
+print('DBG_READY ' .. sock)
+io.stdout:flush()
+dbg.wait_attached()
+]==]):format(H.swayimg_dir, sock, dbg_log_path) .. '\n' .. user_code
 	H.write_file(script_path, script)
 end
 
@@ -197,20 +181,9 @@ local function handshake(c)
 	request_ok(c, 'attach', {})
 end
 
--- A test method: always kills the debuggee and removes its files afterwards,
--- even when the scenario crashes midway
-local function scenario(fn)
-	return function()
-		local ran, err = pcall(fn)
-		kill_debuggee()
-		cleanup()
-		if not ran then H.fail('scenario crashed', err) end
-	end
-end
-
 local T = {}
 
-T.breakpoints = scenario(function()
+T.breakpoints = fx.scenario(function()
 	write_debuggee [[
 e_table = { alpha = 1, beta = 2, gamma = 3, delta = 4, epsilon = 5, zeta = 6, eta = 7, theta = 8, iota = 9, kappa = 10 }
 e_proxy = setmetatable({ 10, 20, 30 }, { __tostring = function(t) return 'PROXY ' .. #t end })
@@ -288,12 +261,12 @@ io.stdout:flush()
 	ok('table members sorted by name', sorted)
 
 	r = request_ok(c, 'variables', { variablesReference = table_ref })
-	local names = {}
+	local member_names = {}
 	for _, v in ipairs((r and r.body and r.body.variables) or {}) do
-		names[#names + 1] = v.name
+		member_names[#member_names + 1] = v.name
 	end
-	eq('table member count', 3, #names)
-	eq('numeric names sort numerically', '1,2,19', table.concat(names, ','))
+	eq('table member count', 3, #member_names)
+	eq('numeric names sort numerically', '1,2,19', table.concat(member_names, ','))
 
 	-- metamethod tables render their __tostring now instead of a bare 'table'
 	r = request_ok(c, 'evaluate', { expression = 'e_proxy', frameId = frames[1].id })
@@ -336,7 +309,7 @@ end)
 -- a client holding frame/variable references from a previous stop must get
 -- visible errors after the freeze reset them - never empty lists or
 -- evaluations against the wrong frame (which silently wipe UI state)
-T.stale_refs = scenario(function()
+T.stale_refs = fx.scenario(function()
 	write_debuggee [[
 local function work(n)
 	local acc = 0
@@ -415,7 +388,7 @@ io.stdout:flush()
 	client_close(c)
 end)
 
-T.hit_log = scenario(function()
+T.hit_log = fx.scenario(function()
 	write_debuggee [[
 local function work(n)
 	local acc = 0
@@ -469,7 +442,7 @@ io.stdout:flush()
 	client_close(c)
 end)
 
-T.conditional = scenario(function()
+T.conditional = fx.scenario(function()
 	write_debuggee [[
 local function work(n)
 	local acc = 0
@@ -513,7 +486,7 @@ io.stdout:flush()
 	client_close(c)
 end)
 
-T.exception = scenario(function()
+T.exception = fx.scenario(function()
 	write_debuggee [[
 local function boom()
 	error 'kaboom'
@@ -554,7 +527,7 @@ io.stdout:flush()
 	client_close(c)
 end)
 
-T.coroutine = scenario(function()
+T.coroutine = fx.scenario(function()
 	write_debuggee [[
 local function cwork()
 	local y = 7
@@ -600,11 +573,6 @@ io.stdout:flush()
 	client_close(c)
 end)
 
-if not _G._TEST_RUNNER then
-	_G._TEST_RUNNER = true
-	H.run(T)
-	H.summary()
-	os.exit(H.exit_code())
-end
+H.maybe_standalone(T)
 
 return T

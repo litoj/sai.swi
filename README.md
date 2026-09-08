@@ -303,7 +303,11 @@ as usual - your nvim-dap bindings pick it up.
 ### Tests
 
 Each test module is named after the sai module it exercises. All tests run end-to-end, over real
-processes. Run it from anywhere:
+processes. The modules also double as usage documentation: the headers of tests/eventloop.lua,
+tests/reconfigurer.lua and tests/ipc.lua state the api idiom their scenarios demonstrate,
+tests/utf8.lua or tests/xkb.lua read as input/output tables for their bridges, and
+tests/remapper.lua shows how to write a custom mode (each test builds its modes with the
+public api calls). Run it from anywhere:
 
 ```sh
 luajit tests/init.lua                     # all tests

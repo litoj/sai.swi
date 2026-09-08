@@ -37,11 +37,6 @@ function T.short_key_name(h)
 	h.eq('Ctrl-BackSpace', '<C-BS>', M.short_key_name 'Ctrl-BackSpace')
 end
 
-if not _G._TEST_RUNNER then
-	_G._TEST_RUNNER = true
-	H.run(T)
-	H.summary()
-	os.exit(H.exit_code())
-end
+H.maybe_standalone(T)
 
 return T

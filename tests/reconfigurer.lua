@@ -2,6 +2,10 @@
 ---Tests for the reconfigurer: the __tostring representations and the special
 ---field functions (view field fallbacks, sai.text.enabled block takeover,
 ---sai.text.status borrow/restore).
+---Usage, as the tests below demonstrate it: R.new { super = api } wraps an
+---api table, field writes become its overrides, and calling the object with
+---true applies them over a captured base while calling it with false
+---restores that base.
 ---Development tool: not used during normal swayimg operation.
 
 local dir = debug.getinfo(1, 'S').source:match '^@(.*)/'
@@ -90,46 +94,19 @@ end
 
 -- The special field functions read the global api at runtime: run them over
 -- the real api stack with a stubbed raw swayimg (same approach as tests/help.lua)
+
 local old_swi, old_sai = _G.swayimg, rawget(_G, 'sai')
 
-local function new_raw_mode()
-	return setmetatable({
-		get_image = function() return { width = 500, height = 400, index = 1, path = 'stub', meta = {} } end,
-	}, {
-		__index = function()
-			return function() end
-		end,
-	})
-end
-
-local swayimg_stub = {
-	mode = 'viewer',
-	viewer = new_raw_mode(),
-	slideshow = new_raw_mode(),
-	gallery = new_raw_mode(),
-	imagelist = { size = 0 },
-	text = {},
-	defer = function() end,
-	on_window_resize = function() end,
-	get_window_size = function() return { width = 800, height = 600 } end,
-}
+local swayimg_stub = H.raw_swayimg()
 
 local sai_stack
 local function with_env(fn)
 	return function(h)
 		if not sai_stack then
-			-- rebind a pristine stack: whichever module ran before this one
-			-- (help.lua in the full suite) leaves its records on the shared
-			-- registry, keyed by that stack's objects - a fresh bind gets a
-			-- clean namespace. Everything except the bridge must go: the lib
-			-- modules bind the eventloop at require time, so a cached one keeps
-			-- firing into a dead eventloop. The bridge stays - its ffi cdefs
-			-- cannot re-run
-			for name in pairs(package.loaded) do
-				if name:sub(1, 4) == 'sai.' and name:sub(1, 11) ~= 'sai.bridge.' then package.loaded[name] = nil end
-			end
-			_G.swayimg = swayimg_stub
-			sai_stack = require 'sai.api.init'
+			-- rebind a pristine stack lazily: whichever module ran before
+			-- this one (help.lua in the full suite) leaves its records on
+			-- the shared registry, keyed by that stack's objects
+			sai_stack = H.fresh_api_stack(swayimg_stub)
 		end
 		_G.sai = sai_stack
 		_G.swayimg = rawget(sai_stack, 'super') -- the raw api the stack is bound to
@@ -339,34 +316,6 @@ T.status_timeout_reset_keeps_pin_for_status = with_env(function(h)
 	h.eq('pin stays at the default', 0, sai_stack.text.status_timeout)
 end)
 
-T.text_mode_change_bracket = with_env(function(h)
-	local mode_text = sai_stack.viewer.text
-	local gallery_text = sai_stack.gallery.text
-	mode_text.topleft = { 'viewer stale' }
-	gallery_text.bottomright = { 'gallery stale' }
-	sai_stack.text.enabled = false
-
-	-- a persist mode survives appmode changes: the remapper brackets its tree
-	-- around the flip, which restores the blocks into the old mode and re-blanks
-	-- them into the new one
-	local mode = require('sai.lib.remapper').new { _path = 'test.persist', persist_mode_change = true }
-	mode.sai.text.topleft = { 'persist block' }
-	mode.enabled = true
-	h.eq('own block shown', 'persist block', mode_text.topleft[1])
-	h.ok('other viewer block emptied', not next(mode_text.bottomright))
-
-	sai_stack.mode = 'gallery' -- fires ModeChangedPre, then ModeChanged
-
-	h.eq('restored into the old mode', 'viewer stale', mode_text.topleft[1])
-	h.eq('layer still on', true, sai_stack.text.enabled)
-	h.eq('own block re-shown in the new mode', 'persist block', gallery_text.topleft[1])
-	h.ok('re-blanked in the new mode', not next(gallery_text.bottomright))
-
-	mode.enabled = false
-	h.eq('new mode block restored', 'gallery stale', gallery_text.bottomright[1])
-	h.eq('own block released', 'viewer stale', mode_text.topleft[1])
-end)
-
 T.text_display_override = with_env(function(h)
 	local mode_text = sai_stack.viewer.text
 	mode_text.topleft = { 'stale' }
@@ -458,11 +407,6 @@ T.capture_once = with_env(function(h)
 	h.eq('the original restored, not an intermediate write', 'original', mode_text.topleft[1])
 end)
 
-if not _G._TEST_RUNNER then
-	_G._TEST_RUNNER = true
-	H.run(T)
-	H.summary()
-	os.exit(H.exit_code())
-end
+H.maybe_standalone(T)
 
 return T

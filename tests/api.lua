@@ -1,78 +1,47 @@
 ---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for the main api (sai.api.init): the notify and cmdline getters.
----The notify tests: the message display is the app's own expiry - the status
----write arms it with the current status_timeout, and its firing is the only
----thing that repaints the layer (an empty write from Lua does not repaint,
----the message frame would stay painted until the next redraw). So notify
----must arm the expiry with the display time and never pin it to 0. The
----cmdline test launches a separate instance with known args and reads its
----served pid and cmdline back over the ipc, checked against the real launch.
----Loads a private copy of the api stack: the raw text table the proxies write
----through to is captured at module load time, so this file cannot reuse the
----stack the help tests bound to their own stub.
----The swayimg.defer stub queues every armed fire the way the app's own timers
----run them: pumping the queue exercises the chain scheduling under the heap,
----the exact machinery the stuck-message bug lived in.
 ---Development tool: not used during normal swayimg operation.
+---
+---Loads a private copy of the api stack: the raw text table the proxies
+---write through to is captured at module load time, so this file cannot
+---reuse the stack the help tests bound to their own stub.
 
 local dir = debug.getinfo(1, 'S').source:match '^@(.*)/'
 if not dir:match '^/' then dir = (os.getenv 'PWD' or '.') .. '/' .. dir end
 package.path = dir .. '/?.lua;' .. package.path
 
+local H = require 'harness'
+local ipc = require 'sai.bridge.ipc'
+
 local old_swi, old_sai = _G.swayimg, rawget(_G, 'sai')
 
--- drop the api stack other test modules may have loaded: their super tables
--- point at their stubs, ours has to point at the one below. Everything except
--- the bridge must go: the lib modules bind the eventloop (and each other) at
--- require time, so a cached one keeps firing into a dead eventloop. The
--- bridge stays - its ffi cdefs cannot re-run
-for name in pairs(package.loaded) do
-	if name:sub(1, 4) == 'sai.' and name:sub(1, 11) ~= 'sai.bridge.' then package.loaded[name] = nil end
-end
+-- The notify tests: the message display is the app's own expiry - the
+-- status write arms it with the current status_timeout, and its firing is
+-- the only thing that repaints the layer (an empty write from Lua does not
+-- repaint, the message frame would stay painted until the next redraw). So
+-- notify must arm the expiry with the display time and never pin it to 0.
+-- The swayimg.defer stub queues every armed fire the way the app's own
+-- timers run them: pumping the queue exercises the chain scheduling under
+-- the heap, the exact machinery the stuck-message bug lived in.
 
--- any method the api stack touches at load or during notify becomes a no-op
-local function new_raw_mode()
-	return setmetatable({}, {
-		__index = function()
-			return function() end
-		end,
-	})
-end
--- the help modes read the gallery metrics for their backdrop sizing
-local gallery = new_raw_mode()
-gallery.thumb_size = 128
-gallery.padding_size = 10
--- and the current image size for their scale fit
-local viewer = new_raw_mode()
-viewer.get_image = function() return { width = 500, height = 400, index = 1, path = 'stub', meta = {} } end
--- faithful to the live app: the C++ text property getters return nil (reads
--- fall through to the api copies), writes land on the C++ side; raw_text
--- records what the app would have received
+-- faithful to the live app: the C++ text property getters return nil
+-- (reads fall through to the api copies), writes land on the C++ side;
+-- raw_text records what the app would have received
 local raw_text = {}
 -- every armed deferred fire queues up; all_defers remembers each one ever
 -- armed so a test can replay them as surplus fires
 local defer_queue, all_defers = {}, {}
-local swayimg = {
-	mode = 'viewer',
-	viewer = viewer,
-	slideshow = new_raw_mode(),
-	gallery = gallery,
-	imagelist = { size = 0 },
-	text = setmetatable({}, {
-		__index = function() return nil end,
-		__newindex = function(_, k, v) raw_text[k] = v end,
-	}),
-	defer = function(_, cb) -- deferred callbacks are pumped manually
-		defer_queue[#defer_queue + 1] = cb
-		all_defers[#all_defers + 1] = cb
-	end,
-	on_window_resize = function() end,
-	get_window_size = function() return { width = 800, height = 600 } end,
-}
-_G.swayimg = swayimg
+local swayimg = H.raw_swayimg()
+swayimg.text = setmetatable({}, {
+	__index = function() return nil end,
+	__newindex = function(_, k, v) raw_text[k] = v end,
+})
+swayimg.defer = function(_, cb) -- deferred callbacks are pumped manually
+	defer_queue[#defer_queue + 1] = cb
+	all_defers[#all_defers + 1] = cb
+end
 
-local sai = require 'sai.api.init'
-local sai_proxy = _G.sai
+local sai, sai_proxy = H.fresh_api_stack(swayimg)
 local heap = require 'sai.bridge.deferred_heap'
 local e = require 'sai.api.eventloop'
 local registry_vars = require('sai.lib.registry').vars
@@ -128,110 +97,80 @@ end
 local T = {}
 
 -- ---------------------------------------------------------------------------
--- The cmdline getter, end-to-end: a launched instance serves its own pid and
--- args over the ipc
+-- The cmdline getter, end-to-end: a launched instance with known args
+-- serves its own pid and cmdline back over the ipc, checked against the
+-- real launch
 -- ---------------------------------------------------------------------------
 
-local H = require 'harness'
-local ipc = require 'sai.bridge.ipc'
-
-local tmp = '/tmp/sai_api_test'
-local sock = tmp .. '.sock'
-local script_path = tmp .. '_instance.lua'
-local log_path = tmp .. '_instance.log'
-local pid_path = tmp .. '_instance.pid'
-
-local function cleanup()
-	os.remove(sock)
-	os.remove(script_path)
-	os.remove(log_path)
-	os.remove(pid_path)
-end
-
-local function kill_instance() H.kill(tonumber((H.read_file(pid_path) or ''):match '%d+')) end
-
--- A test method: always kills the instance and removes its files afterwards,
--- even when the scenario crashes midway
-local function scenario(fn)
-	return function(h)
-		local ran, err = pcall(fn, h)
-		kill_instance()
-		cleanup()
-		if not ran then error(err, 0) end
-	end
-end
+local fx = H.proc_fixture('api_instance', 'INSTANCE_READY')
 
 -- the launched instance: the api stack over a stubbed swayimg (the resize
 -- callback never fires, so no mode ever loads), serving its own state over
--- the ipc - the closest to a real swayimg instance a test can launch
+-- the ipc - the closest to a real swayimg instance a test can launch.
+-- The stub cannot come from the harness: requiring it would preload the
+-- socket and debug bridges before the getters ran, and the whole point of
+-- the PRE_IPC check below is that the api alone declares its ffi needs
 local function instance_script()
 	return table.concat({
 		"local ffi = require('ffi')",
 		("package.path = %q .. '/?.lua;' .. %q .. '/?.lua;' .. package.path"):format(H.dir, H.swayimg_dir),
-		"local function raw_mode()",
-		"	return setmetatable({}, { __index = function() return function() end end })",
-		"end",
-		"local gallery = raw_mode()",
-		"gallery.thumb_size = 128",
-		"gallery.padding_size = 10",
-		"local viewer = raw_mode()",
-		"viewer.get_image = function()",
-		"	return { width = 500, height = 400, index = 1, path = 'stub', meta = {} }",
-		"end",
-		"_G.swayimg = {",
+		'local function raw_mode(t)',
+		'	t = t or {}',
+		'	t.get_image = t.get_image or function()',
+		"		return { width = 500, height = 400, index = 1, path = 'stub', meta = {} }",
+		'	end',
+		'	return setmetatable(t, { __index = function() return function() end end })',
+		'end',
+		'_G.swayimg = {',
 		"	mode = 'viewer',",
-		"	viewer = viewer,",
-		"	slideshow = raw_mode(),",
-		"	gallery = gallery,",
-		"	imagelist = { size = 0 },",
-		"	text = setmetatable({}, {",
-		"		__index = function() return nil end,",
-		"		__newindex = function() end,",
-		"	}),",
-		"	defer = function() end,",
-		"	on_window_resize = function() end,",
-		"	get_window_size = function() return { width = 800, height = 600 } end,",
-		"}",
+		'	viewer = raw_mode(),',
+		'	slideshow = raw_mode {},',
+		'	gallery = raw_mode { thumb_size = 128, padding_size = 10 },',
+		'	imagelist = { size = 0 },',
+		'	text = setmetatable({}, {',
+		'		__index = function() return nil end,',
+		'		__newindex = function() end,',
+		'	}),',
+		'	defer = function() end,',
+		'	on_window_resize = function() end,',
+		'	get_window_size = function() return { width = 800, height = 600 } end,',
+		'}',
 		"require 'sai.api.init' -- also sets the sai global",
 		-- production order: with no bridge module beyond the api's own cdef
 		-- requirement loaded, the getters must already work
 		"print('PRE_IPC_OK ' .. #_G.sai:get_cmdline())",
 		"local H = require 'harness' -- the poll loop's usleep",
-		("local serv = require('sai.bridge.ipc').server(%q)"):format(sock),
-		"serv._signal = false -- no O_ASYNC: the loop below polls",
-		"serv.enabled = false",
-		"serv.enabled = true",
+		("local serv = require('sai.bridge.ipc').server(%q)"):format(fx.sock),
+		'serv._signal = false -- no O_ASYNC: the loop below polls',
+		'serv.enabled = false',
+		'serv.enabled = true',
 		"print('INSTANCE_READY')",
-		"io.stdout:flush()",
-		"while true do",
-		"	serv:poll(0)",
-		"	ffi.C.usleep(1000)",
-		"end",
+		'io.stdout:flush()',
+		'while true do',
+		'	serv:poll(0)',
+		'	ffi.C.usleep(1000)',
+		'end',
 	}, '\n') .. '\n'
 end
 
 -- the instance is launched with known args; the pid and cmdline it serves
 -- must be the real ones of the launched process, through both the getter
 -- and the plain field read
-T.cmdline_of_launched_instance = scenario(function(h)
-	h.write_file(script_path, instance_script())
-	os.remove(sock)
-	h.spawn(("luajit %s --viewer 'my pic.png'"):format(script_path), log_path, pid_path)
-	h.ok('instance started', h.wait_for(function()
-		return (h.read_file(log_path) or ''):find('INSTANCE_READY', 1, true) ~= nil
-	end, 10))
+T.cmdline_of_launched_instance = fx.scenario(function(h)
+	h.write_file(fx.script, instance_script())
+	h.ok('instance started', fx.spawn(("luajit %s --viewer 'my pic.png'"):format(fx.script)))
 	-- the getters ran before the ipc (and the socket bridge) even loaded:
 	-- the api alone must declare everything its ffi use needs
-	h.contains('getters work before any bridge ipc loads', h.read_file(log_path) or '', 'PRE_IPC_OK 4')
+	h.contains('getters work before any bridge ipc loads', h.read_file(fx.log) or '', 'PRE_IPC_OK 4')
 
 	-- the args the instance was really launched with, \1-joined for transport.
 	-- _G.sai, not the local one: the closure's bytecode travels to the
 	-- instance, and upvalues (like this file's sai stack) do not. A wrong pid
 	-- would fail here too: it would read some other process's args
-	local c = ipc.client(sock)
+	local c = ipc.client(fx.sock)
 	h.eq(
 		'cmdline of the launched process',
-		table.concat({ 'luajit', script_path, '--viewer', 'my pic.png' }, '\1'),
+		table.concat({ 'luajit', fx.script, '--viewer', 'my pic.png' }, '\1'),
 		c:send(function() return table.concat(_G.sai:get_cmdline(), '\1') end)
 	)
 	c.enabled = false
@@ -509,5 +448,7 @@ T.notify_writes_do_not_print = with_env(function(h)
 
 	e.unsubscribe { event = 'OptionSet', group = 'test_pin_printer' }
 end)
+
+H.maybe_standalone(T)
 
 return T

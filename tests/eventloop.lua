@@ -1,6 +1,11 @@
 ---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for sai.api.eventloop: hook matching and the trigger/unsubscribe
 ---interaction. Runs in plain luajit with a stubbed swayimg table.
+---Usage, as the tests below demonstrate it: e.subscribe { event = ...,
+---match = ..., once = ... } registers a hook, e.trigger { event = ...,
+---match = ... } fires the matching ones, e.unsubscribe { ... } removes
+---them again. A callback that returns truthy - or a hook subscribed with
+---once = true - deregisters itself after firing.
 ---Development tool: not used during normal swayimg operation.
 
 local dir = debug.getinfo(1, 'S').source:match '^@(.*)/'
@@ -123,11 +128,6 @@ T.match_filtering = stubbed(function()
 	e.unsubscribe { event = E4 }
 end)
 
-if not _G._TEST_RUNNER then
-	_G._TEST_RUNNER = true
-	H.run(T)
-	H.summary()
-	os.exit(H.exit_code())
-end
+H.maybe_standalone(T)
 
 return T

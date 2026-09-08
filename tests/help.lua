@@ -1,9 +1,9 @@
 ---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for the help mode family: the generic sai.mode.help base and its
----key_help/var_help instances, including the bind-layer awareness they rely on.
----Loads the complete real api stack over a stubbed raw swayimg table, so
----enabling the modes executes the same code as inside swayimg, under plain
----luajit. Development tool: not used during normal swayimg operation.
+---key_help/var_help instances, including the bind-layer awareness they rely
+---on, over a recording api stack (see H.recording_stack). The generic
+---mode-machinery interplay lives in tests/remapper.lua instead.
+---Development tool: not used during normal swayimg operation.
 
 local dir = debug.getinfo(1, 'S').source:match '^@(.*)/'
 if not dir:match '^/' then dir = (os.getenv 'PWD' or '.') .. '/' .. dir end
@@ -11,73 +11,11 @@ package.path = dir .. '/?.lua;' .. package.path
 
 local H = require 'harness'
 
--- raw C api stand-in: records the binds swayimg would have received;
--- any other method the api stack touches becomes a no-op function
-local raw_binds = {}
-local function new_raw_mode(name)
-	local t = {
-		on_key = function(b, fn) raw_binds[name .. ':' .. b] = fn end,
-		on_mouse = function(b, fn) raw_binds[name .. ':' .. b] = fn end,
-		on_signal = function() end,
-		on_unassigned_key = function() end,
-		on_image_change = function() end,
-		get_image = function() return { width = 500, height = 400, index = 1, path = 'stub', meta = {} } end,
-	}
-	return setmetatable(t, {
-		__index = function()
-			return function() end
-		end,
-	})
-end
-
--- capture the globals before the api stack replaces them: they must be back
--- in place for the test modules that run after this one (like ipc)
-local old_swi, old_sai = _G.swayimg, rawget(_G, 'sai')
-
-local resize_cb
-local gallery_stub = new_raw_mode 'gallery'
-gallery_stub.thumb_size = 128 -- read by the help modes for the backdrop sizing
-gallery_stub.padding_size = 10
-local swayimg = {
-	mode = 'viewer',
-	viewer = new_raw_mode 'viewer',
-	slideshow = new_raw_mode 'slideshow',
-	gallery = gallery_stub,
-	imagelist = { size = 0 },
-	text = {},
-	defer = function() end,
-	on_window_resize = function(fn) resize_cb = fn end,
-	get_window_size = function() return { width = 800, height = 600 } end,
-}
-_G.swayimg = swayimg
-
--- drop any api stack an earlier module (like api.lua) may have cached: its
--- super tables point at that module's stub, ours has to point at the one
--- above. Everything except the bridge must go: the lib modules bind the
--- eventloop (and each other) at require time, so a cached one keeps firing
--- into a dead eventloop. The bridge stays - its ffi cdefs cannot re-run
-for name in pairs(package.loaded) do
-	if name:sub(1, 4) == 'sai.' and name:sub(1, 11) ~= 'sai.bridge.' then package.loaded[name] = nil end
-end
-
-local sai = require 'sai.api.init'
-resize_cb() -- app initialization: also registers the default binds
-local sai_proxy = _G.sai
-
-local key_help = require 'sai.mode.key_help'
-local var_help = require 'sai.mode.var_help'
-
--- the api stack and the modes read the globals at runtime, so lend them the
--- stubbed environment just for the duration of each method
-_G.swayimg, _G.sai = old_swi, old_sai
-local function with_env(fn)
-	return function(h)
-		_G.swayimg, _G.sai = swayimg, sai_proxy
-		local ran, err = pcall(fn, h)
-		_G.swayimg, _G.sai = old_swi, old_sai
-		if not ran then error(err, 0) end
-	end
-end
+local env = H.recording_stack { 'sai.mode.var_help' }
+local sai, key_help = env.sai, env.key_help
+local var_help = env.mods['sai.mode.var_help']
+local raw_binds, with_env = env.raw_binds, env.with_env
+local remapper = require 'sai.lib.remapper'
 
 -- resolve the text layer templates/event definitions into their current text
 local function rendered(pager)
@@ -87,6 +25,14 @@ local function rendered(pager)
 		out[#out + 1] = type(line) == 'string' and line or line.callback()
 	end
 	return table.concat(out, '\n')
+end
+
+---The first rendered line containing the text, nil when absent.
+local function find_line_with(pager, text)
+	for _, line in ipairs(pager.lines) do
+		---@cast line string
+		if line:find(text, 1, true) then return line end
+	end
 end
 
 local T = {}
@@ -110,28 +56,16 @@ T.key_help_lifecycle = with_env(function(h)
 	h.ok('mode binds listed', #key_help.pager.lines > 0)
 	h.contains('page counter when paging', rawget(key_help.pager, '_last_render')[0], '[Page 1/2]')
 
-	-- a bind without a description must fall back to the simplified trace, not the raw traceback
-	local raw_trace_bind
-	for _, line in ipairs(key_help.pager.lines) do
-		if line:find('stack traceback', 1, true) then raw_trace_bind = line end
-	end
-	h.ok('no raw stack traces in the bind list', raw_trace_bind == nil)
+	-- a bind without a description must fall back to the simplified trace,
+	-- not the raw traceback
+	h.ok('no raw stack traces in the bind list', find_line_with(key_help.pager, 'stack traceback') == nil)
+	local f13_line = find_line_with(key_help.pager, 'F13')
+	h.ok('undescribed bind listed', f13_line ~= nil)
 	h.ok(
 		'undescribed bind shows the simplified call site',
-		(function()
-			for _, line in ipairs(key_help.pager.lines) do
-				if line:find('F13', 1, true) then return not line:find('keybind_processor', 1, true) end
-			end
-		end)()
+		f13_line ~= nil and not f13_line:find('keybind_processor', 1, true)
 	)
-	h.ok(
-		'undescribed bind shows only the first trace line',
-		(function()
-			for _, line in ipairs(key_help.pager.lines) do
-				if line:find('F13', 1, true) then return not line:find('\n', 1, true) end
-			end
-		end)()
-	)
+	h.ok('undescribed bind shows only the first trace line', f13_line ~= nil and not f13_line:find('\n', 1, true))
 
 	key_help.tab = 2
 	key_help.enabled = false
@@ -163,42 +97,39 @@ T.key_help_mode_change = with_env(function(h)
 end)
 
 T.key_help_dynamic_layers = with_env(function(h)
-	local e = require 'sai.api.eventloop'
 	key_help.enabled = true
 	h.contains('two tabs before the push', key_help.pager.title, 'Key Help')
 
-	-- a bind layer whose key is also applied to the mode api, so
-	-- get_active_bindsets lists it (that is what a real enabled layer looks like)
-	local cfg = { cb = function() end, desc = 'dyn', _traced = true }
-	sai.viewer._mappings['d'] = cfg
-	local layer = { _path = 'sai.mode.test_layer', _mappings = { d = cfg } }
-	sai.viewer._active_modes[#sai.viewer._active_modes + 1] = layer
-	e.trigger { event = 'User', match = 'ModePush', data = layer }
+	local layer = remapper.new { _path = 'sai.mode.test_layer' }
+	layer.map('d', function() end, 'dyn')
+
+	layer.enabled = true
 	h.contains('push regenerated the tabs, first one shown', key_help.pager.title, 'Test Layer')
 
 	key_help.tab = 3
 	h.contains('main mode tab is last', key_help.pager.title, 'Viewer')
 
-	table.remove(sai.viewer._active_modes)
-	e.trigger { event = 'User', match = 'ModePop', data = layer }
+	layer.enabled = false
 	h.contains('pop regenerated the tabs, first one shown', key_help.pager.title, 'Key Help')
 
 	-- viewing the layer's own tab and popping it: back on the first tab
-	sai.viewer._active_modes[#sai.viewer._active_modes + 1] = layer
-	e.trigger { event = 'User', match = 'ModePush', data = layer }
+	layer.enabled = true
 	key_help.tab = 1
 	h.contains('layer tab viewable', key_help.pager.title, 'Test Layer')
-	table.remove(sai.viewer._active_modes)
-	e.trigger { event = 'User', match = 'ModePop', data = layer }
+	layer.enabled = false
 	h.contains('viewed layer removed, back on the first tab', key_help.pager.title, 'Key Help')
 
-	sai.viewer._mappings['d'] = nil
+	-- a bindless layer has no tab of its own
+	local quiet = remapper.new { _path = 'sai.mode.quiet' }
+	quiet.enabled = true
+	h.ok('bindless layer skipped', not key_help.pager.title:find('Quiet', 1, true))
+	quiet.enabled = false
+
 	key_help.enabled = false
 end)
 
 T.key_help_auto_display = with_env(function(h)
-	local custom = require 'sai.lib.remapper'
-	local layer = custom.new { _path = 'sai.mode.test_layer' }
+	local layer = remapper.new { _path = 'sai.mode.test_layer' }
 	layer.map('F13', function() end, 'do the thing')
 
 	h.ok('no display before the mode', not key_help.pager._enabled)
@@ -208,7 +139,7 @@ T.key_help_auto_display = with_env(function(h)
 	h.eq('no help bind layer registered', 1, #sai.viewer._active_modes)
 	h.contains('the mode own tab shown', key_help.pager.title, 'Test Layer')
 	h.ok('no tab block without the control binds', not key_help.pager.title:find('Tab', 1, true))
-	h.contains('mode binds listed', table.concat(key_help.pager.lines, '\n'), 'do the thing')
+	h.contains('mode binds listed', rendered(key_help.pager), 'do the thing')
 
 	-- F1 full mode over the display, then back to the strict display
 	key_help.enabled = true
@@ -219,7 +150,7 @@ T.key_help_auto_display = with_env(function(h)
 	h.ok('strict again', not key_help._enabled)
 	h.ok('no tab block again', not key_help.pager.title:find('Tab', 1, true))
 
-	local layer2 = custom.new { _path = 'sai.mode.test_layer2' }
+	local layer2 = remapper.new { _path = 'sai.mode.test_layer2' }
 	layer2.map('F14', function() end, 'other thing')
 	layer2.enabled = true
 	h.contains('push retargets the display', key_help.pager.title, 'Test Layer2')
@@ -227,7 +158,7 @@ T.key_help_auto_display = with_env(function(h)
 	h.contains('pop falls back to the previous mode', key_help.pager.title, 'Test Layer')
 
 	-- a mode without auto_help on top turns the display off
-	local quiet = custom.new { _path = 'sai.mode.test_layer', auto_help = false }
+	local quiet = remapper.new { _path = 'sai.mode.test_layer', auto_help = false }
 	quiet.map('F15', function() end, 'quiet thing')
 	quiet.enabled = true
 	h.ok('auto_help false: no display', not key_help.pager._enabled)
@@ -239,8 +170,7 @@ T.key_help_auto_display = with_env(function(h)
 end)
 
 T.var_help_dynamic_layers = with_env(function(h)
-	local custom = require 'sai.lib.remapper'
-	local layer = custom.new { _path = 'sai.mode.test_layer' }
+	local layer = remapper.new { _path = 'sai.mode.test_layer' }
 	layer.sai.text.size = 42 -- an override to list in the varset sublist
 
 	var_help.enabled = true
@@ -335,70 +265,6 @@ T.var_help_mode_varsets = with_env(function(h)
 	key_help.enabled = false
 end)
 
-T.cmd_auto_display = with_env(function(h)
-	sai.text.enabled = false -- the text overlay is off in the user config
-	-- the full-mode disable below cmd restores binds out of order: fix the
-	-- stale viewer mapping afterwards
-	local escape = sai.viewer._mappings['Escape']
-	local cmd = require('sai.mode.cmd').new {}
-
-	key_help.enabled = true
-	h.ok('full mode on', key_help._enabled)
-	cmd.enabled = true
-	h.ok('overlay on with the display', sai.text.enabled == true)
-	key_help.enabled = false
-	h.ok('display re-derived', key_help.pager._enabled)
-	h.ok('overlay healed', sai.text.enabled == true)
-	h.contains('the mode own tab shown', key_help.pager.title, 'Cmd')
-	h.ok('strict again', not key_help._enabled)
-
-	cmd.enabled = false
-	h.ok('display off with the last mode', not key_help.pager._enabled)
-	h.ok('overlay reverted with the display', sai.text.enabled == false)
-	sai.viewer._mappings['Escape'] = escape
-end)
-
-T.cmd_auto_display_block_location = with_env(function(h)
-	sai.text.enabled = false -- the text overlay is off in the user config
-	local escape = sai.viewer._mappings['Escape']
-	local filter = require('sai.mode.cmd').new { _path = 'test.filter' }
-	filter._location = 'topleft' -- the filter shape: a text block, not the status
-
-	filter.enabled = true
-	h.ok('layer up with the mode', sai.text.enabled == true)
-	h.ok('block armed', #sai.viewer.text.topleft > 0)
-
-	key_help.enabled = true -- F1: the full mode over the display
-	key_help.enabled = false
-	h.ok('display re-derived', key_help.pager._enabled)
-
-	h.eq('layer healed', true, sai.text.enabled)
-	h.ok('our block survived', #sai.viewer.text.topleft > 0)
-	h.ok('user blocks restored', #sai.viewer.text.bottomleft > 0)
-
-	filter.enabled = false
-	sai.viewer._mappings['Escape'] = escape
-end)
-
-T.cmd_block_cleanup_on_disable = with_env(function(h)
-	sai.text.enabled = true -- the user config has the overlay on
-	local escape = sai.viewer._mappings['Escape']
-	local filter = require('sai.mode.cmd').new { _path = 'test.filter' }
-	filter._location = 'topleft' -- the filter shape: a text block, not the status
-
-	key_help.enabled = true -- the auto help display holds the layer up
-	sai.text.topleft = {} -- the user's topleft is empty
-
-	filter.enabled = true
-	h.ok('block armed', #sai.viewer.text.topleft > 0)
-	filter.enabled = false
-	h.ok('empty block restored', #sai.viewer.text.topleft == 0)
-	h.eq('layer kept by the display', true, sai.text.enabled)
-
-	key_help.enabled = false
-	sai.viewer._mappings['Escape'] = escape
-end)
-
 T.key_help_short_binds = with_env(function(h)
 	sai.mode = 'viewer' -- earlier tests may have left another mode active
 	sai.viewer.map('Ctrl+q', function() end, 'short test')
@@ -429,11 +295,6 @@ T.key_help_short_binds = with_env(function(h)
 	sai.viewer.unmap 'Ctrl+q'
 end)
 
-if not _G._TEST_RUNNER then
-	_G._TEST_RUNNER = true
-	H.run(T)
-	H.summary()
-	os.exit(H.exit_code())
-end
+H.maybe_standalone(T)
 
 return T

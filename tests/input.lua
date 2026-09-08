@@ -67,19 +67,29 @@ local function violations(self, display)
 	end
 end
 
+---Asserts the invariant and fails with the violation itself, not the bare fact.
+local function ok_state(h, name, self, get)
+	local v = violations(self, get())
+	if v then
+		h.fail(name, v)
+	else
+		h.pass(name)
+	end
+end
+
 function T.insert_and_cursor(h)
 	local self, get = new_input()
 	self:insert 'héllo'
 	eq('utf8 insert', 'héllo', self._text)
 	eq('cursor after multibyte insert', 6, self._col)
-	h.ok('state valid after insert', not violations(self, get()))
+	ok_state(h, 'state valid after insert', self, get)
 
 	self.col = 2 -- between h and é
 	eq('cursor renders between characters', 'h▎éllo', get())
 	self:insert 'X'
 	eq('insert at char position', 'hXéllo', self._text)
 	eq('cursor after mid-text insert', 3, self._col)
-	h.ok('state valid after mid-text insert', not violations(self, get()))
+	ok_state(h, 'state valid after mid-text insert', self, get)
 end
 
 function T.delete_and_selection(h)
@@ -90,13 +100,13 @@ function T.delete_and_selection(h)
 	self:delete()
 	eq('char-based selection delete', 'hXörld', self._text)
 	eq('cursor after selection delete', 3, self._col)
-	h.ok('state valid after selection delete', not violations(self, get()))
+	ok_state(h, 'state valid after selection delete', self, get)
 
 	self.visual = 2 -- selection before the cursor: icons swap sides
 	eq('selection renders around multibyte chars', 'h|X▎örld', get())
 	self:delete(2, 3)
 	eq('char-based range delete', 'hrld', self._text)
-	h.ok('state valid after range delete', not violations(self, get()))
+	ok_state(h, 'state valid after range delete', self, get)
 end
 
 function T.line_info()
@@ -117,11 +127,11 @@ function T.set_text_cursor_tracking(h)
 	self.col = 5 -- between 'hell' and 'o'
 	self.text = 'xxhéllo' -- text inserted before the cursor
 	eq('cursor stays relative to following text', 7, self._col)
-	h.ok('state valid after prefix insert', not violations(self, get()))
+	ok_state(h, 'state valid after prefix insert', self, get)
 
 	self.text = 'a' -- shorter than the cursor
 	eq('cursor clamps to text end', 2, self._col)
-	h.ok('state valid after shrink', not violations(self, get()))
+	ok_state(h, 'state valid after shrink', self, get)
 end
 
 function T.invalid_input_sanitized(h)
@@ -129,11 +139,11 @@ function T.invalid_input_sanitized(h)
 	self:insert '\255ok\254'
 	h.ok('invalid insert gets sanitized', utf8.isvalid(self._text))
 	h.contains('valid content kept after sanitize', self._text, 'ok')
-	h.ok('state valid after invalid insert', not violations(self, get()))
+	ok_state(h, 'state valid after invalid insert', self, get)
 
 	self.text = '\xf0\x28\x8c\x28a\xffb'
 	h.ok('invalid set_text gets sanitized', utf8.isvalid(self._text))
-	h.ok('state valid after invalid set_text', not violations(self, get()))
+	ok_state(h, 'state valid after invalid set_text', self, get)
 end
 
 ---Random operation soup: whatever happens, the text field must stay valid utf8.
@@ -188,11 +198,6 @@ function T.utf8_invariant_fuzz(h)
 	h.pass '1000 fuzz iterations keep the text field valid utf8'
 end
 
-if not _G._TEST_RUNNER then
-	_G._TEST_RUNNER = true
-	H.run(T)
-	H.summary()
-	os.exit(H.exit_code())
-end
+H.maybe_standalone(T)
 
 return T

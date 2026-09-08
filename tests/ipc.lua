@@ -12,40 +12,12 @@ local ok, eq = H.ok, H.eq
 
 local ipc = require 'sai.bridge.ipc'
 
-local tmp = '/tmp/sai_ipc_test'
-local sock = tmp .. '.sock'
-local script_path = tmp .. '_server.lua'
-local log_path = tmp .. '_server.log'
-local pid_path = tmp .. '_server.pid'
+local fx = H.proc_fixture('ipc', 'SERVER_READY')
 
-local function cleanup()
-	os.remove(sock)
-	os.remove(script_path)
-	os.remove(log_path)
-	os.remove(pid_path)
-end
-
-local function start_server()
-	os.remove(sock)
-	H.spawn('luajit ' .. script_path, log_path, pid_path)
-	return H.wait_for(function() return (H.read_file(log_path) or ''):find('SERVER_READY', 1, true) ~= nil end, 10)
-end
-
-local function kill_server() H.kill(tonumber((H.read_file(pid_path) or ''):match '%d+')) end
-
--- A test method: always kills the server and removes its files afterwards,
--- even when the scenario crashes midway
-local function scenario(fn)
-	return function()
-		local ran, err = pcall(fn)
-		kill_server()
-		cleanup()
-		if not ran then H.fail('scenario crashed', err) end
-	end
-end
+local function start_server() return fx.spawn('luajit ' .. fx.script) end
 
 local function client_suite()
-	local c = ipc.client(sock)
+	local c = ipc.client(fx.sock)
 
 	-- auto-enabled, send works immediately
 	eq('integer result', '4', c:send 'return 2 + 2')
@@ -115,10 +87,10 @@ local T = {}
 -- Generic unit tests
 -- ---------------------------------------------------------------------------
 
-T.config = scenario(function()
+T.config = fx.scenario(function()
 	-- serving is exercised end-to-end by the poll_driven/signal_driven
 	-- scenarios below; here only the config semantics
-	local s2 = ipc.server '/tmp/sai_ipc_test_x2.sock'
+	local s2 = ipc.server '/tmp/sai_ipc_x2.sock'
 	s2._signal = 'USR1'
 	ok('signal set to USR1', s2._signal == 'USR1')
 	s2._signal = false
@@ -136,13 +108,13 @@ end)
 -- Usability tests: a client and a server process over the unix socket
 -- ---------------------------------------------------------------------------
 
-T.poll_driven = scenario(function()
+T.poll_driven = fx.scenario(function()
 	-- no O_ASYNC: the main loop polls the socket itself
 	H.write_file(
-		script_path,
+		fx.script,
 		server_script(
 			table.concat({
-				('local serv = ipc.server(%q)'):format(sock),
+				('local serv = ipc.server(%q)'):format(fx.sock),
 				'serv._signal = false',
 				'serv.enabled = false',
 				'serv.enabled = true',
@@ -159,28 +131,36 @@ T.poll_driven = scenario(function()
 	client_suite()
 end)
 
-T.signal_driven = scenario(function()
-	-- O_ASYNC notifies of connections via SIGUSR2; the handler sets a flag
-	-- and the main loop polls the socket after waking up from pause()
+T.signal_driven = fx.scenario(function()
+	-- O_ASYNC notifies of connections via SIGUSR2; the signal is blocked
+	-- and consumed with sigwait: a pause()-plus-flag loop loses the wakeup
+	-- when the signal lands between the flag check and the pause itself
 	H.write_file(
-		script_path,
+		fx.script,
 		server_script(
 			[==[
 ffi.cdef[[
 typedef void (*sighandler_t)(int);
+typedef struct { unsigned long __val[16]; } sigset_t;
 sighandler_t signal(int, sighandler_t);
-int pause(void);
+int sigemptyset(sigset_t *set);
+int sigaddset(sigset_t *set, int signum);
+int sigprocmask(int how, const sigset_t *set, sigset_t *oldset);
+int sigwait(const sigset_t *set, int *sig);
 ]]
-local got_signal = false
-ffi.C.signal(12, ffi.cast('sighandler_t', function() got_signal = true end))
+-- the handler only satisfies arm_fd's SigCgt check: USR2 must look caught
+ffi.C.signal(12, ffi.cast('sighandler_t', function() end))
+local mask = ffi.new 'sigset_t'
+ffi.C.sigemptyset(mask)
+ffi.C.sigaddset(mask, 12) -- SIGUSR2
+ffi.C.sigprocmask(0, mask, nil) -- 0 = SIG_BLOCK
 ]==]
 				.. '\n'
-				.. ('local serv = ipc.server(%q)'):format(sock),
+				.. ('local serv = ipc.server(%q)'):format(fx.sock),
 			table.concat({
+				"local sig = ffi.new('int[1]')",
 				'while true do',
-				'  ffi.C.pause()',
-				'  if not got_signal then break end',
-				'  got_signal = false',
+				'  if ffi.C.sigwait(mask, sig) ~= 0 then break end',
 				'  serv:poll(0)',
 				'end',
 			}, '\n')
@@ -190,11 +170,6 @@ ffi.C.signal(12, ffi.cast('sighandler_t', function() got_signal = true end))
 	client_suite()
 end)
 
-if not _G._TEST_RUNNER then
-	_G._TEST_RUNNER = true
-	H.run(T)
-	H.summary()
-	os.exit(H.exit_code())
-end
+H.maybe_standalone(T)
 
 return T
