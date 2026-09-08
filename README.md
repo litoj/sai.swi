@@ -314,9 +314,14 @@ luajit tests/init.lua debug.breakpoints   # one method
 ### TODOs
 
 - make input mode into a simple utils function for requesting user input
-- unify pager and input mode
+- unify pager and input mode text display handling
 - generalize completion in filter mode and filter mode itself (for filtering of any content)
-- add another mode to filter variables and view and change their live values (like mpv `gv`)
+- custom sort mode:
+  - interactively pick elements to sort by (LMB -> sort by ASC, RMB -> DESC)
+  - calculate element from mouse pos -> generic util fn getMouseLine->location+linenr
+  - re-sort on every imagelist.remove/add
+- live var mode: filter variables and view and change their live values (like mpv `gv`)
+- touchpad scroll speed control
 - make it easier to make multi-level keybinds (like vim `cd/ce/cb…`)
 - make a snippet for loading keybind config from ranger
 

@@ -38,8 +38,8 @@ H.sai_dir = H.dir:match '^(.*)/'
 H.swayimg_dir = H.sai_dir:match '^(.*)/'
 package.path = H.dir .. '/?.lua;' .. H.swayimg_dir .. '/?.lua;' .. package.path
 
--- cdef ownership: sai.bridge.socket owns `timeval` and the socket calls,
--- sai.bridge.debug owns `realpath`/`free`
+-- cdef ownership: sai.bridge.cdef owns `pid_t`/`getpid`, sai.bridge.socket
+-- owns `timeval` and the socket calls, sai.bridge.debug owns `realpath`/`free`
 require 'sai.bridge.socket'
 require 'sai.bridge.debug'
 

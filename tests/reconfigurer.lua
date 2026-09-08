@@ -117,7 +117,17 @@ local swayimg_stub = {
 local sai_stack
 local function with_env(fn)
 	return function(h)
-		if not sai_stack then -- in the full suite tests/help.lua has bound it already
+		if not sai_stack then
+			-- rebind a pristine stack: whichever module ran before this one
+			-- (help.lua in the full suite) leaves its records on the shared
+			-- registry, keyed by that stack's objects - a fresh bind gets a
+			-- clean namespace. Everything except the bridge must go: the lib
+			-- modules bind the eventloop at require time, so a cached one keeps
+			-- firing into a dead eventloop. The bridge stays - its ffi cdefs
+			-- cannot re-run
+			for name in pairs(package.loaded) do
+				if name:sub(1, 4) == 'sai.' and name:sub(1, 11) ~= 'sai.bridge.' then package.loaded[name] = nil end
+			end
 			_G.swayimg = swayimg_stub
 			sai_stack = require 'sai.api.init'
 		end

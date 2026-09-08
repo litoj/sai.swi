@@ -8,12 +8,9 @@ local ffi = require 'ffi'
 local bit = require 'bit'
 local U = require 'sai.lib.utils'
 
--- applied one by one: another module in the same process may have defined
--- some of them already (ffi.cdef cannot redefine)
 ffi.cdef [[
 typedef unsigned short sa_family_t;
 typedef unsigned int mode_t;
-typedef int pid_t;
 struct sockaddr_un { sa_family_t sun_family; char sun_path[108]; };
 struct timeval { long tv_sec; long tv_usec; };
 struct pollfd { int fd; short events; short revents; };
@@ -28,7 +25,6 @@ int close(int fd);
 int unlink(const char *path);
 int fcntl(int fd, int cmd, ...);
 int chmod(const char *path, mode_t mode);
-pid_t getpid(void);
 int setsockopt(int fd, int level, int optname, const void *optval, int optlen);
 int poll(struct pollfd *fds, unsigned long nfds, int timeout);
 ]]
@@ -65,7 +61,7 @@ end
 
 local function arm_fd(fd, signal, nonblocking)
 	local sig = signal == 'USR1' and SIGUSR1 or SIGUSR2
-	ffi.C.fcntl(fd, F_SETOWN, ffi.new('int', tonumber(ffi.C.getpid())))
+	ffi.C.fcntl(fd, F_SETOWN, ffi.new('int', sai.pid))
 	ffi.C.fcntl(fd, F_SETSIG, ffi.new('int', sig))
 	local flags = O_ASYNC
 	if nonblocking then flags = bit.bor(flags, O_NONBLOCK) end

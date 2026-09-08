@@ -99,9 +99,9 @@ end
 local function server_script(setup, loop)
 	return table.concat({
 		"local ffi = require('ffi')",
-		("package.path = %q .. '/?.lua;' .. package.path"):format(H.swayimg_dir),
+		("package.path = %q .. '/?.lua;' .. %q .. '/?.lua;' .. package.path"):format(H.dir, H.swayimg_dir),
 		"local ipc = require 'sai.bridge.ipc'",
-		"ffi.cdef('int usleep(unsigned int usec);')",
+		"local H = require 'harness' -- the poll loop's usleep",
 		setup,
 		"print('SERVER_READY')",
 		'io.stdout:flush()',

@@ -159,7 +159,7 @@ function U.tbl_to_str(t, indent, visited)
 		return a < b
 	end)
 	if space <= 0 then
-		return ('{\n%s%s}'):format(indent, table.concat(s, ',\n' .. indent))
+		return ('{\n%s%s\n%s}'):format(indent, table.concat(s, ',\n' .. indent), indent:sub(1, -2))
 	else
 		return #s == 0 and '{}' or ('{ %s }'):format(table.concat(s, ', '))
 	end

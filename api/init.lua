@@ -4,6 +4,7 @@
 local proxy = require 'sai.api.proxy'
 local e = require 'sai.api.eventloop'
 local U = require 'sai.lib.utils'
+require 'sai.bridge.cdef'
 
 ---@type sai
 ---@diagnostic disable-next-line: missing-fields
@@ -158,6 +159,19 @@ end
 function M:get_pid()
 	rawset(self, 'pid', require('ffi').C.getpid())
 	return self.pid
+end
+
+function M:get_cmdline()
+	local args = {}
+	local f = io.open(('/proc/%d/cmdline'):format(self.pid), 'rb') ---@type file*
+	if f then
+		for arg in (f:read '*a'):gmatch '[^%z]+' do
+			args[#args + 1] = arg
+		end
+		f:close()
+	end
+	rawset(self, 'cmdline', args)
+	return self.cmdline
 end
 
 function M.set_title(x) swayimg.title = x end

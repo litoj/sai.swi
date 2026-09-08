@@ -822,12 +822,10 @@ local M = {}
 function M.start(opts)
 	opts = opts or {}
 	if S.state ~= 'off' then return S.path end
-	S.path = opts.path
-		or ('%s/sai-debug-%d.sock'):format(os.getenv 'XDG_RUNTIME_DIR' or '/tmp', tonumber(ffi.C.getpid()))
+	S.path = opts.path or ('%s/sai-debug-%d.sock'):format(os.getenv 'XDG_RUNTIME_DIR' or '/tmp', sai.pid)
 	S.signal = opts.signal ~= nil and opts.signal or 'USR2'
 	if opts.log then
-		S.log_path = type(opts.log) == 'string' and opts.log
-			or ('/tmp/sai-debug-%d.log'):format(tonumber(ffi.C.getpid()))
+		S.log_path = type(opts.log) == 'string' and opts.log or ('/tmp/sai-debug-%d.log'):format(sai.pid)
 	end
 	S.exc_default = opts.break_on_exception == true
 	S.break_on_exception = S.exc_default

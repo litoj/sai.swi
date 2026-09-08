@@ -51,6 +51,15 @@ local swayimg = {
 }
 _G.swayimg = swayimg
 
+-- drop any api stack an earlier module (like api.lua) may have cached: its
+-- super tables point at that module's stub, ours has to point at the one
+-- above. Everything except the bridge must go: the lib modules bind the
+-- eventloop (and each other) at require time, so a cached one keeps firing
+-- into a dead eventloop. The bridge stays - its ffi cdefs cannot re-run
+for name in pairs(package.loaded) do
+	if name:sub(1, 4) == 'sai.' and name:sub(1, 11) ~= 'sai.bridge.' then package.loaded[name] = nil end
+end
+
 local sai = require 'sai.api.init'
 resize_cb() -- app initialization: also registers the default binds
 local sai_proxy = _G.sai
@@ -91,8 +100,7 @@ T.key_help_lifecycle = with_env(function(h)
 	h.eq('pager in the right pane', 'topright', key_help.pager.location)
 	h.ok('no display self-recursion', key_help.auto_help == false)
 
-	h.contains('pager title', key_help.pager.title, 'Key Help')
-	h.contains('first tab is the topmost bind layer', key_help.pager.title, 'Key Help')
+	h.contains('pager title, first tab is the topmost bind layer', key_help.pager.title, 'Key Help')
 	h.ok('own binds listed', #key_help.pager.lines > 0)
 	h.ok('no page counter when it fits one page', not rawget(key_help.pager, '_last_render')[0]:find('[Page', 1, true))
 	h.contains('rendered title', rawget(key_help.pager, '_last_render')[0], 'Key Help')
@@ -295,8 +303,7 @@ end)
 T.var_help_lifecycle = with_env(function(h)
 	var_help.enabled = true
 	h.ok('mode enabled', var_help._enabled)
-	h.contains('pager title', var_help.pager.title, 'Settings')
-	h.contains('settings tab first', var_help.pager.title, 'Settings')
+	h.contains('pager title, settings tab first', var_help.pager.title, 'Settings')
 	h.ok('settings lines listed', #var_help.pager.lines >= 6)
 
 	var_help.tab = var_help.tab + 1

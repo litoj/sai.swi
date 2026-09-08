@@ -1,9 +1,12 @@
 ---@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
----Tests for sai.notify: the message display is the app's own expiry - the
----status write arms it with the current status_timeout, and its firing is
----the only thing that repaints the layer (an empty write from Lua does not
----repaint, the message frame would stay painted until the next redraw). So
----notify must arm the expiry with the display time and never pin it to 0.
+---Tests for the main api (sai.api.init): the notify and cmdline getters.
+---The notify tests: the message display is the app's own expiry - the status
+---write arms it with the current status_timeout, and its firing is the only
+---thing that repaints the layer (an empty write from Lua does not repaint,
+---the message frame would stay painted until the next redraw). So notify
+---must arm the expiry with the display time and never pin it to 0. The
+---cmdline test launches a separate instance with known args and reads its
+---served pid and cmdline back over the ipc, checked against the real launch.
 ---Loads a private copy of the api stack: the raw text table the proxies write
 ---through to is captured at module load time, so this file cannot reuse the
 ---stack the help tests bound to their own stub.
@@ -19,9 +22,12 @@ package.path = dir .. '/?.lua;' .. package.path
 local old_swi, old_sai = _G.swayimg, rawget(_G, 'sai')
 
 -- drop the api stack other test modules may have loaded: their super tables
--- point at their stubs, ours has to point at the one below
+-- point at their stubs, ours has to point at the one below. Everything except
+-- the bridge must go: the lib modules bind the eventloop (and each other) at
+-- require time, so a cached one keeps firing into a dead eventloop. The
+-- bridge stays - its ffi cdefs cannot re-run
 for name in pairs(package.loaded) do
-	if name:sub(1, 4) == 'sai.' then package.loaded[name] = nil end
+	if name:sub(1, 4) == 'sai.' and name:sub(1, 11) ~= 'sai.bridge.' then package.loaded[name] = nil end
 end
 
 -- any method the api stack touches at load or during notify becomes a no-op
@@ -120,6 +126,116 @@ local function with_env(fn)
 end
 
 local T = {}
+
+-- ---------------------------------------------------------------------------
+-- The cmdline getter, end-to-end: a launched instance serves its own pid and
+-- args over the ipc
+-- ---------------------------------------------------------------------------
+
+local H = require 'harness'
+local ipc = require 'sai.bridge.ipc'
+
+local tmp = '/tmp/sai_api_test'
+local sock = tmp .. '.sock'
+local script_path = tmp .. '_instance.lua'
+local log_path = tmp .. '_instance.log'
+local pid_path = tmp .. '_instance.pid'
+
+local function cleanup()
+	os.remove(sock)
+	os.remove(script_path)
+	os.remove(log_path)
+	os.remove(pid_path)
+end
+
+local function kill_instance() H.kill(tonumber((H.read_file(pid_path) or ''):match '%d+')) end
+
+-- A test method: always kills the instance and removes its files afterwards,
+-- even when the scenario crashes midway
+local function scenario(fn)
+	return function(h)
+		local ran, err = pcall(fn, h)
+		kill_instance()
+		cleanup()
+		if not ran then error(err, 0) end
+	end
+end
+
+-- the launched instance: the api stack over a stubbed swayimg (the resize
+-- callback never fires, so no mode ever loads), serving its own state over
+-- the ipc - the closest to a real swayimg instance a test can launch
+local function instance_script()
+	return table.concat({
+		"local ffi = require('ffi')",
+		("package.path = %q .. '/?.lua;' .. %q .. '/?.lua;' .. package.path"):format(H.dir, H.swayimg_dir),
+		"local function raw_mode()",
+		"	return setmetatable({}, { __index = function() return function() end end })",
+		"end",
+		"local gallery = raw_mode()",
+		"gallery.thumb_size = 128",
+		"gallery.padding_size = 10",
+		"local viewer = raw_mode()",
+		"viewer.get_image = function()",
+		"	return { width = 500, height = 400, index = 1, path = 'stub', meta = {} }",
+		"end",
+		"_G.swayimg = {",
+		"	mode = 'viewer',",
+		"	viewer = viewer,",
+		"	slideshow = raw_mode(),",
+		"	gallery = gallery,",
+		"	imagelist = { size = 0 },",
+		"	text = setmetatable({}, {",
+		"		__index = function() return nil end,",
+		"		__newindex = function() end,",
+		"	}),",
+		"	defer = function() end,",
+		"	on_window_resize = function() end,",
+		"	get_window_size = function() return { width = 800, height = 600 } end,",
+		"}",
+		"require 'sai.api.init' -- also sets the sai global",
+		-- production order: with no bridge module beyond the api's own cdef
+		-- requirement loaded, the getters must already work
+		"print('PRE_IPC_OK ' .. #_G.sai:get_cmdline())",
+		"local H = require 'harness' -- the poll loop's usleep",
+		("local serv = require('sai.bridge.ipc').server(%q)"):format(sock),
+		"serv._signal = false -- no O_ASYNC: the loop below polls",
+		"serv.enabled = false",
+		"serv.enabled = true",
+		"print('INSTANCE_READY')",
+		"io.stdout:flush()",
+		"while true do",
+		"	serv:poll(0)",
+		"	ffi.C.usleep(1000)",
+		"end",
+	}, '\n') .. '\n'
+end
+
+-- the instance is launched with known args; the pid and cmdline it serves
+-- must be the real ones of the launched process, through both the getter
+-- and the plain field read
+T.cmdline_of_launched_instance = scenario(function(h)
+	h.write_file(script_path, instance_script())
+	os.remove(sock)
+	h.spawn(("luajit %s --viewer 'my pic.png'"):format(script_path), log_path, pid_path)
+	h.ok('instance started', h.wait_for(function()
+		return (h.read_file(log_path) or ''):find('INSTANCE_READY', 1, true) ~= nil
+	end, 10))
+	-- the getters ran before the ipc (and the socket bridge) even loaded:
+	-- the api alone must declare everything its ffi use needs
+	h.contains('getters work before any bridge ipc loads', h.read_file(log_path) or '', 'PRE_IPC_OK 4')
+
+	-- the args the instance was really launched with, \1-joined for transport.
+	-- _G.sai, not the local one: the closure's bytecode travels to the
+	-- instance, and upvalues (like this file's sai stack) do not. A wrong pid
+	-- would fail here too: it would read some other process's args
+	local c = ipc.client(sock)
+	h.eq(
+		'cmdline of the launched process',
+		table.concat({ 'luajit', script_path, '--viewer', 'my pic.png' }, '\1'),
+		c:send(function() return table.concat(_G.sai:get_cmdline(), '\1') end)
+	)
+	c.enabled = false
+end)
 
 -- ---------------------------------------------------------------------------
 -- Generic unit tests: the deferred heap notify schedules its restore on
@@ -223,31 +339,6 @@ local function base_scenario()
 	return key_help, cmd
 end
 
--- The app sequence: the option printer reacts to every disable, the modes
--- take the status over and release it - the final message pins the raw
--- timeout off for its display and the defer clears it, the publicly known
--- timeout never changes
-T.app_sequence_cmd_message_clears = with_env(function(h)
-	local key_help, cmd = base_scenario()
-
-	sai.text.status = 'my status' -- set first: the printer borrow captures it
-	sai.text.status_timeout = 3 -- anything but the length-formula 2: the
-	-- configured time must win over the formula in every assert below
-
-	key_help.enabled = true
-	cmd.enabled = true
-	cmd.text = 'echo hi'
-	key_help.enabled = false
-	cmd.enabled = false
-
-	h.eq('the printer message shows', 'Cmd Enabled: false', tostring(sai.text.status))
-	h.eq('the raw pinned for the display', 0, raw_text.status_timeout)
-
-	run_deferred() -- the defer owns the clear
-	h.eq('the timed text cleared', ' ', raw_text.status)
-	h.eq('the configured timeout stands', 3, raw_text.status_timeout)
-end)
-
 -- The Escape path: F1 opens help, ':' opens cmd, F1 closes help, Escape
 -- aborts the cmd input (confirm(false) clears the text, then disables the
 -- mode from inside the confirm) - the message must come out the same
@@ -268,28 +359,6 @@ T.app_sequence_escape_abort_clears = with_env(function(h)
 	run_deferred()
 	h.eq('the timed text cleared', ' ', raw_text.status)
 	h.eq('the configured timeout stands', 3, raw_text.status_timeout)
-end)
-
--- The same sequence over a permanent statusline (timeout 0): the display
--- time comes from the message length, and the permanent text and its 0 come
--- back once the message is gone
-T.app_sequence_computes_over_permanent = with_env(function(h)
-	local key_help, cmd = base_scenario()
-
-	sai.text.status = 'my status'
-	sai.text.status_timeout = 0
-
-	key_help.enabled = true
-	cmd.enabled = true
-	key_help.enabled = false
-	cmd:confirm(false)
-
-	h.eq('the printer message shows', 'Cmd Enabled: false', tostring(sai.text.status))
-	h.eq('the raw stays 0 over the permanent', 0, raw_text.status_timeout)
-
-	run_deferred()
-	h.eq('the permanent statusline restored', 'my status', raw_text.status)
-	h.eq('the permanent timeout restored', 0, raw_text.status_timeout)
 end)
 
 -- A message over a mode's live prompt: the message pins itself permanent

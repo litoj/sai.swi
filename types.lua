@@ -51,7 +51,8 @@
 ---@field exif_orientation boolean Enable or disable changing orientation based on EXIF
 ---@field formats FormatCfg
 ---@field initialized boolean Whether initialization has completed and config has been loaded
----@field pid integer Get the process ID of the swayimg instance (cached). READ-ONLY
+---@field pid integer Get the process ID of the swayimg instance. READ-ONLY
+---@field cmdline string[] Get the command line arguments of the swayimg instance. READ-ONLY
 ---@field [appmode_t] sai.api.mode_base
 sai = {}
 
@@ -332,7 +333,7 @@ function sai.eventloop.takeover_subscribe(cfg) end
 ---@field recursive boolean Recursive directory reading
 ---@field adjacent boolean Open adjacent files from the same directory
 ---@field fsmon boolean Allow filesystem monitoring for changes and updating images
----@field size integer
+---@field size integer total number of items; READ-ONLY
 sai.imagelist = {}
 
 do
@@ -358,7 +359,7 @@ do
 	---Helper for working with marks on images
 	---Changes to the size get emitted as OptionSet(`sai.imagelist.marked.size`)
 	---@class sai.imagelist.marked
-	---@field size integer
+	---@field size integer number of marked items; READ-ONLY
 	sai.imagelist.marked = {}
 
 	---Toggle the marked state of the current entry.
