@@ -126,14 +126,7 @@ M.set_border_size = set_int
 local api_get_img = api.get_image
 function api.get_image()
 	local img = api_get_img()
-	return img
-			and setmetatable(img, {
-				__index = function(self, idx)
-					if idx == 'meta' then self.meta = require('sai.bridge.exiv2').get_meta(self.path) end
-					return rawget(self, idx)
-				end,
-			})
-		or nil
+	return img and U.lazymeta(img) or nil
 end
 
 e.subscribe { -- ad-hoc registering for when user wants to subscribe

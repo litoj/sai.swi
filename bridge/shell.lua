@@ -170,8 +170,8 @@ function M.load_so(so_path)
 	if not source_of(so_path) then error('No source file for module: ' .. so_path) end
 	if not os.rename(so_path, so_path) then M.compile_so(so_path) end
 
-	local loader = package.loadlib(so_path, 'luaopen_' .. so_path:match '([^/]+)%.so$')
-	if not loader then error('Unable to load library: ' .. so_path) end
+	local loader, err = package.loadlib(so_path, 'luaopen_' .. so_path:match '([^/]+)%.so$')
+	if not loader then error('Unable to load ' .. err) end
 	return loader()
 end
 

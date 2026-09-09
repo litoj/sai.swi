@@ -328,7 +328,10 @@ function sai.eventloop.takeover_subscribe(cfg) end
 ---Image list
 ---Changes to the contents get emitted as OptionSet(`sai.imagelist.size`)
 ---@class sai.imagelist: sai.api.proxy
----@field order order_t Image list sort order
+---The list order: the app's own order setting (forwarded to the raw api,
+---which re-sorts right away; default `numeric`), or a comparator the list is
+---kept ordered by. `'none'` stops the ordering, keeping the list as it is.
+---@field order order_t|fun(a:swayimg.entry,b:swayimg.entry):boolean
 ---@field reverse boolean Reverse the sort order
 ---@field recursive boolean Recursive directory reading
 ---@field adjacent boolean Open adjacent files from the same directory
@@ -349,8 +352,9 @@ do
 	function sai.imagelist.clear() end
 
 	---Get list of all entries in the image list.
-	---@return swayimg.entry[] # Array with all entries
-	function sai.imagelist.get() end
+	---@param full boolean? include the full image data (exif, actual pixel resolution)
+	---@return swayimg.entry[]|swayimg.image[] # Array with all entries
+	function sai.imagelist.get(full) end
 
 	---Get current image entry (metadata is lazy-loaded)
 	---@return swayimg.image
@@ -369,6 +373,13 @@ do
 	---Get list of all marked paths.
 	---@return string[] paths of all marked images
 	function sai.imagelist.marked.get() end
+
+	---@param path_or_list string|string[]
+	function sai.imagelist.marked.add(path_or_list) end
+	---@param path_or_list string|string[]
+	function sai.imagelist.marked.remove(path_or_list) end
+	---@param path_or_list string|string[]
+	function sai.imagelist.marked.toggle(path_or_list) end
 end
 
 --------------------------------------------------------------------------------
@@ -407,6 +418,12 @@ do
 	local keybind_processor = {}
 
 	---Map a keyboard or mouse event to an action.
+	---A mouse bind may carry a block-position prefix (`TL+`/`TR+`/`BL+`/`BR+`):
+	---it only fires for clicks in that window quadrant, and the callback
+	---receives the text row within the corner block (nil off the content
+	---rows; counted top-down for the top corners, from the bottom edge for
+	---the bottom ones) and the block position. An unprefixed mouse bind
+	---serves the clicks no qualified bind claimed.
 	---@param bind string|string[] 1 or more mouse or keyboard events to map - `Alt+s`, etc.
 	---@param action fun()|string callback function to run or shell command to execute
 	---@param opts bindcfg|string? optional description or other options for the keybind

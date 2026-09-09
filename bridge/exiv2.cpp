@@ -1,10 +1,8 @@
 // EXIF data extraction module for Lua using Exiv2.
-#include <exiv2/metadatum.hpp>
 #include <luajit-2.1/lua.hpp>
 
 #include <exiv2/exiv2.hpp>
 
-#include <cstdio>
 #include <string>
 #include <thread>
 #include <vector>
@@ -29,9 +27,18 @@ constexpr static bool should_include(const Exiv2::Metadatum &item) {
 	}
 }
 
+// The loaded facts of one image: the human-readable meta and the actual
+// pixel dimensions, decoded from the data (the exif tags can lie about the
+// size, the structure cannot).
+struct image_info {
+	std::vector<std::pair<std::string, std::string>> meta;
+	uint32_t width  = 0;
+	uint32_t height = 0;
+};
+
 static void
 populate_exif_table(lua_State *L, const std::vector<std::pair<std::string, std::string>> &meta) {
-	lua_createtable(L, 0, 0);
+	lua_createtable(L, 0, meta.size());
 	for (const auto &[k, v] : meta) {
 		lua_pushlstring(L, k.c_str(), k.size());
 		lua_pushlstring(L, v.c_str(), v.size());
@@ -39,7 +46,7 @@ populate_exif_table(lua_State *L, const std::vector<std::pair<std::string, std::
 	}
 }
 
-static std::vector<std::pair<std::string, std::string>> read_image_meta(const std::string &path) {
+static image_info read_image_info(const std::string &path) {
 	try {
 		Exiv2::Image::UniquePtr exiv2 = Exiv2::ImageFactory::open(path);
 
@@ -47,30 +54,54 @@ static std::vector<std::pair<std::string, std::string>> read_image_meta(const st
 
 		exiv2->readMetadata();
 
-		std::vector<std::pair<std::string, std::string>> meta;
-		meta.reserve(exiv2->exifData().count() + exiv2->iptcData().count() + exiv2->xmpData().count());
+		image_info info;
+		info.width  = exiv2->pixelWidth();
+		info.height = exiv2->pixelHeight();
+		info.meta.reserve(
+		  exiv2->exifData().count() + exiv2->iptcData().count() + exiv2->xmpData().count()
+		);
 
 		for (const auto &it : exiv2->exifData())
-			if (should_include(it)) meta.push_back(std::make_pair(it.key(), it.value().toString()));
+			if (should_include(it)) info.meta.push_back(std::make_pair(it.key(), it.value().toString()));
 
 		for (const auto &it : exiv2->iptcData())
-			if (should_include(it)) meta.push_back(std::make_pair(it.key(), it.value().toString()));
+			if (should_include(it)) info.meta.push_back(std::make_pair(it.key(), it.value().toString()));
 
 		for (const auto &it : exiv2->xmpData())
-			if (should_include(it)) meta.push_back(std::make_pair(it.key(), it.value().toString()));
+			if (should_include(it)) info.meta.push_back(std::make_pair(it.key(), it.value().toString()));
 
-		return meta;
+		return info;
 	} catch (const std::exception &) {
 		return {};
 	}
 }
 
-static int lua_get_meta(lua_State *L) {
-	const char *path = luaL_checkstring(L, 1);
-	if (!path) luaL_error(L, "Expected string argument for path");
+static void populate_entry(lua_State *L, const image_info &info) {
+	populate_exif_table(L, info.meta);
+	lua_setfield(L, -2, "meta");
 
-	populate_exif_table(L, read_image_meta(path));
-	return 1;
+	// only set the dimensions when the decoder knows them: 0
+	// means unknown, not "no dimensions"
+	if (info.width > 0) {
+		lua_pushinteger(L, info.width);
+		lua_setfield(L, -2, "width");
+	}
+	if (info.height > 0) {
+		lua_pushinteger(L, info.height);
+		lua_setfield(L, -2, "height");
+	}
+}
+
+static int lua_add_meta(lua_State *L) {
+	lua_getfield(L, 1, "path");
+	const char *path = lua_tostring(L, -1);
+	if (!path) return luaL_error(L, "Expected string argument for path");
+	lua_pop(L, 1);
+
+	populate_entry(L, read_image_info(path));
+	lua_pop(L, 1);
+
+	return 0;
 }
 
 static int lua_load_all(lua_State *L) {
@@ -92,19 +123,17 @@ static int lua_load_all(lua_State *L) {
 				lua_rawgeti(L, -1, l_idx);
 
 				lua_getfield(L, -1, "path");
-				const char *path_str = lua_tostring(L, -1);
-				std::string path(path_str);
+				const char *path = lua_tostring(L, -1);
 
 				lua_pop(L, 2);
 				mt.unlock();
 
-				auto exif_data = read_image_meta(path);
+				auto info = read_image_info(path);
 
 				mt.lock();
 				lua_rawgeti(L, -1, l_idx);
 
-				populate_exif_table(L, exif_data);
-				lua_setfield(L, -2, "meta");
+				populate_entry(L, info);
 
 				lua_pop(L, 1);
 				mt.unlock();
@@ -124,8 +153,8 @@ static int lua_load_all(lua_State *L) {
 extern "C" int luaopen_exiv2(lua_State *L) {
 	lua_createtable(L, 0, 2);
 
-	lua_pushcfunction(L, lua_get_meta);
-	lua_setfield(L, -2, "get_meta");
+	lua_pushcfunction(L, lua_add_meta);
+	lua_setfield(L, -2, "add_meta");
 
 	lua_pushcfunction(L, lua_load_all);
 	lua_setfield(L, -2, "load_all");

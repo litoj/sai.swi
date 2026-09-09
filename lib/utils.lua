@@ -1,6 +1,7 @@
 ---@module 'sai.lib.utils'
 ---@class sai.lib.utils
 local U = { debug_perf = os.getenv 'DEBUG_PERF' == '1' }
+local exiv2 = require 'sai.bridge.exiv2'
 
 ---@type swayimg.image
 ---@diagnostic disable-next-line: missing-fields
@@ -27,6 +28,25 @@ end
 ---@return swayimg.image
 function U.lazyimg(api)
 	return U.lazyload(function() return api.get_image() or U.dummy_image end)
+end
+
+---@param img swayimg.entry
+---@return swayimg.image
+function U.lazymeta(img)
+	return setmetatable(img, {
+		__index = function(self, idx)
+			exiv2.add_meta(self)
+			return rawget(self, idx)
+		end,
+	})
+end
+
+---@generic O
+---@param x `O`?
+---@return O
+function U.get_or_default(x, def)
+	if x == nil then return def end
+	return x
 end
 
 ---@generic O
