@@ -1,298 +1,158 @@
----@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
----Tests for the help mode family: the generic sai.mode.help base and its
----key_help/var_help instances, including the bind-layer awareness they rely
----on, over a recording api stack (see H.recording_stack). The generic
----mode-machinery interplay lives in tests/remapper.lua instead.
+---Tests for sai.mode.help: the base pager and its scrolls.
+---Over a recording api stack.
 ---Development tool: not used during normal swayimg operation.
+---
+---The sub-mode tab/group tests live on their subjects now
+---(tests/key_help.lua, tests/var_help.lua, tests/image_filter.lua).
 
-local dir = debug.getinfo(1, 'S').source:match '^@(.*)/'
+local dir = debug.getinfo(1, 'S').source:match '^@(.*)/' or ''
 if not dir:match '^/' then dir = (os.getenv 'PWD' or '.') .. '/' .. dir end
+dir = dir:gsub('/%./', '/'):gsub('/%.?$', '')
 package.path = dir .. '/?.lua;' .. package.path
 
 local H = require 'harness'
 
-local env = H.recording_stack { 'sai.mode.var_help' }
+local env = H.recording_stack()
 local sai, key_help = env.sai, env.key_help
-local var_help = env.mods['sai.mode.var_help']
 local raw_binds, with_env = env.raw_binds, env.with_env
 local remapper = require 'sai.lib.remapper'
+local at = H.mouse_stub(env.swayimg)
 
--- resolve the text layer templates/event definitions into their current text
-local function rendered(pager)
-	local out = {}
-	for _, line in ipairs(pager.lines) do
-		---@cast line string|mode_base.text.dyntext
-		out[#out + 1] = type(line) == 'string' and line or line.callback()
-	end
-	return table.concat(out, '\n')
-end
-
----The first rendered line containing the text, nil when absent.
-local function find_line_with(pager, text)
-	for _, line in ipairs(pager.lines) do
-		---@cast line string
-		if line:find(text, 1, true) then return line end
-	end
+local function tabs_of(m)
+	m:gen_tabs()
+	return m._tabs
 end
 
 local T = {}
 
-T.key_help_lifecycle = with_env(function(h)
-	sai.viewer.map('F13', function() end) -- no desc: must fall back to the simplified trace
-	key_help.enabled = true
-	h.ok('mode enabled', key_help._enabled)
-	h.eq('registered as bind layer of the current mode', 1, #sai.viewer._active_modes)
-	h.ok('binds applied to the raw api', raw_binds['viewer:Escape'] ~= nil)
-	h.eq('pager in the right pane', 'topright', key_help.pager.location)
-	h.ok('no display self-recursion', key_help.auto_help == false)
-
-	h.contains('pager title, first tab is the topmost bind layer', key_help.pager.title, 'Key Help')
-	h.ok('own binds listed', #key_help.pager.lines > 0)
-	h.ok('no page counter when it fits one page', not rawget(key_help.pager, '_last_render')[0]:find('[Page', 1, true))
-	h.contains('rendered title', rawget(key_help.pager, '_last_render')[0], 'Key Help')
-
-	key_help.tab = key_help.tab + 1
-	h.contains('second tab is the main mode', key_help.pager.title, 'Viewer')
-	h.ok('mode binds listed', #key_help.pager.lines > 0)
-	h.contains('page counter when paging', rawget(key_help.pager, '_last_render')[0], '[Page 1/2]')
-
-	-- a bind without a description must fall back to the simplified trace,
-	-- not the raw traceback
-	h.ok('no raw stack traces in the bind list', find_line_with(key_help.pager, 'stack traceback') == nil)
-	local f13_line = find_line_with(key_help.pager, 'F13')
-	h.ok('undescribed bind listed', f13_line ~= nil)
-	h.ok(
-		'undescribed bind shows the simplified call site',
-		f13_line ~= nil and not f13_line:find('keybind_processor', 1, true)
-	)
-	h.ok('undescribed bind shows only the first trace line', f13_line ~= nil and not f13_line:find('\n', 1, true))
-
-	key_help.tab = 2
+-- enable cycles must not accumulate hooks: the shared tree (mode plus its
+-- pager) applies its presets on enable and drops them on disable, every time
+T.enable_cycles_drop_all_hooks = with_env(function(h)
+	local e = require 'sai.api.eventloop'
+	local function mode_hooks()
+		local n = 0
+		for _ in pairs(e.find_all { event = 'ModeChanged' }) do
+			n = n + 1
+		end
+		for _ in pairs(e.find_all { event = 'ModeChangedPre' }) do
+			n = n + 1
+		end
+		return n
+	end
 	key_help.enabled = false
-	key_help.enabled = true
-	h.contains('reenable shows the same tab', key_help.pager.title, 'Viewer')
-	h.eq('reenable keeps the tab number', 2, key_help.tab)
-
-	sai.viewer.unmap 'F13'
-	key_help.enabled = false
-	h.ok('mode disabled', not key_help._enabled)
-	h.eq('bind layer removed', 0, #sai.viewer._active_modes)
-	h.eq('original bind restored', 'Exit application', sai.viewer._mappings['Escape'].desc)
+	local base = mode_hooks()
+	for _ = 1, 3 do
+		key_help.enabled = true
+		key_help.enabled = false
+	end
+	h.eq('no hooks left behind', base, mode_hooks())
 end)
 
-T.key_help_mode_change = with_env(function(h)
-	key_help.enabled = true
-
-	sai.mode = 'gallery' -- fires ModeChangedPre + ModeChanged
-	h.eq('re-registered on the new mode', 1, #sai.gallery._active_modes)
-	h.eq('old mode cleaned', 0, #sai.viewer._active_modes)
-	h.ok('binds re-applied on the new mode', sai.gallery._mappings['Escape'] ~= nil)
-
-	key_help.tab = 2
-	h.contains('tabs regenerated for the new mode', key_help.pager.title, 'Gallery')
-
-	key_help.enabled = false
-	h.eq('bind layer removed after mode change', 0, #sai.gallery._active_modes)
-	h.ok('pager disabled', not key_help.pager._enabled)
+-- enable holds with no current image: the fit-scale needs one
+T.enable_without_image_skips_fit_scale = with_env(function(h)
+	sai.mode = 'viewer'
+	local raw = env.swayimg.viewer
+	local old = raw.get_image
+	raw.get_image = function() end
+	local ok = pcall(function() key_help.enabled = true end)
+	raw.get_image = old
+	h.ok('enable holds with no current image', ok)
+	if ok then key_help.enabled = false end
 end)
 
-T.key_help_dynamic_layers = with_env(function(h)
+-- set_tab wraps around the tab set; an emptied set renders nothing
+T.tab_switch_wraps_and_empty_renders_silent = with_env(function(h)
+	sai.mode = 'viewer'
 	key_help.enabled = true
-	h.contains('two tabs before the push', key_help.pager.title, 'Key Help')
+	local n = #tabs_of(key_help)
+	h.ok('at least one tab exists', n >= 1)
 
-	local layer = remapper.new { _path = 'sai.mode.test_layer' }
-	layer.map('d', function() end, 'dyn')
+	key_help.tab = n + 5
+	h.eq('wrap lands inside the set', (n + 5 - 1) % n + 1, key_help.tab)
 
-	layer.enabled = true
-	h.contains('push regenerated the tabs, first one shown', key_help.pager.title, 'Test Layer')
-
-	key_help.tab = 3
-	h.contains('main mode tab is last', key_help.pager.title, 'Viewer')
-
-	layer.enabled = false
-	h.contains('pop regenerated the tabs, first one shown', key_help.pager.title, 'Key Help')
-
-	-- viewing the layer's own tab and popping it: back on the first tab
-	layer.enabled = true
+	local title = key_help.pager.title
+	local saved, saved_tab = key_help._tabs, key_help.tab
+	key_help._tabs = {}
+	key_help:render()
+	h.eq('empty set keeps the title', title, key_help.pager.title)
+	key_help._tabs = saved
 	key_help.tab = 1
-	h.contains('layer tab viewable', key_help.pager.title, 'Test Layer')
-	layer.enabled = false
-	h.contains('viewed layer removed, back on the first tab', key_help.pager.title, 'Key Help')
-
-	-- a bindless layer has no tab of its own
-	local quiet = remapper.new { _path = 'sai.mode.quiet' }
-	quiet.enabled = true
-	h.ok('bindless layer skipped', not key_help.pager.title:find('Quiet', 1, true))
-	quiet.enabled = false
-
 	key_help.enabled = false
+	h.eq('tab back to one', 1, saved_tab and key_help.tab)
 end)
 
-T.key_help_auto_display = with_env(function(h)
+-- the corner display scrolls with the mouse wheel over its block, taken
+-- by the topmost enabled display; the keyboard keys stay with the
+-- running mode - a display never eats them
+T.help_pager_owns_scrolls = with_env(function(h)
+	-- the viewer's plain wheel pans the image: count it instead, the
+	-- stub app carries no image position
+	local pans = 0
+	local pan_scroll = sai.viewer.remap('Scroll', { cb = function() pans = pans + 1 end })
+
+	key_help.enabled = true
+	local lines = table.concat(key_help.pager.lines, '\n')
+	h.ok('the wheel scroll stays out of the display listing', not lines:find('Scroll up', 1, true))
+
+	local pager = key_help.pager
+	at(750, 30) -- the top-right corner: inside the display's block
+	H.wheel(raw_binds, '', 'ScrollDown')
+	h.eq('the wheel over the block scrolls the display', 2, pager.scroll)
+	h.eq('the display keeps the wheel off the viewer pan', 0, pans)
+
+	local recs = H.capture_notify(sai, function() raw_binds['viewer:unassigned'] 'Up' end)
+	h.eq('keyboard scrolling claims the key', 0, #recs)
+	h.eq('the display scrolled up a line', 1, pager.scroll)
+
+	key_help.enabled = false
+	H.wheel(raw_binds, '', 'ScrollDown')
+	h.eq('window wheel mapping drops with the mode', 1, pager.scroll)
+	h.eq('the wheel fell through to the viewer pan', 1, pans)
+
+	local fired = 0
 	local layer = remapper.new { _path = 'sai.mode.test_layer' }
-	layer.map('F13', function() end, 'do the thing')
-
-	h.ok('no display before the mode', not key_help.pager._enabled)
+	layer.map('F13', function() fired = fired + 1 end, 'do the thing')
 	layer.enabled = true
-	h.ok('displayed for the mode', key_help.pager._enabled)
-	h.ok('strict: help mode not enabled', not key_help._enabled)
-	h.eq('no help bind layer registered', 1, #sai.viewer._active_modes)
-	h.contains('the mode own tab shown', key_help.pager.title, 'Test Layer')
-	h.ok('no tab block without the control binds', not key_help.pager.title:find('Tab', 1, true))
-	h.contains('mode binds listed', rendered(key_help.pager), 'do the thing')
+	layer.help_pager.lines = H.items(20)
+	H.wheel(raw_binds, '', 'ScrollDown')
+	h.eq('the layer display owns the corner wheel', 2, layer.help_pager.scroll)
 
-	-- F1 full mode over the display, then back to the strict display
-	key_help.enabled = true
-	h.ok('full mode takes over', key_help._enabled)
-	h.contains('tab block back with the control binds', key_help.pager.title, 'Tab')
-	key_help.enabled = false
-	h.ok('display restored after the full mode', key_help.pager._enabled)
-	h.ok('strict again', not key_help._enabled)
-	h.ok('no tab block again', not key_help.pager.title:find('Tab', 1, true))
-
-	local layer2 = remapper.new { _path = 'sai.mode.test_layer2' }
-	layer2.map('F14', function() end, 'other thing')
-	layer2.enabled = true
-	h.contains('push retargets the display', key_help.pager.title, 'Test Layer2')
-	layer2.enabled = false
-	h.contains('pop falls back to the previous mode', key_help.pager.title, 'Test Layer')
-
-	-- a mode without auto_help on top turns the display off
-	local quiet = remapper.new { _path = 'sai.mode.test_layer', auto_help = false }
-	quiet.map('F15', function() end, 'quiet thing')
-	quiet.enabled = true
-	h.ok('auto_help false: no display', not key_help.pager._enabled)
-	quiet.enabled = false
-	h.ok('display back with the layer gone', key_help.pager._enabled)
+	H.press(raw_binds, 'F13')
+	h.eq('the layer keeps its keys: the display claims none', 1, fired)
 
 	layer.enabled = false
-	h.ok('display off after the last mode', not key_help.pager._enabled)
+	H.wheel(raw_binds, '', 'ScrollDown')
+	h.eq('corner wheel mapping drops with the display', 2, layer.help_pager.scroll)
+	h.eq('the wheel fell through to the viewer pan', 2, pans)
+
+	sai.viewer.remap('Scroll', pan_scroll)
 end)
 
-T.var_help_dynamic_layers = with_env(function(h)
+-- enable cycles keep the display's wheel exactly-once: one line per
+-- tick through them, silence with the display
+T.help_pager_records_stable = with_env(function(h)
+	-- the viewer's plain wheel pans the image: count it instead, the
+	-- stub app carries no image position
+	local pans = 0
+	local pan_scroll = sai.viewer.remap('Scroll', { cb = function() pans = pans + 1 end })
+
 	local layer = remapper.new { _path = 'sai.mode.test_layer' }
-	layer.sai.text.size = 42 -- an override to list in the varset sublist
-
-	var_help.enabled = true
-	h.contains('settings tab plus own varset', var_help.pager.title, 'Settings')
-
 	layer.enabled = true
-	h.contains('push added the layer varset tab', var_help.pager.title, 'Settings')
-
-	var_help.tab = 2
-	h.contains('layer varset tab viewable', var_help.pager.title, 'Test Layer')
-	h.contains('mode own var listed', rendered(var_help.pager), 'enabled\ttrue')
-	h.contains('sai override listed as a fixed value', rendered(var_help.pager), 'text.size\t42')
-
-	var_help.tab = 3
-	h.contains('own varset last', var_help.pager.title, 'Var Help')
-
+	for _ = 1, 3 do
+		layer.enabled = false
+		layer.enabled = true
+	end
+	layer.help_pager.lines = H.items(20)
+	at(750, 30)
+	H.wheel(raw_binds, '', 'ScrollDown')
+	h.eq('one wheel tick scrolls one line through the cycles', 2, layer.help_pager.scroll)
+	h.eq('the display keeps the wheel off the viewer pan', 0, pans)
 	layer.enabled = false
-	h.contains('pop regenerated the tabs, first one shown', var_help.pager.title, 'Settings')
+	H.wheel(raw_binds, '', 'ScrollDown')
+	h.eq('the display takes no wheel once disabled', 2, layer.help_pager.scroll)
+	h.eq('the wheel fell through to the viewer pan', 1, pans)
 
-	var_help.enabled = false
-end)
-
-T.var_help_live_values = with_env(function(h)
-	key_help.enabled = true
-	var_help.enabled = true
-
-	var_help.tab = 3 -- key_help's varset
-	h.contains('key_help varset tab', var_help.pager.title, 'Key Help')
-
-	-- the mode's variables are event definitions subscribed to the exact option
-	local line_dyne
-	for _, line in ipairs(var_help.pager.lines) do
-		---@cast line string|mode_base.text.dyntext
-		if type(line) == 'table' and line.pattern == 'sai.mode.key_help.pager.line' then line_dyne = line end
-	end
-	h.ok('nested pager line is an event definition', line_dyne ~= nil)
-
-	key_help.pager.max_height = 0.2 -- constrain the page so the line position can advance
-	key_help.pager.line = 2
-	h.eq('callback renders the live value', '    line\t2', line_dyne.callback())
-
-	-- the text layer received the update through the event definition
-	local updated = false
-	local txt = swayimg[sai.mode].text
-	if type(txt) == 'table' and type(txt.topleft) == 'table' then
-		for _, v in pairs(txt.topleft) do
-			if v == '    line\t2' then updated = true end
-		end
-	end
-	h.ok('text layer shows the live value', updated)
-
-	-- no re-render feedback exists anymore: own paging cannot be clobbered
-	var_help.pager.line = 2
-	h.eq('own pager line kept', 2, var_help.pager.line)
-
-	var_help.enabled = false
-	key_help.enabled = false
-end)
-
-T.var_help_lifecycle = with_env(function(h)
-	var_help.enabled = true
-	h.ok('mode enabled', var_help._enabled)
-	h.contains('pager title, settings tab first', var_help.pager.title, 'Settings')
-	h.ok('settings lines listed', #var_help.pager.lines >= 6)
-
-	var_help.tab = var_help.tab + 1
-	h.contains('own overrides listed as a varset tab', var_help.pager.title, 'Var Help')
-	h.ok('varset lines listed', #var_help.pager.lines > 0)
-
-	var_help.enabled = false
-	h.ok('mode disabled without pager errors', not var_help._enabled)
-end)
-
-T.var_help_mode_varsets = with_env(function(h)
-	key_help.enabled = true
-	var_help.enabled = true
-	var_help.tab = 1 -- a previous test may have left it on another tab
-	-- tabs: all settings + one varset per active mode, topmost first
-	h.contains('three tabs', var_help.pager.title, '1/3')
-	var_help.tab = 3 -- skip our own varset, land on key_help's
-	h.contains('key_help varset tab', var_help.pager.title, 'Key Help')
-	h.ok('key_help overrides listed', #var_help.pager.lines > 0)
-	h.contains('var lines show fixed override values', rendered(var_help.pager), 'default_scale\tkeep_width')
-	local key_help_varset = rendered(var_help.pager)
-	h.contains('nested pager vars listed', key_help_varset, '  pager:')
-	h.contains('nested pager field shown', key_help_varset, '    enabled\ttrue')
-	h.ok('super not listed', not key_help_varset:find('super', 1, true))
-	h.ok('help_pager not listed', not key_help_varset:find('help_pager', 1, true))
-	h.ok('sai reconfigurer not listed', not key_help_varset:find('  sai:', 1, true))
-
-	var_help.enabled = false
-	key_help.enabled = false
-end)
-
-T.key_help_short_binds = with_env(function(h)
-	sai.mode = 'viewer' -- earlier tests may have left another mode active
-	sai.viewer.map('Ctrl+q', function() end, 'short test')
-	key_help.enabled = true
-
-	-- gather every tab line so the bind is found regardless of which layer it lands in
-	local function all_lines()
-		local s = {}
-		for _, tab in ipairs(key_help:tabs()) do
-			s[#s + 1] = table.concat(tab.lines, '\n')
-		end
-		return table.concat(s, '\n')
-	end
-
-	key_help.short_binds = false
-	local full = all_lines()
-	h.contains('full form keeps Ctrl+', full, 'Ctrl+q')
-	h.ok('full form is not shortened', not full:find('<C-q>', 1, true))
-
-	-- public option, changeable at any time: next render picks it up
-	key_help.short_binds = true
-	local short = all_lines()
-	h.contains('short form uses C-', short, '<C-q>')
-	h.ok('short form drops the full Ctrl+', not short:find('Ctrl+q', 1, true))
-
-	key_help.short_binds = false
-	key_help.enabled = false
-	sai.viewer.unmap 'Ctrl+q'
+	sai.viewer.remap('Scroll', pan_scroll)
 end)
 
 H.maybe_standalone(T)

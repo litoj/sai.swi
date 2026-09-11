@@ -1,6 +1,22 @@
 {
-	"runtime": { "version": "LuaJIT" },
-	"type": { "castNumberToInteger": true, "weakNilCheck": true, "weakUnionCheck": true },
-	"diagnostics": { "globals": ["vim"], "disable": [], "severity": { "unused-local": "Warning", "unused-vararg": "Warning" } },
-	"workspace": { "checkThirdParty": false }
+	"_note": "Two luarc files exist on purpose. This one types the shipped sources: strict private-field checks stay on here. tests/.luarc.json types the test doubles instead and relaxes those checks, so the doubles do not raise false typedef errors in sources. Keep both files.",
+	"runtime": {"version": "LuaJIT"},
+	"type": {"castNumberToInteger": true, "weakNilCheck": true, "weakUnionCheck": true},
+	"diagnostics": {
+		"globals": ["vim"],
+		"disable": [],
+		"severity": {"unused-local": "Warning", "unused-vararg": "Warning"},
+		"groupFileStatus": {
+			"luadoc": "Any",
+			"strict": "Any",
+			"type-check": "Any",
+			"unbalanced": "Any"
+		}
+	},
+	"workspace": {
+		"checkThirdParty": false,
+		"ignoreDir": ["tests"],
+		"library": ["/usr/local/share/swayimg/swayimg.lua"]
+	},
+	"doc": {"regengine": "lua", "protectedName": ["^_[^_]"]}
 }

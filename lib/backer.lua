@@ -1,13 +1,13 @@
 ---@module 'sai.lib.backer'
 
 local e = require 'sai.api.eventloop'
+local U = require 'sai.lib.utils'
 
----Field backer
 --- Define set_xxx(self,val,idx) to use a custom setter for var named (idx=) `xxx`
 --- Define get_xxx(self,idx) to use a custom getter for var named (idx=) `xxx`
 ---@class sai.lib.backer
----@field protected _path string object path to this new api (sai.xxx) or just a name for errors
----@field protected _trigger boolean? trigger events on setting a field (default: true)
+---@field _path? string object path to this new api (sai.xxx) or just a name for errors
+---@field _trigger boolean? trigger events on setting a field (default: true)
 
 local M = {}
 
@@ -16,7 +16,7 @@ function M.__index(self, idx)
 	if v then return v(self, idx) end
 
 	v = rawget(self, '_' .. idx)
-	if v ~= nil then return v end -- read local copy of the last set value
+	if v ~= nil then return v end
 
 	error('tried to get: ' .. self._path .. '.' .. idx)
 end
@@ -26,13 +26,19 @@ function M.__newindex(self, idx, val)
 
 	local oio = e.ignore_opts
 	e.ignore_opts = true
-	local res = rawget(self, 'set_' .. idx)
-	if not res then error('tried to set ' .. self.path .. '.' .. idx) end
-	res = res(self, val, idx)
+	local setter = rawget(self, 'set_' .. idx)
+	if not setter then
+		e.ignore_opts = oio
+		error('tried to set: ' .. self._path .. '.' .. idx)
+	end
+	-- restore the flag even when the setter throws: a stuck flag
+	-- would silence every later OptionSet event
+	local ok, res = pcall(setter, self, val, idx)
 	e.ignore_opts = oio
+	if not ok then error(res, 0) end
 
 	if res == nil then -- set the field only if the setter allows it
-		rawset(self, '_' .. idx, val)
+		self['_' .. idx] = val
 	elseif res then -- trigger allowed but value has been updated
 		val = self['_' .. idx]
 	end
@@ -46,18 +52,16 @@ function M:__tostring(indent, visited)
 	visited = visited or { [self] = self._path }
 	local copy = {}
 	visited[copy] = visited[self]
-	for _, field in ipairs(require('sai.lib.utils').get_dynvars(self)) do
+	for _, field in ipairs(U.get_dynvars(self)) do
 		copy[field.name] = field.value
 	end
-	return require('sai.lib.utils').tbl_to_str(copy, indent, visited)
+	return U.tbl_to_str(copy, indent, visited)
 end
 
 ---Add field backing logic to the current object; no `super` lookups
 ---Inheritors are required to copy all functions from super to self themselves!
----@generic O: sai.lib.backer
----@return O self
+---@return self
 function M:new()
-	---@diagnostic disable-next-line: inject-field
 	if self._trigger == nil then self._trigger = true end
 	return setmetatable(self, M)
 end
