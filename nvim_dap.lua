@@ -5,43 +5,56 @@ local ADAPTER = 'sai'
 
 local function uv() return vim.uv or vim.loop end
 
-local function socket_path(pid) return ('%s/sai-debug-%d.sock'):format(vim.env.XDG_RUNTIME_DIR or '/tmp', pid) end
+-- vim.env is a lookup table in nvim, os.getenv a function elsewhere
+local env_get = vim and function(k) return vim.env[k] end or os.getenv
+local runtime_dir = env_get 'XDG_RUNTIME_DIR' or '/tmp'
+
+local function socket_path(pid) return ('%s/sai-debug-%d.sock'):format(runtime_dir, pid) end
+
+---Test injection for the process/filesystem seams.
+---@class sai.nvim_dap.probe
+---@field glob? fun(pattern: string): string[] default vim.fn.glob
+---@field fs_stat? fun(path: string): unknown default uv().fs_stat
 
 ---Lists running swayimg instances with an active debug harness.
+---@param probe? sai.nvim_dap.probe
 ---@return { pid: integer, path: string }[]
-function M.sockets()
-	local dir = vim.env.XDG_RUNTIME_DIR or '/tmp'
+function M.sockets(probe)
+	local glob = probe and probe.glob or function(pat) return vim.fn.glob(pat, false, true) end
+	local fs_stat = probe and probe.fs_stat or uv().fs_stat
 	local out = {}
-	for _, path in ipairs(vim.fn.glob(dir .. '/sai-debug-*.sock', false, true)) do
+	for _, path in ipairs(glob(runtime_dir .. '/sai-debug-*.sock')) do
 		local pid = tonumber(path:match 'sai%-debug%-(%d+)%.sock$')
-		if pid and uv().fs_stat(('/proc/%d'):format(pid)) then out[#out + 1] = { pid = pid, path = path } end
+		if pid and fs_stat(('/proc/%d'):format(pid)) then out[#out + 1] = { pid = pid, path = path } end
 	end
 	return out
 end
 
-local function resolve(config)
+---@param config table attach config: explicit `pipe`/`pid` or auto-discovery
+---@param probe? sai.nvim_dap.probe
+---@return string? path, integer count running instances (0 when the explicit target is missing)
+function M.resolve(config, probe)
+	local fs_stat = probe and probe.fs_stat or uv().fs_stat
 	if config.pipe then
-		if uv().fs_stat(config.pipe) then return config.pipe end
+		if fs_stat(config.pipe) then return config.pipe, 1 end
 		return nil, 0
 	end
 	if config.pid then
 		local path = socket_path(config.pid)
-		if uv().fs_stat(path) then return path end
+		if fs_stat(path) then return path, 1 end
 		return nil, 0
 	end
-	local found = M.sockets()
-	if #found == 1 then return found[1].path end
+	local found = M.sockets(probe)
+	if #found == 1 then return found[1].path, 1 end
 	return nil, #found
 end
 
----Registers the `sai` adapter and the lua 'Attach to swayimg' configuration in nvim-dap.
----The configuration is offered only when the current file lives under a swayimg
----directory; run `require('sai.bridge.debug').start {}` in swayimg (bound to
----Shift+F6 by default) to launch the socket
+---Registers the `sai` adapter and 'Attach to swayimg' config; offered only under a swayimg dir.
+---Run `require('sai.bridge.debug').start {}` in swayimg (Shift+F6) to launch the socket.
 function M.setup()
 	local dap = require 'dap'
 	dap.adapters[ADAPTER] = function(callback, config)
-		local path, count = resolve(config)
+		local path, count = M.resolve(config)
 		if not path then
 			local msg = count > 1
 					and ('sai.nvim_dap: %d debug-enabled swayimg instances running, close the others'):format(count)

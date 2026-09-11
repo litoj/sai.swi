@@ -34,19 +34,9 @@
 ---@field app_id string Wayland application ID. READ-ONLY
 ---@field mode appmode_t Which mode is the application in
 ---@field fullscreen boolean set to `nil` to toggle
----Set mouse button used for drag-and-drop image file to external apps. (`MouseRight` etc.)
----Configurable only at startup.
----@field dnd_button string
----Create a floating window with the same coordinates and size as the currently
----focused window. This variable can be set only once.
----Sway and Hyprland compositors only.
----By default enabled in Sway and disabled in other compositors.
----@field overlay boolean
----Enable or disable window decoration (title, border, buttons).
----Available only in Wayland, the corresponding protocol must be
----supported by the composer.
----By default disabled in Sway and enabled in other compositors.
----@field decoration boolean
+---@field dnd_button string mouse button for drag-and-drop to external apps, startup-only
+---@field overlay boolean floating window matching the focused window, set once; Sway/Hyprland only
+---@field decoration boolean enable/disable window decoration; Wayland only, off by default in Sway
 ---@field antialiasing boolean Enable/disable antialiasing
 ---@field exif_orientation boolean Enable or disable changing orientation based on EXIF
 ---@field formats FormatCfg
@@ -54,59 +44,61 @@
 ---@field pid integer Get the process ID of the swayimg instance. READ-ONLY
 ---@field cmdline string[] Get the command line arguments of the swayimg instance. READ-ONLY
 ---@field [appmode_t] sai.api.mode_base
+---@field modes (sai.api.mode_base|sai.lib.remapper)[] currently active modes: [1] the app mode, the rest the enabled custom modes in enable order
 sai = {}
 
----Exit from application.
----NOTE: exits only if all SwiLeavePre hooks deregister!
----@param code? integer Program exit code, `0` by default
-function sai.exit(code) end
+do
+	---NOTE: exits only if all SwiLeavePre hooks deregister!
+	---@param code? integer Program exit code, `0` by default
+	function sai.exit(code) end
 
----Set title until image changes.
----@param title string
-function sai.set_title(title) end
+	---Set title until image changes.
+	---@param title string
+	function sai.set_title(title) end
 
----Get application window size.
----@return { width: integer, height: integer } # Window size in pixels
-function sai.get_window_size() end
+	---@return { width: integer, height: integer } # Window size in pixels
+	function sai.get_window_size() end
 
----Set application window size.
----@param width integer Width of the window in pixels
----@param height integer Height of the window in pixels
-function sai.set_window_size(width, height) end
+	---@param width integer Width of the window in pixels
+	---@param height integer Height of the window in pixels
+	function sai.set_window_size(width, height) end
 
----Get mouse pointer coordinates.
----@return { x :integer, y: integer } # Coordinates of the mouse pointer
-function sai.get_mouse_pos() end
+	---@return { x :integer, y: integer }
+	function sai.get_mouse_pos() end
 
----Schedule function execution to after `ms`.
----@param cb fun()
----@param ms? integer (default: min=1)
-function sai.defer_fn(cb, ms) end
+	---Schedule function execution to after `ms`.
+	---@param cb fun()
+	---@param ms? integer (default: min=1)
+	function sai.defer_fn(cb, ms) end
 
----Show status message for the duration of `sai.text.status_timeout` seconds.
----@param msg string
----@param timeout integer? how many seconds to display the message for (<0 for #msg/-t)
-function sai.notify(msg, timeout) end
+	---Show a message on a text block for `timeout` seconds (the status
+	---defaults to `sai.text.status_timeout`, other blocks to the length rate).
+	---@param msg string
+	---@param timeout integer? how many seconds to display the message for (<0 for #msg/-t)
+	---@param location text_location? which text block to display on (default: status)
+	function sai.notify(msg, timeout, location) end
 
----Print a message on-screen and to the terminal.
----@param msg string
----@param file string? optional redirect of the message to a file (append mode)
-function sai.log(msg, file) end
+	---Print a message on-screen and to the terminal.
+	---@param msg string
+	---@param file string? optional redirect of the message to a file (append mode)
+	---@param location text_location? which text block to display on (default: status)
+	function sai.log(msg, file, location) end
 
----Execute a shell command.
----Escape sequences:
---- - `%`: current file unquoted
---- - `%f`: current file quoted with singlequotes
---- - `%s`: all marked files or current file quoted with singlequotes
---- - `%m`: only marked files or don't execute
---- - `%%`: normal percentage sign (`%`)
----@see event.User.ShellCmdPost
----@param cmd string
----@param async? boolean should the command be launched in the bg (no event will be emitted)
----@return string stdout or the expanded command when in async mode
----@return integer exitcode
----@return string stderr in case of any warnings etc
-function sai.exec(cmd, async) end
+	---Execute a shell command.
+	---Escape sequences:
+	--- - `%`: current file unquoted
+	--- - `%f`: current file quoted with singlequotes
+	--- - `%s`: all marked files or current file quoted with singlequotes
+	--- - `%m`: only marked files or don't execute
+	--- - `%%`: normal percentage sign (`%`)
+	---@see event.User.ShellCmdPost
+	---@param cmd string
+	---@param async? boolean should the command be launched in the bg (no event will be emitted)
+	---@return string stdout or the expanded command when in async mode
+	---@return integer exitcode
+	---@return string stderr in case of any warnings etc
+	function sai.exec(cmd, async) end
+end
 
 --------------------------
 --- Eventloop processing
@@ -286,12 +278,10 @@ do -- Event and Hook type definitions
 	---| hook.User.ShellCmdPost
 end
 
----@alias hook_id hook.base
-
 ---@class sai.eventloop.filter.opts
 ---@field event? event_name_t|event_name_t[]
----@field id? hook_id
----@field group? string|string[]
+---@field id? hook.base
+---@field group? string single group name; arrays unsupported
 ---@field mode? appmode_t|appmode_t[]
 ---@field match? string text to let the hooks match it with their patterns
 ---@field pattern? string|string[] luapat to match with or '!'-prefixed str to ignore
@@ -302,36 +292,36 @@ end
 ---@field debug_subscribe boolean print all hook registrations and where they were triggered from
 sai.eventloop = {}
 
----@param hook sai.eventloop.hook
----@return hook_id id that can be used to remove the hook
-function sai.eventloop.subscribe(hook) end
+do
+	---@param hook sai.eventloop.hook
+	---@return hook.base id that can be used to remove the hook
+	function sai.eventloop.subscribe(hook) end
 
----@param f? sai.eventloop.filter.opts
----@return table<hook_id,sai.eventloop.hook>
-function sai.eventloop.find_all(f) end
+	---@param f? sai.eventloop.filter.opts
+	---@return table<hook.base,sai.eventloop.hook>
+	function sai.eventloop.find_all(f) end
 
----@param f sai.eventloop.filter.opts
-function sai.eventloop.unsubscribe(f) end
+	---@param f sai.eventloop.filter.opts
+	function sai.eventloop.unsubscribe(f) end
 
----@param state sai.eventloop.event|event.base
-function sai.eventloop.trigger(state) end
+	---@param state sai.eventloop.event|event.base
+	function sai.eventloop.trigger(state) end
 
----Temporarily substitute all events matching the same conditions until self-deregistration.
----NOTE: can be undone only by the callback or with `once=true` - cannot use unsubscribe()
----@param cfg sai.eventloop.hook
-function sai.eventloop.takeover_subscribe(cfg) end
+	---Temporarily substitute all events matching the same conditions until self-deregistration.
+	---NOTE: can be undone only by the callback or with `once=true` - cannot use unsubscribe()
+	---@param cfg sai.eventloop.hook
+	function sai.eventloop.takeover_subscribe(cfg) end
+end
 
 --------------------------------------------------------------------------------
 -- Image list
 --------------------------------------------------------------------------------
 
----Image list
----Changes to the contents get emitted as OptionSet(`sai.imagelist.size`)
+---Image list; content changes emit OptionSet(`sai.imagelist.size`).
 ---@class sai.imagelist: sai.api.proxy
----The list order: the app's own order setting (forwarded to the raw api,
----which re-sorts right away; default `numeric`), or a comparator the list is
----kept ordered by. `'none'` stops the ordering, keeping the list as it is.
----@field order order_t|fun(a:swayimg.entry,b:swayimg.entry):boolean
+---@field order order_t|fun(a:swayimg.entry,b:swayimg.entry):boolean the app's own
+---  setting (forwarded to the raw api, default `numeric`), a comparator the
+---  list is kept ordered by, or `'none'`
 ---@field reverse boolean Reverse the sort order
 ---@field recursive boolean Recursive directory reading
 ---@field adjacent boolean Open adjacent files from the same directory
@@ -340,15 +330,15 @@ function sai.eventloop.takeover_subscribe(cfg) end
 sai.imagelist = {}
 
 do
-	---Add entry to the image list.
-	---@param paths string|string[] Paths to add
-	function sai.imagelist.add(paths) end
+	---@param paths string|string[]
+	---@param adjacent boolean? should we add all files in the same folder (default: l.adjacent)
+	function sai.imagelist.add(paths, adjacent) end
 
-	---Remove entry from the image list.
-	---@param paths string|string[] Paths to remove
+	---Entries drop out of the cached list in place: lists handed out by
+	---earlier get() calls mutate along, copy one first when it must stand.
+	---@param paths string|string[]
 	function sai.imagelist.remove(paths) end
 
-	---Clear the image list.
 	function sai.imagelist.clear() end
 
 	---Get list of all entries in the image list.
@@ -356,9 +346,20 @@ do
 	---@return swayimg.entry[]|swayimg.image[] # Array with all entries
 	function sai.imagelist.get(full) end
 
+	---@param path_or_idx string|integer # <0 for reverse indexing
+	---@return swayimg.image?
+	function sai.imagelist.get(path_or_idx) end
+
+	---@param path string
+	---@return boolean
+	function sai.imagelist.has(path) end
+
 	---Get current image entry (metadata is lazy-loaded)
-	---@return swayimg.image
+	---@return swayimg.image active_img or dummy image when list is empty
 	function sai.imagelist.get_current() end
+
+	---@param path_or_idx string|integer path or index of the image to add and open
+	function sai.imagelist.select(path_or_idx) end
 
 	---Helper for working with marks on images
 	---Changes to the size get emitted as OptionSet(`sai.imagelist.marked.size`)
@@ -370,8 +371,7 @@ do
 	---@param state boolean|'toggle'
 	function sai.imagelist.marked.set_current(state) end
 
-	---Get list of all marked paths.
-	---@return string[] paths of all marked images
+	---@return string[]
 	function sai.imagelist.marked.get() end
 
 	---@param path_or_list string|string[]
@@ -386,14 +386,9 @@ end
 -- Text overlay layer
 --------------------------------------------------------------------------------
 
----Text overlay layer.
----@class sai.text
----Should displaying the text layer be allowed,
----and how long for (after switching to a different image).
----Use `true` to disable timeout and permanently display, `false` to always hide, x for x seconds
----@field enabled boolean|number
----Msg in the middle, use only via sai.lib.reconfigurer.text for permanent msg display
----@field status string
+---@class sai.text: sai.api.proxy
+---@field enabled boolean|number show the text layer and how long (`true` forever, `false` never)
+---@field status string center message, set only via sai.lib.reconfigurer.text for permanent display
 ---@field status_timeout number Timeout in seconds after which the status message is hidden
 ---@field font string Font face name
 ---@field size integer Font size in pixels
@@ -404,8 +399,7 @@ end
 ---@field shadow integer Shadow text color in ARGB format, e.g. `0xff00aa99`
 sai.text = {}
 
----Get immediate visibility state of the text layer.
----@return boolean visible
+---@return boolean
 function sai.text.is_visible() end
 
 --------------------------------------------------------------------------------
@@ -414,28 +408,32 @@ function sai.text.is_visible() end
 
 do
 	---@class keybind_processor
-	---@field on_unassigned fun(combo:string) callback for handling unassigned key combinations
+	---@field on_unassigned fun(key:string) unbound key handler
 	local keybind_processor = {}
 
-	---Map a keyboard or mouse event to an action.
-	---A mouse bind may carry a block-position prefix (`TL+`/`TR+`/`BL+`/`BR+`):
-	---it only fires for clicks in that window quadrant, and the callback
-	---receives the text row within the corner block (nil off the content
-	---rows; counted top-down for the top corners, from the bottom edge for
-	---the bottom ones) and the block position. An unprefixed mouse bind
-	---serves the clicks no qualified bind claimed.
-	---@param bind string|string[] 1 or more mouse or keyboard events to map - `Alt+s`, etc.
-	---@param action fun()|string callback function to run or shell command to execute
-	---@param opts bindcfg|string? optional description or other options for the keybind
+	---Map a bind; mouse binds may carry a block-position prefix (`TL+`/`TR+`/`BL+`/`BR+`):
+	--- - the bind fires only when the pointer is over the text block
+	---   rendered in that corner (the block spans its longest line)
+	--- - the callback receives the text row within the block and the
+	---   block position; the row counts from the content top (for the
+	---   bottom corners from the window's bottom edge), nil off the
+	---   content rows
+	--- - an unprefixed mouse bind serves the clicks no qualified bind claimed
+	---
+	---@param bind string|string[] 1 or more mouse or keyboard events, e.g. `Alt+s`
+	---@param action fun()|string the callback to run, or a shell command to execute
+	---@param opts bindopts|string? extra options, or a short description
 	function keybind_processor.map(bind, action, opts) end
 
-	---@class bindcfg
-	---The action that runs on the binding activation (or the shell command).
-	---In overriding modes you can use `false` to set to unmapped (use the default handler).
-	---@field cb function|string|false
-	---@field trace string where was the binding defined
-	---@field desc? string optional description of the action
-	---@field kind? 'default'|'private'|'input' what category does this bind belong to, unspecified is for user
+	---A partial bind config: `map` itself fills the action and the trace.
+	---@class bindopts
+	---@field desc? string human-readable description shown in the help
+	---@field kind? 'default'|'private'|'input' `'default'` factory, `'private'` hidden
+	---  from the help, `'input'` text entry; unspecified means a user bind
+
+	---@class bindcfg: bindopts
+	---@field cb function|string|false the action; `false` unmaps the bind (default handler takes over)
+	---@field trace string where the bind was defined, used by the help listing
 
 	---@param bind string
 	---@param bindcfg bindcfg config to set the bind to
@@ -445,35 +443,23 @@ do
 	---@param bind string keybind to disable
 	function keybind_processor.unmap(bind) end
 
-	---@alias bind_map table<string,bindcfg>
-
-	---@return bind_map map of the user bindings
+	---@return sai.lib.keybind_processor.bindmap map of the user bindings
 	function keybind_processor.get_mappings() end
 
-	---Extension to create event-based textlayer updates.
-	---When triggered, the callback gets evaluated and value set to its position in the text block.
+	---Event-based text-layer update: the callback runs and its value is set at its position;
+	---an initial call without args gets the initial value.
 	---@class mode_base.text.dyntext: hook.base
-	---@field group? nil This eventhook field gets set automatically for auto-deregistration
-	---Generator of the text to be displayed.
-	---NOTE: An initial call call without args is made to get the initial value of the text.
-	---@field callback fun(ev:sai.eventloop.event|nil):(string|string[]?)
-
-	---Extended text layer functionality for setting dynamic text values.
-	---Multiline generators should remember the size of their previous output to reset the lines to ''
+	---@field group? string|nil overwritten with the per-block group
+	---@field callback fun(ev:sai.eventloop.event|nil):(string|string[]?) the text for its position
+	---Extended text layer: dynamic text values; multiline generators should
+	---remember the size of their previous output to reset the lines to ''.
 	---@alias extended_text_template
 	---| string basic single-line template string
 	---| mode_base.text.dyntext event-based generator
 	---| fun(img:swayimg.image):(string|string[]?) generator for ImgChanged event
 
-	---A more dynamic approach to updating the text layer.
-	--- - custom functions to generate text on image change.
-	--- - custom hooks to update the text when an event is triggered.
-	---   - for tracking variables just template the varpath: `'Marked: {sai.imagelist.marked.size}'`
-	---
-	---In viewer+slideshow mode you can use exif tags directly, like {ExposureTime}
-	---or specify the full exif path (without `meta.` prefix), like {Exif.Fujifilm.Rating}
-	---`utils.format_exif` then automatically formats the values.
-	---HINT: to see what tags are available: `print(sai.viewer.get_image().meta)`
+	---Dynamic text layer: custom functions/hooks per corner block; see `swayimg_appmode.text`.
+	---Exif tags: `{ExposureTime}` or the full path `{Exif.Fujifilm.Rating}`; `utils.format_exif` formats the values, print the image meta to list them.
 	---@see swayimg_appmode.text
 	---@class mode_base.text
 	---@field topleft extended_text_template[] Text layer scheme for top-left corner
@@ -481,12 +467,20 @@ do
 	---@field bottomleft extended_text_template[] Text layer scheme for bottom-left corner
 	---@field bottomright extended_text_template[] Text layer scheme for bottom-right corner
 
+	---@see sai.imagelist.select
+	---@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
+	---@overload fun(index:integer) index of the image to open from the imagelist
+	---@class sai.mode_base.go
+	---@field first fun()
+	---@field last fun()
+
 	---Base class providing text overlay layout fields shared by all display modes.
 	---@class mode_base: keybind_processor,sai.api.proxy
 	---@field text mode_base.text access to setting the overlay fields/indexes
 	---@field mark_color integer Mark icon color in ARGB format
 	---@field pinch_factor number how aggressive should the effect be
-	---@field multiclick_delay integer ms for coupling mouse clicks as one mouse event
+	---@field go sai.mode_base.go
+	---@field multiclick_delay integer ms window for counting event repeats as one burst (sai.lib.bindmods)
 	local mode_base = {}
 
 	---Reload current view. Causes ImgChanged event.
@@ -533,9 +527,8 @@ end
 ---@field down fun(p:integer?) Step down by `p` px (default: step.default_size)
 ---@field up fun(p:integer?) Step up by `p` px (default: step.default_size)
 
----@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
----@overload fun(index:integer) index of the image to open from the imagelist
----@class sai.viewer.go: {[vdir_t]: function}
+---@class sai.viewer.go: sai.mode_base.go
+---@field [vdir_t] fun()
 
 ---@class sai.viewer : mode_base
 ---@field auto_center boolean Should image be automatically centered when smaller than window size
@@ -543,22 +536,17 @@ end
 ---@field default_scale default_scale_t Default scale applied to newly opened images
 ---@field default_position fixed_position_t Default position applied to newly opened images
 ---@field scale one_time_scale_t|number Scale of the image as a preset or absolute value
----Position of the image relative to the position of the window.
----This is the viewport approach!
----Example: ←↑ corner of the image is outside the window -> `x,y<0`
----@field position fixed_position_t|{x:integer,y:integer}
+---@field position fixed_position_t|{x:integer,y:integer} image position relative to the window
+---  (viewport: ←↑ corner outside the window -> `x,y<0`)
 ---@field window_background integer|bkgmode_t Window background: solid ARGB color or fill mode
----Background color or pattern for transparent images (ARGB)
----@field image_background integer|checkerboard
+---@field image_background integer|checkerboard bg color/pattern for transparent images (ARGB)
 ---@field animation boolean State of the image (GIF) animation
 ---@field frame integer Currently displayed frame number. (stops animation)
 ---@field drag_button mbutton_t Mouse button used for dragging the image outside the window.
 ---@field preload_size integer Number of images to preload in a separate thread
 ---@field history_size integer Number of previously viewed images to keep in cache
----Helper table for easier mappings for moving around the image
----@field pan sai.viewer.panner
----Helper table for easier mappings for switching between images
----@field go sai.viewer.go
+---@field pan sai.viewer.panner helper table for easier mappings for moving around the image
+---@field go sai.viewer.go helper table for easier mappings for switching between images
 sai.viewer = {}
 
 do
@@ -577,10 +565,8 @@ do
 	---@see swayimg.viewer.set_default_position
 	function sai.viewer.reset() end
 
-	---Flip image vertically.
 	function sai.viewer.flip_vertical() end
 
-	---Flip image horizontally.
 	function sai.viewer.flip_horizontal() end
 
 	---Rotate image.
@@ -610,10 +596,9 @@ sai.slideshow = {}
 -- Gallery mode
 --------------------------------------------------------------------------------
 
----@overload fun(path_to_open:string) path to open directly (will be added if not in imagelist)
----@overload fun(index:integer) index of the image to open from the imagelist
 ---@overload fun(x:integer,y:integer) position of the thumbnail to select (limited to visible images)
----@class sai.gallery.go: {[gdir_t]:function}
+---@class sai.gallery.go: sai.mode_base.go
+---@field [gdir_t] fun()
 
 ---@class sai.gallery: mode_base
 ---@field aspect aspect_t Thumbnail aspect ratio
@@ -631,14 +616,7 @@ sai.slideshow = {}
 ---@field preload boolean Preload invisible thumbnails
 ---@field cache_size integer Max number of thumbnails stored in memory cache
 ---@field embedded_thumb boolean Use embedded thumbnails
----Should thumbnails be reloaded when the smallest cached could be less than 1/2 resolution
----@field thumb_size_diff_reload boolean
----Helper table for easier mappings for switching between images
----@field go sai.gallery.go
+---@field thumb_size_diff_reload boolean reload thumbnails when the smallest cached one
+---  could be less than 1/2 resolution
+---@field go sai.gallery.go helper table for easier mappings for switching between images
 sai.gallery = {}
-
----Get information about image displayed at given position.
----@param x integer
----@param y integer
----@return swayimg.image # Currently selected image entry
-function sai.gallery.get_at(x, y) end

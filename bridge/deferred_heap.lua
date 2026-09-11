@@ -2,10 +2,11 @@
 
 local ffi = require 'ffi'
 
--- os.time() has whole-second resolution: a due time recorded just before a
--- second boundary lands up to 1s early, so every re-arm of the single
--- swayimg.defer slot (each push re-aims at the earliest item) can fire
--- callbacks far too soon. The monotonic clock gives exact milliseconds.
+-- the monotonic clock, not os.time():
+-- - os.time() has whole-second resolution: a due time recorded just before a
+--   second boundary lands up to 1s early
+-- - each earlier push re-arms the single swayimg.defer slot at itself, so the
+--   chain would fire callbacks far too soon
 -- ffi.cdef is process-global: a re-require (like the test runner dropping
 -- the module cache) must not declare the struct a second time
 if not pcall(ffi.typeof, 'struct sai_monotonic_ts') then
@@ -15,30 +16,27 @@ if not pcall(ffi.typeof, 'struct sai_monotonic_ts') then
 	]]
 end
 local CLOCK_MONOTONIC = 1
--- lls cannot resolve cdef'd struct fields on cdata
+-- lls cannot resolve cdef'd struct fields on cdata: type the struct's fields
+---@type {tv_sec: number, tv_nsec: number}
 local ts = ffi.new 'struct sai_monotonic_ts'
----@cast ts any
 local function now_ms()
 	ffi.C.clock_gettime(CLOCK_MONOTONIC, ts)
 	-- tonumber: int64 cdata does not auto-convert for math.floor
 	return tonumber(ts.tv_sec) * 1000 + math.floor(tonumber(ts.tv_nsec) / 1e6)
 end
 
---- Min-heap for keeping track of the next deferred cb to be excuted
 ---@private
 ---@class sai.api.deferred_heap
 ---@field private [integer] {time: integer, cb: function}
 local M = {}
 
----Push a callback to be executed after ms milliseconds
----@param ms number milliseconds from now until execution
----@param cb function callback to execute
+---@param ms number
+---@param cb function
 function M:push(ms, cb)
-	local exec_time = now_ms() + ms -- estimate intended time of execution
+	local exec_time = now_ms() + ms
 	local i = #self + 1
 	self[i] = { time = exec_time, cb = cb }
 
-	-- bubble up to maintain heap property
 	while i > 1 do
 		local parent = math.floor(i / 2)
 		if self[parent].time <= self[i].time then break end
@@ -47,7 +45,6 @@ function M:push(ms, cb)
 	end
 end
 
----Pop and return the earliest callback (if any)
 ---@return function? cb
 function M:pop()
 	if #self == 0 then return nil end
@@ -56,7 +53,6 @@ function M:pop()
 	self[1] = self[#self]
 	self[#self] = nil
 
-	-- bubble down to maintain heap property
 	local i = 1
 	while true do
 		local left = i * 2
@@ -74,13 +70,38 @@ function M:pop()
 	return result
 end
 
----Get the time until the next callback should execute
----@return integer? ms_remaining until next execution, or nil if empty
+---@return integer?
 function M:time_to_next()
 	if #self == 0 then return nil end
 	local now = now_ms()
 	local remaining = self[1].time - now
 	return math.max(0, remaining)
+end
+
+-- the single swayimg defer slot is re-armed on every push: stale armed
+-- fires must stay silent, so each arm stamps a generation and only the
+-- newest one may pop
+local gen = 0
+function M:arm()
+	gen = gen + 1
+	local id = gen
+	swayimg.defer(math.max(self:time_to_next(), 1) / 1000, function()
+		if id ~= gen then return end
+		-- a throwing callback must not take the chain down: isolate and carry on.
+		-- (pop returns the callback: the old `pcall(heap:pop())` idiom pcalled it)
+		local cb = self:pop()
+		if not cb then return end
+		local ran, err = pcall(cb)
+		if not ran then print('sai deferred callback error: ' .. tostring(err)) end
+		if #self > 0 then self:arm() end
+	end)
+end
+
+---@param cb function
+---@param ms number? default 1: the app's own minimum step
+function M:schedule(cb, ms)
+	self:push(ms or 1, cb)
+	self:arm()
 end
 
 return M

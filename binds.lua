@@ -1,50 +1,30 @@
----@diagnostic disable: invisible, undefined-field
+---@diagnostic disable: invisible, missing-fields
 ---@module 'sai.binds'
 
 local U = require 'sai.lib.utils'
-local utf8 = require 'sai.bridge.utf8'
+local B = require 'sai.lib.bindmods'
 
 local M = {}
 
-local g = sai.gallery
-local v = sai.viewer
-local s = sai.slideshow
-local t = sai.text
-local l = sai.imagelist
-
----@alias bindmode
----| 'v' # viewer mode
----| 's' # slideshow mode
----| 'g' # gallery mode
----| '' # slideshow and viewer modes
----| 'a' # all modes
-
----@type {[string]:{[integer]:sai.lib.keybind_processor|keybind_processor}}
-M.modemap = { [''] = { v, s }, a = { v, s, g }, g = { g }, v = { v }, s = { s } }
-
----@param mode bindmode
----@param binds string|string[]
----@param cb string|fun()
----@param desc string?
-function M.map(mode, binds, cb, desc)
-	for _, m in ipairs(M.modemap[mode]) do
-		m.map(binds, cb, desc)
-	end
-end
-
 function M.default()
+	local g = sai.gallery
+	local v = sai.viewer
+	local s = sai.slideshow
+	local t = sai.text
+	local l = sai.imagelist
+	local modemap = { [''] = { v, s }, a = { v, s, g }, g = { g }, v = { v }, s = { s } }
+
 	local deftrace = U.pretty_trace('default', debug.traceback())
 	local function map(mode, binds, cb, desc)
-		local cfg = { cb = cb, desc = desc, default = true, trace = deftrace, _traced = true }
-		for _, m in ipairs(M.modemap[mode]) do
+		local cfg = { cb = cb, desc = desc, kind = 'default', trace = deftrace, _traced = true }
+		for _, m in ipairs(modemap[mode]) do
 			for _, b in ipairs(U.tabled(binds)) do
 				if not m._mappings[b] then m:_setmap(b, cfg) end
 			end
 		end
 	end
 	for _, m in ipairs { v, s, g } do ---@cast m sai.api.viewer
-		-- clear the native bindings of all mapped keypad keys
-		-- so that we rely on the fallback function rather than hardcoded identical defaults
+		-- clear native keypad binds and use the dynamic fallback instead of hardcoded defaults copies
 		for _, b in ipairs {
 			'KP_Enter',
 			'KP_Space',
@@ -71,12 +51,7 @@ function M.default()
 	end
 
 	-- Custom keybinds for our own help modes
-	map(
-		'a',
-		{ 'F1', 'question' },
-		function() require('sai.mode.key_help').enabled = not require('sai.mode.key_help').enabled end,
-		'Toggle key help'
-	)
+	map('a', { 'F1', 'question' }, require('sai.mode.key_help').cycle, 'Cycle key help')
 	map(
 		'a',
 		'Shift+F1',
@@ -85,10 +60,21 @@ function M.default()
 	)
 	map(
 		'a',
+		'F2',
+		function() require('sai.mode.text_adjust').enabled = not require('sai.mode.text_adjust').enabled end,
+		'Toggle text adjust'
+	)
+	map(
+		'a',
 		'Shift+F6',
 		function() sai.notify('Started debug ipc on: ' .. require('sai.bridge.debug').start {}) end,
 		'Start debug ipc'
 	)
+	local snip = require 'sai.snippets'
+	local cmd = snip.lua_mode()
+	map('a', ':', function() cmd.enabled = not cmd.enabled end, 'Lua mode')
+	local shell = snip.shell_mode()
+	map('a', 'Shift+s', function() shell.enabled = not shell.enabled end, 'Shell mode')
 
 	-- Global keybinds
 	map('a', 'Return', function() sai.mode = sai.mode == 'gallery' and 'viewer' or 'gallery' end, 'Toggle viewer')
@@ -99,84 +85,74 @@ function M.default()
 	map('a', 'a', function() sai.antialiasing = not sai.antialiasing end, 'Toggle antialiasing')
 
 	-- Gallery
-	local gmap = function(binds, cb, desc)
-		local cfg = { cb = cb, desc = desc, default = true, trace = deftrace, _traced = true }
-		for _, b in ipairs(U.tabled(binds)) do
-			if not g._mappings[b] then g:_setmap(b, cfg) end
-		end
-	end
 	-- scale
-	gmap(
+	map(
+		'g',
 		{ 'equal', 'Shift+plus', 'Ctrl+ScrollUp' },
 		function() g.thumb_size = math.floor(g.thumb_size * 1.1 + 0.5) end,
 		'Increase thumbnail size'
 	)
-	gmap(
+	map(
+		'g',
 		{ 'minus', 'Ctrl+ScrollDown' },
 		function() g.thumb_size = math.floor(g.thumb_size / 1.1 + 0.5) end,
 		'Decrease thumbnail size'
 	)
 	-- image selection
 	local ggo = g.go
-	gmap('Home', ggo.first, 'Go first')
-	gmap('End', ggo.last, 'Go last')
-	gmap({ 'Left', 'ScrollLeft' }, ggo.left, 'Go left')
-	gmap({ 'Right', 'ScrollRight' }, ggo.right, 'Go right')
-	gmap({ 'Up', 'ScrollUp' }, ggo.up, 'Go up')
-	gmap({ 'Down', 'ScrollDown' }, ggo.down, 'Go down')
-	gmap('Next', ggo.pgdown, 'Page down')
-	gmap('Prior', ggo.pgup, 'Page up')
+	map('g', 'Home', ggo.first, 'Go first')
+	map('g', 'End', ggo.last, 'Go last')
+	map('g', { 'Left', 'ScrollLeft' }, ggo.left, 'Go left')
+	map('g', { 'Right', 'ScrollRight' }, ggo.right, 'Go right')
+	map('g', { 'Up', 'ScrollUp' }, ggo.up, 'Go up')
+	map('g', { 'Down', 'ScrollDown' }, ggo.down, 'Go down')
+	map('g', 'Next', ggo.pgdown, 'Page down')
+	map('g', 'Prior', ggo.pgup, 'Page up')
 	-- text layer
-	gmap('t', function() t.enabled = not t.enabled end, 'Toggle text')
+	map('g', 't', function() t.enabled = not t.enabled end, 'Toggle text')
 	-- mouse bindings as keys
-	gmap('MouseLeft', function()
+	map('g', 'MouseLeft', function()
 		local pos = sai.get_mouse_pos()
 		g.go(pos.x, pos.y)
 		sai.mode = 'viewer'
 	end, 'Switch to viewer')
 
 	-- Viewer
-	local vmap = function(binds, cb, desc)
-		local cfg = { cb = cb, desc = desc, default = true, trace = deftrace, _traced = true }
-		for _, b in ipairs(U.tabled(binds)) do
-			if not v._mappings[b] then v:_setmap(b, cfg) end
-		end
-	end
 	-- Image transforms
-	vmap('bracketleft', function() v.rotate(270) end, 'Rotate left')
-	vmap('bracketright', function() v.rotate(90) end, 'Rotate right')
-	vmap('m', v.flip_vertical, 'Flip vertical')
-	vmap('Shift+m', v.flip_horizontal, 'Flip horizontal')
+	map('v', 'bracketleft', function() v.rotate(270) end, 'Rotate left')
+	map('v', 'bracketright', function() v.rotate(90) end, 'Rotate right')
+	map('v', 'm', v.flip_vertical, 'Flip vertical')
+	map('v', 'Shift+m', v.flip_horizontal, 'Flip horizontal')
 	-- Text overlay toggle
-	vmap('t', function() t.enabled = not t.enabled end, 'Toggle text')
+	map('v', 't', function() t.enabled = not t.enabled end, 'Toggle text')
 	-- Image navigation
-	vmap('Home', v.go.first, 'Go first')
-	vmap('End', v.go.last, 'Go last')
-	vmap('Next', v.go.next, 'Go next')
-	vmap('Prior', v.go.prev, 'Go prev')
+	map('v', 'Home', v.go.first, 'Go first')
+	map('v', 'End', v.go.last, 'Go last')
+	map('v', 'Next', v.go.next, 'Go next')
+	map('v', 'Prior', v.go.prev, 'Go prev')
 	-- Frame navigation
-	vmap('Shift+Next', v.next_frame, 'Next frame')
-	vmap('Shift+Prior', v.prev_frame, 'Previous frame')
+	map('v', 'Shift+Next', function() v.frame = v.frame + 1 end, 'Next frame')
+	map('v', 'Shift+Prior', function() v.frame = v.frame - 1 end, 'Previous frame')
 	-- Scale (zoom)
-	vmap({ 'equal', 'Shift+plus', 'Ctrl+ScrollUp' }, function() v.scale = v.get_abs_scale() * 1.1 end, 'Zoom in')
-	vmap({ 'minus', 'Ctrl+ScrollDown' }, function() v.scale = v.get_abs_scale() / 1.1 end, 'Zoom out')
-	vmap('BackSpace', v.reset, 'Reset scale and position')
+	map('v', { 'equal', 'Shift+plus', 'Ctrl+ScrollUp' }, function() v.scale = v.get_abs_scale() * 1.1 end, 'Zoom in')
+	map('v', { 'minus', 'Ctrl+ScrollDown' }, function() v.scale = v.get_abs_scale() / 1.1 end, 'Zoom out')
+	map('v', 'BackSpace', v.reset, 'Reset scale and position')
 	-- Image position / panning
-	vmap('Left', v.pan.left, 'Pan left')
-	vmap('Right', v.pan.right, 'Pan right')
-	vmap('Up', v.pan.up, 'Pan up')
-	vmap('Down', v.pan.down, 'Pan down')
-	vmap('ScrollUp', function() v.pan.up(20) end, 'Pan up 20px')
-	vmap('ScrollDown', function() v.pan.down(20) end, 'Pan down 20px')
-	vmap('ScrollLeft', function() v.pan.left(20) end, 'Pan left 20px')
-	vmap('ScrollRight', function() v.pan.right(20) end, 'Pan right 20px')
+	map('v', 'Left', v.pan.left, 'Pan left')
+	map('v', 'Right', v.pan.right, 'Pan right')
+	map('v', 'Up', v.pan.up, 'Pan up')
+	map('v', 'Down', v.pan.down, 'Pan down')
+	map('v', 'ScrollUp', function() v.pan.up(20) end, 'Pan up 20px')
+	map('v', 'ScrollDown', function() v.pan.down(20) end, 'Pan down 20px')
+	map('v', 'ScrollLeft', function() v.pan.left(20) end, 'Pan left 20px')
+	map('v', 'ScrollRight', function() v.pan.right(20) end, 'Pan right 20px')
 	-- Mouse zoom (centered at pointer)
-	vmap('Ctrl+ScrollUp', function()
+	map('v', 'Ctrl+ScrollUp', function()
 		local s = v.get_abs_scale() * 1.1
 		local m = sai.get_mouse_pos()
 		v.scale_centered(s, m.x, m.y)
 	end, 'Zoom in on cursor')
-	vmap('Ctrl+ScrollDown', function()
+	map('v', 'Ctrl+ScrollDown', function()
 		local s = v.get_abs_scale() / 1.1
 		local m = sai.get_mouse_pos()
 		v.scale_centered(s, m.x, m.y)
@@ -184,10 +160,10 @@ function M.default()
 end
 
 ---@private
---- Support function for generating updater of default keybinds.
----@param modeapi keybind_processor|sai.lib.keybind_processor
+---@generic O: keybind_processor
+---@param modeapi sai.lib.keybind_processor|`O`
 ---@param defaults? bindcfg|{}
----@return fun(b:string|string[], action:fun(), desc:string)
+---@return fun(b:string|string[], action:fun(O), desc:string?)
 function M.gen_mapadd(modeapi, defaults)
 	local deftrace = U.pretty_trace('custom_map', debug.traceback())
 	defaults = defaults or {}
@@ -201,10 +177,12 @@ function M.gen_mapadd(modeapi, defaults)
 		cfg.desc = desc
 		if binds[1] then
 			for _, b in ipairs(binds) do
+				b = B.canonical(b)
 				if not modeapi._mappings[b] then modeapi._mappings[b] = cfg end
 			end
 		else
-			if not modeapi._mappings[binds] then modeapi._mappings[binds] = cfg end
+			local b = B.canonical(binds)
+			if not modeapi._mappings[b] then modeapi._mappings[b] = cfg end
 		end
 	end
 end
@@ -215,158 +193,229 @@ function M.help(self)
 
 	map('Tab', function() self.tab = self.tab + 1 end, 'Next help tab')
 	map('Shift+ISO_Left_Tab', function() self.tab = self.tab - 1 end, 'Previous help tab')
-	map({ 'Up', 'ScrollUp' }, function() self.pager.line = self.pager.line - 1 end, 'Scroll up')
-	map({ 'Down', 'ScrollDown' }, function() self.pager.line = self.pager.line + 1 end, 'Scroll down')
-	map('Prior', function() self.pager.line = self.pager.line - self.pager.page_size end, 'Page up')
-	map('Next', function() self.pager.line = self.pager.line + self.pager.page_size end, 'Page down')
 	map({ 'Escape', 'q' }, function() self.enabled = false end, 'Exit help overlay')
 end
 
----@param self sai.mode.input
-function M.input(self)
+---Keyboard scrolling binds of a pager that owns its input.
+---@param pager sai.lib.pager a full overlay mode's display; the wheel is its own block bind
+function M.pager_scrolls(pager)
+	local map = M.gen_mapadd(pager, { kind = 'private' })
+	map({ 'Up', 'k' }, function(p) p.scroll = p.scroll - 1 end)
+	map({ 'Down', 'j' }, function(p) p.scroll = p.scroll + 1 end)
+	map('Prior', function(p) p.scroll = p.scroll - p.page_size end)
+	map('Next', function(p) p.scroll = p.scroll + p.page_size end)
+end
+
+---@param self sai.mode.selector
+function M.selector(self)
+	self.map('ScrollUp', function() self:move(-1) end, { kind = 'private' })
+	self.map('ScrollDown', function() self:move(1) end, { kind = 'private' })
+
+	if self.component then return end
+	self.map('MouseLeft', function() self:select_at_mouse() end, { kind = 'private' })
+	self.map('2+MouseLeft', function(row, _)
+		if row then self:select_at_mouse() end
+		self:confirm()
+	end, { kind = 'private' })
+
 	-- Important actions that should be displayed in help list
 	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
-	map('Return', function() self:confirm() end, 'Confirm input')
-	map('Escape', function() self:confirm(false) end, 'Abort input')
+	map('Return', function() self:confirm() end, 'Confirm')
+	map('Escape', function() self:confirm(false) end, 'Abort')
 	map('Ctrl+Escape', function() self.enabled = false end, 'Hide mode')
 
 	-- Make mappings invisible in help lists
 	map = M.gen_mapadd(self, { kind = 'private', _wrapped = true })
 
-	local S = require 'sai.bridge.shell'
+	local s = self
+	-- plain list navigation: obvious keys - kept out of the help lists
+	map('Up', function() s:move(-1) end)
+	map('Down', function() s:move(1) end)
+	map('Prior', function() s:move(-s.page_size) end)
+	map('Next', function() s:move(s.page_size) end)
+	map('Home', function() s.line = 1 end)
+	map('End', function() s.line = #s.lines end)
+	if not s.single_select then map('Tab', function() s:toggle_select() end, 'Toggle select') end
+end
+
+---@param self sai.mode.editor
+function M.editor(self)
+	self.map('Shift+Return', function() self:insert '\n' end, 'Newline')
+
+	-- Make mappings invisible in help lists
+	local map = M.gen_mapadd(self, { kind = 'private', _wrapped = true })
+
 	-- Clipboard management
-	map('Ctrl+a', function()
-		self._visual = 1
-		self.col = utf8.len(self.text) + 1
-	end, 'Select all')
-	local set = function()
-		local from, to = self._col, self._visual
-		if not to then return end
-		if from > to then
-			from, to = to, from
-		end
-		S.clipboard_set(utf8.sub(self._text, from, to))
-	end
-	map('Ctrl+x', function()
-		set()
-		self:insert ''
-	end, 'Cut to clipboard')
-	map('Ctrl+c', function()
-		set()
-		self.visual = false
-	end, 'Copy to clipboard')
-	map('Ctrl+v', function()
-		local text = S.clipboard_get()
-		if text then self:insert(text) end
-	end, 'Paste from clipboard')
+	map('Ctrl+a', function() self:select_all() end)
+	map('Ctrl+x', function() self:cut() end)
+	map('Ctrl+c', function() self:copy() end)
+	map('Ctrl+v', function() self:paste() end)
 
 	-- Deleting text
-	map('BackSpace', function() self:delete(not self._visual and self._col - 1) end, 'Delete prev char')
-	map('Delete', function() self:delete(not self._visual and self._col) end, 'Delete next char')
-
-	-- utf8-aware word scanning: ASCII %w plus any non-ASCII codepoint counts as a word char
-	local function word_flags(text)
-		local flags = {}
-		for _, cp in utf8.codes(text) do
-			flags[#flags + 1] = cp >= 0x80 or utf8.char(cp):match '%w' ~= nil
-		end
-		return flags
-	end
-
-	---@param text string
-	---@param col integer char position to scan from
-	---@param backward? boolean scan towards the text start instead
-	---@return integer from start of the word boundary
-	---@return integer to end of the word boundary
-	local function get_word_idx(text, col, backward)
-		local isw = word_flags(text)
-		local n = #isw
-		local i = col
-		if backward then
-			i = math.min(i, n)
-			while i > 0 and not isw[i] do
-				i = i - 1
-			end
-			while i > 0 and isw[i] do
-				i = i - 1
-			end
-			return i + 1, col
-		end
-		while i <= n and not isw[i] do
-			i = i + 1
-		end
-		while i <= n and isw[i] do
-			i = i + 1
-		end
-		return col, i
-	end
-	map('Ctrl+BackSpace', function() self:delete(get_word_idx(self._text, self._col - 1, true)) end, 'Delete prev word')
-	map('Ctrl+Delete', function() self:delete(get_word_idx(self._text, self._col)) end, 'Delete next word')
+	map('BackSpace', function() self:delete_prev_char() end)
+	map('Delete', function() self:delete_next_char() end)
+	map('Ctrl+BackSpace', function() self:delete_prev_word() end)
+	map('Ctrl+Delete', function() self:delete_next_word() end)
 
 	-- Allow moving around taking text selection into account
-	local function add_move(key, fn, direction)
-		direction = direction or key:lower()
-		map(key, function()
-			if self._visual then self._visual = false end
-			fn()
-		end, 'Move ' .. direction)
-		map('Shift+' .. key, function()
-			if not self._visual then self._visual = self._col end
-			fn()
-		end, 'Select ' .. direction)
+	local function add_move(key, method)
+		map(key, function() method(self) end)
+		map('Shift+' .. key, function() method(self, true) end)
 	end
 
-	add_move('Ctrl+Left', function() self.col = get_word_idx(self._text, self._col - 1, true) end, 'prev word')
-	add_move('Ctrl+Right', function()
-		local isw = word_flags(self._text)
-		local i, n = self._col, #isw
-		while i <= n and isw[i] do
-			i = i + 1
-		end
-		while i <= n and not isw[i] do
-			i = i + 1
-		end
-		self.col = i
-	end, 'next word')
-	add_move('Left', function() self.col = self._col - 1 end)
-	add_move('Right', function() self.col = self._col + 1 end)
-	add_move('Up', function() self.line = self.line - 1 end)
-	add_move('Down', function() self.line = self.line + 1 end)
-	add_move('End', function() self.col = self:get_current_line_info().to end, 'line end')
-	add_move('Ctrl+End', function() self.col = utf8.len(self.text) + 1 end, 'text end')
-	add_move('Home', function() self.col = self:get_current_line_info().from end, 'line start')
-	add_move('Ctrl+Home', function() self.col = 1 end, 'text start')
-end
+	add_move('Ctrl+Left', self.move_prev_word)
+	add_move('Ctrl+Right', self.move_next_word)
+	add_move('Left', self.move_left)
+	add_move('Right', self.move_right)
+	add_move('End', self.move_line_end)
+	add_move('Ctrl+End', self.move_text_end)
+	add_move('Home', self.move_line_start)
+	add_move('Ctrl+Home', self.move_text_start)
 
----@param self sai.mode.filter
-function M.filter(self)
-	self.map('Shift+Return', '\n', 'Newline')
-
-	-- Important actions that should be displayed in help list
-	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
-	map('Ctrl+j', function() self.selected_pos = self.selected_pos + 1 end, 'next filtered image')
-	map('Ctrl+k', function() self.selected_pos = self.selected_pos - 1 end, 'prev filtered image')
-	map('Tab', function() self:complete() end, 'Complete tag')
-end
-
----@param self sai.mode.cmd
-function M.cmd(self)
-	self.map('Shift+Return', '\n', 'Newline')
-
+	-- Up/Down cycle the history on a single line, move the cursor line on
+	-- multiline; Shift keeps extending the selection
 	self.map('Up', function()
 		if self.text:find('\n', 1, true) then
-			self.line = self.line - 1
+			self:move_up()
 		else
 			self:hist_prev()
 		end
-	end)
+	end, 'History previous (move up in multiline)')
 	self.map('Down', function()
 		if self.text:find('\n', 1, true) then
-			self.line = self.line + 1
+			self:move_down()
 		else
 			self:hist_next()
 		end
-	end)
+	end, 'History next (move down in multiline)')
+	map('Shift+Up', function() self:move_up(true) end)
+	map('Shift+Down', function() self:move_down(true) end)
+end
+
+---@param self sai.mode.completion
+function M.completion(self)
+	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
+	map('Tab', function() self:confirm() end, 'Accept completion')
+	map('Ctrl+j', function() self:move(1) end, 'Next completion')
+	map('Ctrl+k', function() self:move(-1) end, 'Previous completion')
+
+	-- clicking a menu entry is obvious: kept out of the help lists
+	self.map('MouseLeft', function() self:select_at_mouse() end, { kind = 'private', _wrapped = true })
+end
+
+---@param self sai.mode.image_filter
+function M.image_filter(self)
+	-- Important actions that should be displayed in help list
+	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
+	map('Ctrl+n', function() self.selected_pos = self.selected_pos + 1 end, 'next filtered image')
+	map('Ctrl+p', function() self.selected_pos = self.selected_pos - 1 end, 'prev filtered image')
+
+	-- the results list: a click takes the cursor to the clicked match,
+	-- the same image the wheel lands on
+	if self.results_list then
+		self.results_list.map('BL+MouseLeft', function(row, _)
+			if not row then return end
+			local list = self.results_list ---@cast list sai.mode.selector<string>
+			list:select_at_mouse()
+			self:set_selected_pos(list.line)
+		end, { kind = 'private', _wrapped = true })
+	end
+end
+
+---@param self sai.mode.sort
+function M.sort(self)
+	-- Important actions that should be displayed in help list
+	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
+	-- the sort overrides the editor's plain confirm: an in-flight edit
+	-- must not slip out as a confirm
+	self.map('Return', function()
+		-- a `name:code` input commits like Tab: Enter must not strand it
+		local _, code = self:code_input()
+		if code and #code > 0 then return self:_accept(1) end
+		if self.text:match '%S' then
+			sai.notify('Clear the input to confirm', nil, 'bottomright')
+			return
+		end
+		self:confirm()
+	end, { kind = 'default', _wrapped = true, desc = 'Confirm / commit code' })
+	map('Ctrl+p', function()
+		-- program the cursor's picked criterion: its name and code land in the input
+		local name = self.sort_by.lines[self.sort_by.line]
+		if not name then return end
+		self.text = name .. ':' .. (self._code_src[name] or '')
+	end, 'Program the picked criterion')
+
+	local cmp = self.completion
+	cmp.map('Tab', function() self:_accept(1) end, 'Add sort criterion, ASC')
+	cmp.map('Shift+ISO_Left_Tab', function() self:_accept(-1) end, 'Add sort criterion, DESC')
+	cmp.map('TL+MouseLeft', function(row, _)
+		if not row then return end
+		cmp:select_at_mouse()
+		self:_accept(1)
+	end, 'Sort by the clicked field, ascending')
+	cmp.map('TL+MouseRight', function(row, _)
+		if not row then return end
+		cmp:select_at_mouse()
+		self:_accept(-1)
+	end, 'Sort by the clicked field, descending')
+
+	-- the picked pane: the cursor walks it, Ctrl+i flips the direction,
+	-- Alt+Delete drops, the pointer flips or drops the clicked criterion
+	local by = self.sort_by
+	by.map('Ctrl+Up', function() by:move(-1) end, 'Previous picked criterion')
+	by.map('Ctrl+Down', function() by:move(1) end, 'Next picked criterion')
+	by.map(
+		'Ctrl+i',
+		function() self:flip_criterion(by.lines[by.line]) end,
+		'Toggle the direction of the picked criterion'
+	)
+	by.map('Alt+Delete', function() self:remove_criterion(by.lines[by.line]) end, 'Drop the picked criterion')
+	by.map('BL+MouseLeft', function(row, _)
+		if not row then return end
+		by:select_at_mouse()
+		self:flip_criterion(by.lines[by.line])
+	end, 'Toggle the direction of the clicked criterion')
+	by.map('BL+MouseRight', function(row, _)
+		if not row then return end
+		by:select_at_mouse()
+		self:remove_criterion(by.lines[by.line])
+	end, 'Drop the clicked criterion')
+end
+
+---Pointer binds of the live text-box adjustment: every visible block owns
+---the pointer over it, so each section carries its own wheel and swap keys.
+---@param self sai.mode.text_adjust
+function M.text_adjust(self)
+	local map = M.gen_mapadd(self, { kind = 'default', _wrapped = true })
+	map({ 'Escape', 'q' }, function() self.enabled = false end, 'Exit text adjust')
+
+	local modmap = { TL = 'topleft', TR = 'topright', BL = 'bottomleft', ST = 'status', BR = 'bottomright' }
+	for mod, loc in pairs(modmap) do
+		mod = mod .. '+'
+		local inc_dir, dec_dir
+		if mod:sub(1, 1) == 'T' then
+			inc_dir, dec_dir = 'ScrollDown', 'ScrollUp'
+		else
+			dec_dir, inc_dir = 'ScrollDown', 'ScrollUp'
+		end
+
+		map(mod .. dec_dir, function() self:adjust_height(loc, -1) end, 'Shrink pager')
+		map(mod .. inc_dir, function() self:adjust_height(loc, 1) end, 'Grow pager')
+		map(mod .. 'Shift+' .. dec_dir, function() self:adjust_scrolloff(loc, -1) end, 'Dec scrolloff')
+		map(mod .. 'Shift+' .. inc_dir, function() self:adjust_scrolloff(loc, 1) end, 'Inc scrolloff')
+
+		if mod:sub(1, 1) == 'T' then
+			map(mod .. 's', function() self:swap(loc, loc:gsub('top', 'bottom')) end, 'Swap ↓')
+		elseif mod:sub(1, 1) == 'B' then -- don't match status
+			map(mod .. 'w', function() self:swap(loc, loc:gsub('bottom', 'top')) end, 'Swap ↑')
+		end
+	end
+	map('TR+a', function() self:swap('topright', 'topleft') end, 'Swap ←')
+	map('TL+d', function() self:swap('topleft', 'topright') end, 'Swap →')
+	map('BR+a', function() self:swap('bottomright', 'status') end, 'Swap ←')
+	map('ST+a', function() self:swap('status', 'bottomleft') end, 'Swap ←')
+	map('ST+d', function() self:swap('status', 'bottomright') end, 'Swap →')
+	map('BL+d', function() self:swap('bottomleft', 'status') end, 'Swap →')
 end
 
 return M

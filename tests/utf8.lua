@@ -1,4 +1,3 @@
----@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for sai.bridge.utf8: system module preference, download, LuaJIT-compat
 ---patching, compilation and the utf8 C module behavior. Runs in plain luajit;
 ---the first fallback download needs network access. Development tool: not used
@@ -30,13 +29,13 @@ function T.len(h)
 end
 
 function T.char(h)
-	h.eq('char()', '☃', M.char(0x2603))
-	h.eq('char() multiple', 'a☃é', M.char(97, 0x2603, 0xE9))
+	h.eq('char() encodes a codepoint', '☃', M.char(0x2603))
+	h.eq('char() encodes multiple codepoints', 'a☃é', M.char(97, 0x2603, 0xE9))
 end
 
 function T.codepoint(h)
-	h.eq('codepoint()', 0xE9, M.codepoint(s, 2))
-	h.eq('codepoint() range count', 2, select('#', M.codepoint('éé', 1, 4)))
+	h.eq('codepoint() decodes at a position', 0xE9, M.codepoint(s, 2))
+	h.eq('codepoint() decodes a range', 2, select('#', M.codepoint('éé', 1, 4)))
 end
 
 function T.offset(h)
@@ -58,7 +57,7 @@ end
 
 -- the char-aware equivalent of string.sub(): position, byte range
 function T.sub(h)
-	h.eq('sub()', 'éllo 釵 wörl', M.sub(s, 2, -2))
+	h.eq('sub() slices by chars', 'éllo 釵 wörl', M.sub(s, 2, -2))
 	h.eq('sub() to end', 'éllo 釵 wörld', M.sub(s, 2))
 	h.eq('sub() middle', '釵 w', M.sub(s, 7, 9))
 	h.eq('sub() single', 'l', M.sub(s, 3, 3))
@@ -75,6 +74,22 @@ function T.call(h)
 	h.ok('invalid string gets cleaned', M.isvalid(cleaned))
 	h.contains('cleaned content kept', cleaned, 'ok')
 	h.ok('non-strings pass through', M(42) == 42 and M(nil) == nil)
+end
+
+-- isvalid/clean edge shapes; find/gmatch/gsub exist only on the system module
+function T.clean_edges(h)
+	h.ok('empty string is valid', M.isvalid '')
+	local cleaned = M.clean '\253ok\254'
+	h.ok('multiple invalid runs cleaned', M.isvalid(cleaned))
+	h.contains('valid content between runs kept', cleaned, 'ok')
+	if M.find then
+		local from, to = M.find('héllo 釵', '釵')
+		h.ok('char-aware find returns char positions', from == 7 and to == 7)
+		local subs, n = M.gsub('héllo', 'l', 'L', 1)
+		h.ok('char-aware gsub respects the count', subs == 'héLlo' and n == 1)
+	else
+		h.skip('find/gmatch/gsub are system-only', 'compiled fallback active')
+	end
 end
 
 -- a system-provided module must take precedence over the compiled one
@@ -108,9 +123,9 @@ function T.fallback_build(h)
 	h.ok('fallback module loads', ok)
 	h.ok('fallback differs from system module', built ~= sys)
 	if ok then
-		h.eq('fallback len()', 13, built.len(s))
-		h.eq('fallback sub()', 'éllo 釵 wörl', built.sub(s, 2, -2))
-		h.eq('fallback sub idiom', 'l', s:sub(built.offset(s, 3), built.offset(s, 4) - 1))
+		h.eq('fallback len() counts chars', 13, built.len(s))
+		h.eq('fallback sub() slices by chars', 'éllo 釵 wörl', built.sub(s, 2, -2))
+		h.eq('fallback offset feeds the sub idiom', 'l', s:sub(built.offset(s, 3), built.offset(s, 4) - 1))
 		h.ok('fallback callable cleans', built.isvalid(built '\255ok\254'))
 	end
 end

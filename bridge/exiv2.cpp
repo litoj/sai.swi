@@ -7,7 +7,7 @@
 #include <thread>
 #include <vector>
 
-constexpr static bool should_include(const Exiv2::Metadatum &item) {
+static bool should_include(const Exiv2::Metadatum &item) {
 	// Explicitly exclude binary and complex types that contain non-human-readable
 	// data
 	switch (item.typeId()) {
@@ -82,14 +82,10 @@ static void populate_entry(lua_State *L, const image_info &info) {
 
 	// only set the dimensions when the decoder knows them: 0
 	// means unknown, not "no dimensions"
-	if (info.width > 0) {
-		lua_pushinteger(L, info.width);
-		lua_setfield(L, -2, "width");
-	}
-	if (info.height > 0) {
-		lua_pushinteger(L, info.height);
-		lua_setfield(L, -2, "height");
-	}
+	lua_pushinteger(L, info.width);
+	lua_setfield(L, -2, "width");
+	lua_pushinteger(L, info.height);
+	lua_setfield(L, -2, "height");
 }
 
 static int lua_add_meta(lua_State *L) {

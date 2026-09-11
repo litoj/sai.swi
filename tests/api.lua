@@ -1,6 +1,8 @@
----@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for the main api (sai.api.init): the notify and cmdline getters.
 ---Development tool: not used during normal swayimg operation.
+---
+---Due-order scheduling lives in tests/deferred_heap.lua, viewer scale
+---handling in tests/viewer.lua.
 ---
 ---Loads a private copy of the api stack: the raw text table the proxies
 ---write through to is captured at module load time, so this file cannot
@@ -15,14 +17,8 @@ local ipc = require 'sai.bridge.ipc'
 
 local old_swi, old_sai = _G.swayimg, rawget(_G, 'sai')
 
--- The notify tests: the message display is the app's own expiry - the
--- status write arms it with the current status_timeout, and its firing is
--- the only thing that repaints the layer (an empty write from Lua does not
--- repaint, the message frame would stay painted until the next redraw). So
--- notify must arm the expiry with the display time and never pin it to 0.
--- The swayimg.defer stub queues every armed fire the way the app's own
--- timers run them: pumping the queue exercises the chain scheduling under
--- the heap, the exact machinery the stuck-message bug lived in.
+-- Notify arms the expiry with the display time, never 0: only its firing repaints.
+-- The defer stub queues fires like the app timers, exercising the stuck-message chain.
 
 -- faithful to the live app: the C++ text property getters return nil
 -- (reads fall through to the api copies), writes land on the C++ side;
@@ -42,7 +38,6 @@ swayimg.defer = function(_, cb) -- deferred callbacks are pumped manually
 end
 
 local sai, sai_proxy = H.fresh_api_stack(swayimg)
-local heap = require 'sai.bridge.deferred_heap'
 local e = require 'sai.api.eventloop'
 local registry_vars = require('sai.lib.registry').vars
 
@@ -104,12 +99,8 @@ local T = {}
 
 local fx = H.proc_fixture('api_instance', 'INSTANCE_READY')
 
--- the launched instance: the api stack over a stubbed swayimg (the resize
--- callback never fires, so no mode ever loads), serving its own state over
--- the ipc - the closest to a real swayimg instance a test can launch.
--- The stub cannot come from the harness: requiring it would preload the
--- socket and debug bridges before the getters ran, and the whole point of
--- the PRE_IPC check below is that the api alone declares its ffi needs
+-- The instance serves its state over ipc over a stubbed swayimg with no modes loaded.
+-- The stub stays local: the api alone must declare its ffi needs before PRE_IPC.
 local function instance_script()
 	return table.concat({
 		"local ffi = require('ffi')",
@@ -177,18 +168,6 @@ T.cmdline_of_launched_instance = fx.scenario(function(h)
 end)
 
 -- ---------------------------------------------------------------------------
--- Generic unit tests: the deferred heap notify schedules its restore on
--- ---------------------------------------------------------------------------
-
-T.monotonic_ms_precision = function(h)
-	-- whole-second clock truncation would record this due time up to 1s early
-	heap:push(500, function() end)
-	local remaining = heap:time_to_next()
-	h.ok('sub-second precision', remaining > 250 and remaining <= 500)
-	heap:pop()
-end
-
--- ---------------------------------------------------------------------------
 -- Usability tests: the status flows a user and a mode trigger
 -- ---------------------------------------------------------------------------
 
@@ -197,13 +176,13 @@ T.notify_never_arms_the_app_expiry = with_env(function(h)
 	sai.text.status = 'my status'
 
 	sai.notify 'test message'
-	h.eq('message shown', 'test message', raw_text.status)
-	h.eq('the raw timeout pinned for the display', 0, raw_text.status_timeout)
-	h.eq('the publicly known timeout untouched', 2, sai.text.status_timeout)
+	h.eq('notify message shown in the status', 'test message', raw_text.status)
+	h.eq('raw status timeout pinned to 0 for display', 0, raw_text.status_timeout)
+	h.eq('public status timeout untouched', 2, sai.text.status_timeout)
 
 	run_deferred() -- the defer owns the clear, no expiry to wait for
 	h.eq('the timed text cleared', ' ', raw_text.status)
-	h.eq('the raw back to the public value', 2, raw_text.status_timeout)
+	h.eq('raw status timeout back to the public value', 2, raw_text.status_timeout)
 end)
 
 -- A display time of our own (the given one, or the length formula over a
@@ -212,8 +191,8 @@ end)
 T.notify_restores_the_configured_timeout = with_env(function(h)
 	sai.text.status_timeout = 5
 	sai.notify('test message', 2)
-	h.eq('the raw pinned for the display', 0, raw_text.status_timeout)
-	h.eq('the public timeout untouched', 5, sai.text.status_timeout)
+	h.eq('raw status timeout pinned to 0 for display', 0, raw_text.status_timeout)
+	h.eq('public status timeout untouched', 5, sai.text.status_timeout)
 
 	run_deferred()
 	h.eq('the configured timeout restored', 5, raw_text.status_timeout)
@@ -225,15 +204,15 @@ T.late_timeout_write_survives_the_restore = with_env(function(h)
 
 	sai.text.status_timeout = 7 -- a late direct write does not cancel it
 	run_deferred()
-	h.eq('the late write survives', 7, raw_text.status_timeout)
+	h.eq('the late timeout write survives', 7, raw_text.status_timeout)
 end)
 
 T.superseded_notify_keeps_newest = with_env(function(h)
 	sai.text.status_timeout = 5
 	sai.notify('first message', 2)
 	sai.notify('second message', 3)
-	h.eq('newest message shown', 'second message', raw_text.status)
-	h.eq('the raw stays pinned across them', 0, raw_text.status_timeout)
+	h.eq('newest notify message shown in the status', 'second message', raw_text.status)
+	h.eq('raw status timeout stays pinned across notifies', 0, raw_text.status_timeout)
 
 	run_deferred()
 	h.eq('the configured timeout restored once', 5, raw_text.status_timeout)
@@ -245,17 +224,77 @@ end)
 T.notify_computes_over_permanent = with_env(function(h)
 	sai.text.status_timeout = 0
 	sai.notify 'test message' -- 13 chars: one second at the -10 rate
-	h.eq('message shown', 'test message', raw_text.status)
-	h.eq('the raw stays 0 over the permanent', 0, raw_text.status_timeout)
+	h.eq('notify message shown in the status', 'test message', raw_text.status)
+	h.eq('raw status timeout stays 0 over the permanent', 0, raw_text.status_timeout)
 
 	run_deferred()
-	h.eq('the stored text restored', '', raw_text.status)
+	h.eq('stored status text restored', '', raw_text.status)
 	h.eq('the permanent timeout restored', 0, raw_text.status_timeout)
+end)
+
+-- a multiline message is aligned to its longest line so the centered status
+-- renders it as a block: the padding must keep the lines, not replace them
+-- with the width number (a format mix-up once rendered the width twice)
+T.notify_pads_multiline_into_a_block = with_env(function(h)
+	sai.notify 'ab\ncdef'
+	h.eq('multiline notify lines padded to the longest', 'ab  \ncdef', raw_text.status)
+	sai.notify 'single'
+	h.eq('single-line notify left unpadded', 'single', raw_text.status)
+end)
+
+-- A corner block takes a message too, leaving the status free (e.g. for the
+-- input field); every location owns its expiry: one block's hider must not
+-- cancel another's pending clear
+T.notify_per_location = with_env(function(h)
+	sai.text.status_timeout = 5
+	sai.notify('status message', 5)
+	sai.notify('corner message', 5, 'bottomright')
+
+	h.eq('the corner block shows its message', 'corner message', (swayimg.viewer.text.bottomright or {})[1])
+	h.eq('the status keeps its message', 'status message', raw_text.status)
+	h.eq('the status timeout still pinned', 0, raw_text.status_timeout)
+
+	run_deferred()
+	h.eq('the corner back to its empty default', nil, (swayimg.viewer.text.bottomright or {})[1])
+	h.eq('the status cleared on its own', ' ', raw_text.status)
+	h.eq('the configured timeout restored', 5, raw_text.status_timeout)
+end)
+
+-- a newer message on the same corner replaces the older one and its expiry
+T.notify_supersedes_per_location = with_env(function(h)
+	sai.notify('first corner', 5, 'topleft')
+	sai.notify('second corner', 5, 'topleft')
+	h.eq('only the newest corner message shows', 'second corner', (swayimg.viewer.text.topleft or {})[1])
+
+	run_deferred()
+	-- the release restores the corner's prior content: the viewer's
+	-- default block, not a blank
+	h.eq('the corner restored to its prior content', 'File:\t{name}', (swayimg.viewer.text.topleft or {})[1])
+end)
+
+-- the corner machinery reads tables of lines: the message must arrive
+-- aligned and split, a raw string would break it
+T.notify_splits_the_corner_message = with_env(function(h)
+	sai.notify('ab\ncdef', 5, 'topleft')
+	local lines = swayimg.viewer.text.topleft or {}
+	h.eq('corner notify line one padded', 'ab  ', lines[1])
+	h.eq('corner notify line two split off', 'cdef', lines[2])
+
+	run_deferred()
+	h.eq('the corner restored to its prior content', 'File:\t{name}', (swayimg.viewer.text.topleft or {})[1])
+end)
+
+T.notify_unknown_location_errors = with_env(function(h)
+	local ok, err = pcall(function() sai.notify('msg', nil, 'nowhere') end)
+	h.ok('unknown block errors on its own', not ok)
+	h.contains('the error names the block', tostring(err), 'sai.text.nowhere')
+	-- the throw skips notify's own restore of the muted flag
+	e.ignore_opts = false
 end)
 
 -- ---------------------------------------------------------------------------
 -- The base app scenario: the option printer snippet, the key_help display
--- and the cmd mode over the shared text stack - what a real session runs
+-- and the editor input mode over the shared text stack - what a real session runs
 -- ---------------------------------------------------------------------------
 
 -- the other test files bind the mode modules to their own stacks: reload
@@ -266,7 +305,7 @@ local function fresh(name)
 end
 
 -- the app after startup: init resolved, the option printer subscribed, the
--- help display and the cmd mode loaded - the base every user path below
+-- help display and the editor input mode loaded - the base every user path below
 -- runs against
 local function base_scenario()
 	sai.initialized = true
@@ -274,26 +313,27 @@ local function base_scenario()
 	snip.print_option_changes(false) -- a printer from an earlier scenario must not stack
 	snip.print_option_changes()
 	local key_help = fresh 'sai.mode.key_help'
-	local cmd = fresh('sai.mode.cmd').new {}
-	return key_help, cmd
+	local prompt = fresh('sai.mode.editor').new { _prompt = 'Code' }
+	return key_help, prompt
 end
 
--- The Escape path: F1 opens help, ':' opens cmd, F1 closes help, Escape
--- aborts the cmd input (confirm(false) clears the text, then disables the
--- mode from inside the confirm) - the message must come out the same
+-- The Escape path: F1 opens help, the prompt opens over the status, F1
+-- closes help, Escape aborts the prompt input (confirm(false) clears the
+-- text, then disables the mode from inside the confirm) - the message must
+-- come out the same
 T.app_sequence_escape_abort_clears = with_env(function(h)
-	local key_help, cmd = base_scenario()
+	local key_help, prompt = base_scenario()
 
 	sai.text.status = 'my status'
 	sai.text.status_timeout = 3
 
 	key_help.enabled = true
-	cmd.enabled = true
+	prompt.enabled = true
 	key_help.enabled = false
-	cmd:confirm(false)
+	prompt:confirm(false)
 
-	h.eq('the printer message shows', 'Cmd Enabled: false', tostring(sai.text.status))
-	h.eq('the raw pinned for the display', 0, raw_text.status_timeout)
+	h.eq('option printer message shows in the status', 'Editor Enabled: false', tostring(sai.text.status))
+	h.eq('raw status timeout pinned to 0 for display', 0, raw_text.status_timeout)
 
 	run_deferred()
 	h.eq('the timed text cleared', ' ', raw_text.status)
@@ -301,89 +341,76 @@ T.app_sequence_escape_abort_clears = with_env(function(h)
 end)
 
 -- A message over a mode's live prompt: the message pins itself permanent
--- for its display, but the cmd input still waits for its text - the prompt
+-- for its display, but the prompt input still waits for its text - the prompt
 -- must come back once the message is gone
-T.app_sequence_help_over_cmd_returns_the_prompt = with_env(function(h)
-	local key_help, cmd = base_scenario()
+T.app_sequence_help_over_prompt_returns_the_prompt = with_env(function(h)
+	local key_help, prompt = base_scenario()
 
 	sai.text.status = 'my status'
 	sai.text.status_timeout = 3
 
-	cmd.enabled = true -- the prompt takes the status over, permanent
-	h.eq('the prompt shows', 'Code: ▎', raw_text.status)
+	prompt.enabled = true -- the prompt takes the status over, permanent
+	h.eq('the editor prompt shows in the status', 'Code: ▎', raw_text.status)
 	h.eq('the prompt pins its status permanent', 0, raw_text.status_timeout)
 
 	key_help.enabled = true
 	key_help.enabled = false -- the printer notifies over the prompt
-	h.eq('the printer message shows', 'Key Help Enabled: false', tostring(sai.text.status))
+	h.eq('option printer message shows in the status', 'Key Help Enabled: false', tostring(sai.text.status))
 
 	run_deferred() -- the message is gone, the defer restored the prompt
 	h.eq('the prompt is back after the message', 'Code: ▎', raw_text.status)
 	h.eq('the prompt is permanent again', 0, raw_text.status_timeout)
 
-	cmd.enabled = false -- the scenario leaves no mode layer behind
+	prompt.enabled = false -- the scenario leaves no mode layer behind
 end)
 
--- The notify fires from inside the cmd disable itself (the printer reacts
--- to sai.mode.cmd.enabled = false): the armed expiry must survive the
+-- The notify fires the prompt disable itself (the printer reacts
+-- to sai.mode.editor.enabled = false): the armed expiry must survive the
 -- whole disable cascade running underneath it
-T.notify_fired_from_inside_cmd_disable = with_env(function(h)
-	local _, cmd = base_scenario()
+T.notify_fired_from_inside_prompt_disable = with_env(function(h)
+	local _, prompt = base_scenario()
 
 	sai.text.status = 'my status'
 	sai.text.status_timeout = 3
 
-	cmd.enabled = true
-	cmd.text = 'echo hi'
-	cmd.enabled = false -- the OptionSet fires after the setter: notify mid-cascade
+	prompt.enabled = true
+	prompt.text = 'echo hi'
+	prompt.enabled = false -- the OptionSet fires after the setter: notify mid-cascade
 
-	h.eq('the printer message shows', 'Cmd Enabled: false', tostring(sai.text.status))
-	h.eq('the raw pinned for the display', 0, raw_text.status_timeout)
+	h.eq('option printer message shows in the status', 'Editor Enabled: false', tostring(sai.text.status))
+	h.eq('raw status timeout pinned to 0 for display', 0, raw_text.status_timeout)
 
 	run_deferred()
 	h.eq('the timed text cleared', ' ', raw_text.status)
 	h.eq('the configured timeout stands', 3, raw_text.status_timeout)
-end)
-
--- Every push beyond the first must re-aim the single chain instead of
--- arming another fire: the surplus fires pop past the heap's end and the
--- error inside the app's callback kills every timer the app runs on
-T.pushes_keep_single_chain = with_env(function(h)
-	sai.defer_fn(function() end, 1)
-	h.eq('the first push arms the chain', 1, #defer_queue)
-
-	sai.defer_fn(function() end, 1)
-	sai.defer_fn(function() end, 1)
-	h.eq('the later pushes re-arm it, not multiply', 1, #defer_queue)
-
-	run_deferred()
-	h.eq('the queue drained', 0, #defer_queue)
 end)
 
 -- The user sequence used to leave armed fires behind after the heap
 -- emptied: a surplus fire must skip the empty heap instead of erroring
 -- inside the app callback - the stuck-message wedge
 T.spurious_fire_does_not_kill_the_chain = with_env(function(h)
-	local key_help, cmd = base_scenario()
+	local key_help, prompt = base_scenario()
 
 	sai.text.status = 'my status'
 	sai.text.status_timeout = 3
 
 	key_help.enabled = true
-	cmd.enabled = true
-	cmd.text = 'echo hi'
+	prompt.enabled = true
+	prompt.text = 'echo hi'
 	key_help.enabled = false
-	cmd.enabled = false
+	prompt.enabled = false
 
 	run_deferred()
 	h.eq('the timed text cleared', ' ', raw_text.status)
 	h.eq('the configured timeout stands', 3, raw_text.status_timeout)
 
-	for i = 1, #all_defers do
-		all_defers[i]() -- every fire ever armed, fired again as a surplus
+	-- only stale fires are replayed: the latest arm always finds its heap
+	-- entry (arms happen on push), so the app can only deliver it work to do
+	for i = 1, #all_defers - 1 do
+		all_defers[i]() -- every older fire, fired again as a surplus
 	end
 	h.eq('no state change after the surplus fires', ' ', raw_text.status)
-	h.eq('the timeout untouched by them', 3, raw_text.status_timeout)
+	h.eq('the timeout untouched by the surplus fires', 3, raw_text.status_timeout)
 end)
 
 -- A callback erroring inside the app's fire would take the whole timer
@@ -402,22 +429,8 @@ T.callback_error_does_not_kill_the_chain = with_env(function(h)
 	if not ran then error(err, 0) end
 
 	h.eq('the timed text cleared', ' ', raw_text.status)
-	h.eq('the restore behind the error ran', 5, raw_text.status_timeout)
-	h.ok('the error was reported', printed[1] ~= nil and printed[1]:find('boom', 1, true) ~= nil)
-end)
-
--- A defer_fn called from inside a running fire re-arms the chain for its
--- own entry: the queue must not grow a second fire
-T.reentrant_push_rearms_single_chain = with_env(function(h)
-	local ran_inner = false
-	sai.defer_fn(function()
-		sai.defer_fn(function() ran_inner = true end, 1)
-		h.eq('the reentrant push re-armed, not multiplied', 1, #defer_queue)
-	end, 1)
-
-	run_deferred()
-	h.ok('the reentrant push ran', ran_inner)
-	h.eq('the queue drained', 0, #defer_queue)
+	h.eq('the timeout restore behind the error ran', 5, raw_text.status_timeout)
+	h.ok('the callback error was reported', printed[1] ~= nil and printed[1]:find('boom', 1, true) ~= nil)
 end)
 
 -- The notify writes run under e.ignore_opts: option printers must stay
@@ -435,16 +448,16 @@ T.notify_writes_do_not_print = with_env(function(h)
 
 	sai.text.status_timeout = 2
 	sai.text.status = 'my status'
-	h.eq('a direct write prints', 1, #printed)
+	h.eq('a direct timeout write prints', 1, #printed)
 
 	sai.notify 'test message' -- the timeout write: no print
 	h.eq('the notify printed nothing', 1, #printed)
 
 	sai.notify('own time', 5) -- a display time of our own: no print either
-	h.eq('the own time printed nothing', 1, #printed)
+	h.eq('notify own display time printed nothing', 1, #printed)
 
 	run_deferred() -- the timeout restore: no print
-	h.eq('the restore printed nothing', 1, #printed)
+	h.eq('the timeout restore printed nothing', 1, #printed)
 
 	e.unsubscribe { event = 'OptionSet', group = 'test_pin_printer' }
 end)

@@ -1,44 +1,32 @@
 ---@module 'sai.lib.keybind_processor'
 local U = require 'sai.lib.utils'
-local X = require 'sai.bridge.xkb'
+local B = require 'sai.lib.bindmods'
 
 ---@class sai.lib.keybind_processor.bindcfg: bindcfg
----@field _traced? boolean
+---@field package _traced? boolean
 
 ---@class sai.lib.keybind_processor.bindmap: {[string]: sai.lib.keybind_processor.bindcfg}
 
 ---@class sai.lib.keybind_processor: keybind_processor
----@field _path string path to the module for error processing
----@field _mappings sai.lib.keybind_processor.bindmap
----Function to set a mapping directly without updating the active mappings.
----Nil action gets replaced with the default handler for unbound keys
----@field warn_on_duplicates boolean
+---@field _path? string path to the module for error processing
+---@field _mappings? sai.lib.keybind_processor.bindmap
+---@field warn_on_duplicates? boolean warn on duplicate plain binds
+--- TODO: make modebase translate multimaps (`cd`) correctly and use sig USR1 for fallback
+---@field map? fun(bind:string|string[],fn:fun(row:integer?,location:block_position_t)|fun(self:self),opts?:string|bindopts) single-arg callbacks receive the mode
+---@field _rawmap? fun(self:self,bind:string,cfg:bindcfg,action:fun()) must be overridden by inheriting class
+---@field _rawunmap? fun(self:self,bind:string)
 local M = {
-	---How to handle unassigned xkb key combinations.
 	---Default custom handler tries to solve common layout differences (toggled shift)
 	---@type fun(key: string)|false
-	_on_unassigned = false, ---@protected
+	_on_unassigned = false,
 }
 
--- TODO: make modebase translate multimaps (`cd`) correctly and use sig USR1 for fallback
----Must be overriden by inheriting class
----@protected
+---Set a mapping directly without updating the active mappings.
+---The key canonicalizes through the bind modifier registry.
 ---@param bind string
----@param cfg bindcfg
----@param action fun()
----@diagnostic disable-next-line: unused-local
-function M:_rawmap(bind, cfg, action) end
-
----Must be overriden by inheriting class
----@protected
----@param bind string
----@diagnostic disable-next-line: unused-local
-function M:_rawunmap(bind) end
-
----@private
----@param bind string
----@param cfg bindcfg?
+---@param cfg bindcfg? nil drops the bind, falling back to the unbound-keys default
 function M:_setmap(bind, cfg)
+	bind = B.canonical(bind)
 	---@diagnostic disable-next-line: assign-type-mismatch
 	self._mappings[bind] = cfg or nil
 	if not cfg then
@@ -54,7 +42,7 @@ function M:new()
 	if self._mappings then
 		local trace = U.pretty_trace('keybind_processor.+new', debug.traceback())
 		for k, v in pairs(self._mappings) do
-			local newkey = X.userbind_to_xkb(k)
+			local newkey = B.canonical(k)
 			if k ~= newkey then
 				self._mappings[k] = nil
 				self._mappings[newkey] = v
@@ -69,14 +57,14 @@ function M:new()
 	end
 
 	self.remap = function(b, cfg)
-		b = X.userbind_to_xkb(b)
+		b = B.canonical(b)
 		local old = self._mappings[b]
 		cfg.trace = cfg.trace or cfg.kind or debug.traceback()
 		self:_setmap(b, cfg)
 		return old
 	end
 
-	self.unmap = function(b) self:_setmap(X.userbind_to_xkb(b)) end
+	self.unmap = function(b) self:_setmap(b) end
 
 	local function pretty_trace(trace) return U.pretty_trace('keybind_processor.+map', trace) end
 
@@ -88,7 +76,9 @@ function M:new()
 
 		for _, b in ipairs(U.tabled(bind)) do
 			local old = self.remap(b, bindcfg)
-			if self.warn_on_duplicates and old and not old.kind then
+			-- factory defaults are meant to be overridden, unmapping is
+			-- removal: only a plain bind mapped twice with a real action warns
+			if action ~= nil and self.warn_on_duplicates and old and not old.kind and not bindcfg.kind then
 				sai.log(
 					('Duplicate mapping %s["%s"].\n  old: %s\n  new: %s)'):format(
 						self._path,

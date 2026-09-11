@@ -1,9 +1,6 @@
 ---@module 'sai.bridge.socket'
----Generic unix-socket layer for the bridge modules (debug, ipc): buffered
----connections and servers with O_ASYNC arming and signal-driven or polled
----io dispatch. Extend the class tables the way the sai modes extend each
----other (`super` + U.new_object flattening) and override the `on_*` hooks;
----framing stays with the consumers.
+---Generic unix-socket layer for the bridge modules (debug, ipc): buffered connections and servers.
+---Extend the class tables (`super` + U.new_object flattening) and override the `on_*` hooks; framing stays with the consumers.
 local ffi = require 'ffi'
 local bit = require 'bit'
 local U = require 'sai.lib.utils'
@@ -44,10 +41,8 @@ local POLLIN, POLLERR, POLLHUP = 0x1, 0x8, 0x10
 
 local M = {}
 
----Is the signal actually handled by this process?
----swayimg installs its SIGUSR1/2 handlers only after the config script
----finished; arming O_ASYNC before that kills the process on the first
----IO signal (default action).
+---Swayimg installs its SIGUSR handlers only after the config script
+---finished; arming O_ASYNC earlier kills the process on the first IO signal.
 ---@param signal string 'USR1' or 'USR2'
 ---@return boolean
 local function signal_handled(signal)
@@ -82,17 +77,15 @@ local function check_path(path)
 end
 
 ---@class sai.bridge.socket.conn
----@field protected _socket_path string? when set, connect a client socket instead of wrapping an fd
----@field protected _fd integer
----@field protected _buffer string received bytes not yet consumed by the framing
----@field protected _owner sai.bridge.socket.server? set while tracked by the server
+---@field _socket_path string? when set, connect a client socket instead of wrapping an fd
+---@field _fd integer
+---@field _buffer string received bytes not yet consumed by the framing
+---@field _owner sai.bridge.socket.server? set while tracked by the server
 local Conn = {
 	_fd = -1,
 	_buffer = '',
 }
 
----Append everything currently readable without blocking.
----Returns whether the peer closed the connection.
 ---@return boolean closed
 function Conn:drain()
 	local buf = ffi.new 'char[65536]'
@@ -106,10 +99,8 @@ function Conn:drain()
 	end
 end
 
----Read exactly `n` bytes, first from the buffer, then blocking from the
----socket. Nil on error or close.
----@param n integer
----@return string?
+---@param n integer byte count to read
+---@return string? data exactly `n` bytes, nil on error or close
 function Conn:read(n)
 	if #self._buffer >= n then
 		local data = self._buffer:sub(1, n)
@@ -131,9 +122,9 @@ function Conn:read(n)
 	return ffi.string(buf, n)
 end
 
----Send the whole buffer; never raises SIGPIPE.
+---Never raises SIGPIPE.
 ---@param data string
----@return boolean ok
+---@return boolean ok false on error
 function Conn:send(data)
 	local sent, total = 0, #data
 	while sent < total do
@@ -191,12 +182,12 @@ function Conn.new(self)
 end
 
 ---@class sai.bridge.socket.server
----@field protected _socket_path string
----@field protected _signal string? 'USR1' or 'USR2'
----@field protected _arm_conns boolean track, arm and report accepted connections
+---@field _socket_path string
+---@field _signal string? 'USR1' or 'USR2'
+---@field _arm_conns boolean track, arm and report accepted connections
 ---@field package _conns sai.bridge.socket.conn[]
----@field protected _listen_fd integer
----@field protected _sub hook.base|false eventloop subscription while armed
+---@field _listen_fd integer
+---@field _sub hook.base|false eventloop subscription while armed
 local Server = {
 	_arm_conns = false,
 	_conns = {},
@@ -205,10 +196,12 @@ local Server = {
 }
 
 ---Hook: called per accepted connection, after the socket layer drained it.
+---@param conn sai.bridge.socket.conn
 ---@diagnostic disable-next-line: unused-local
 function Server:on_conn(conn) end
 
 ---Hook: called on io of an armed connection.
+---@param conn sai.bridge.socket.conn connection with pending io
 ---@diagnostic disable-next-line: unused-local
 function Server:on_data(conn) end
 
@@ -241,12 +234,8 @@ function Server:accept()
 		local cfd = ffi.C.accept4(self._listen_fd, nil, nil, 0)
 		if cfd < 0 then break end
 		local conn = Conn.new { _fd = cfd }
-		-- O_ASYNC only signals NEW data: bytes that arrived before the
-		-- accept never wake us - drain now so on_conn sees them.  EOF
-		-- here does not mean dead: half-closing peers (shutdown on
-		-- their write side) deliver data-then-FIN in one breath, so
-		-- serve the buffered request and let read() hit the EOF only
-		-- after it consumed the data.
+		-- O_ASYNC only signals NEW data, so drain now: pre-accept bytes never wake us.
+		-- EOF here does not mean dead: half-closing peers deliver data-then-FIN in one breath, so serve the buffered request first.
 		conn:drain()
 		if self._arm_conns then
 			conn._owner = self
@@ -257,8 +246,7 @@ function Server:accept()
 	end
 end
 
----Poll the listen socket and the armed connections for `timeout` ms,
----then dispatch what is ready.
+---@param timeout integer poll wait in milliseconds
 function Server:poll(timeout)
 	if self._listen_fd < 0 then return end
 	-- snapshot: the accept dispatch below may close or add connections
@@ -299,12 +287,9 @@ function Server:stop()
 	end
 end
 
----Create a listening unix-socket server. Config on `self`: `_socket_path`
----(required), `_signal?`. `self` may be a Server extension: the socket
----methods and hook defaults are flattened into it, overrides survive.
----Re-creating after `stop()` re-binds the socket.
+---Create a server; re-creating after `stop()` re-binds the socket.
 ---@generic O: table
----@param self `O`
+---@param self `O` config: `_socket_path` (required), `_signal?`; may be a Server extension
 ---@return `O`
 function Server.new(self)
 	U.new_object(self, Server)

@@ -1,4 +1,3 @@
----@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Shared test harness for the tests in this directory.
 ---Development tool: not used during normal swayimg operation.
 ---
@@ -11,6 +10,14 @@
 ---		h.ok('sky is blue', true)
 ---	end
 ---	return T
+---
+---Counting is per usecase (method), not per assertion. A method fails when
+---any of its checks fails or it crashes, skips when it skipped and nothing
+---failed, and fails when it ran no check at all; a failure beats a skip.
+---A method's output is buffered and shown only for a failed or skipped
+---usecase (VERBOSE=1 shows every method live). A failed check leads with
+---its `path:line`. It prints the compared objects where they differ.
+---A harness-detected failure carries no site: its reason names the place.
 
 local ffi = require 'ffi'
 
@@ -23,7 +30,7 @@ int *__errno_location(void);
 
 local H = {}
 
--- test output is piped through files/logs most of the time: never buffer it
+-- the real output: every write the per-test buffer lets through flushes here
 local _print = print
 function print(...)
 	_print(...)
@@ -57,25 +64,58 @@ local function abs_path(p)
 end
 H.abs_path = abs_path
 
+-- the summary counts usecases (methods), not assertions
 local passed, failed, skipped = 0, 0, 0
 
--- output is only inspected on failure: print the per-assertion noise (PASS
--- lines, method headers) only when explicitly asked to (VERBOSE=1)
+-- the method H.run currently runs: its checks decide the method's status
+-- (a failure beats a skip, no check at all fails it). Outside H.run no
+-- method runs, so H.fail counts the usecase itself (module load errors)
+local cur
+
+-- every check result lands in the running method's buffer, so a failed
+-- usecase can dump its full log; VERBOSE=1 keeps the output live instead
 local verbose = os.getenv 'VERBOSE' ~= nil
 H.verbose = verbose
 
 function H.pass(name)
-	passed = passed + 1
-	if verbose then print('PASS ' .. name) end
+	if cur then cur.passes = cur.passes + 1 end
+	print('PASS ' .. name)
 end
 
-function H.fail(name, extra)
-	failed = failed + 1
-	print('FAIL ' .. name .. (extra ~= nil and (': ' .. tostring(extra)) or ''))
+-- self source for the walk below: its own frames are never the check site
+local harness_src = debug.getinfo(1, 'S').source
+
+-- check site: the first frame outside this file, so a wrapper reports the test.
+-- C frames skipped: they carry no line, a pcall(h.ok, ...) site would read `=[C]:-1`.
+-- sai_dir stripped: the runner loads by absolute path, the repo names `tests/foo.lua`.
+local function fail_site()
+	for level = 2, math.huge do
+		local info = debug.getinfo(level, 'Sl')
+		if not info then return end
+		if info.what ~= 'C' and info.source ~= harness_src then
+			local src = info.source:match '^@(.+)' or info.source
+			if src:sub(1, #H.sai_dir + 1) == H.sai_dir .. '/' then src = src:sub(#H.sai_dir + 2) end
+			return src .. ':' .. info.currentline
+		end
+	end
 end
+
+-- FAIL line with an optional site prefix.
+-- internal callers pass none: no check ran, the reason already names the place.
+-- load errors keep it: the err names the module, the site names the reporter.
+local function emit_fail(name, extra, site)
+	if cur then
+		cur.fails = cur.fails + 1
+	else
+		failed = failed + 1
+	end
+	print('FAIL ' .. (site and site .. ': ' or '') .. name .. (extra ~= nil and (': ' .. tostring(extra)) or ''))
+end
+
+function H.fail(name, extra) emit_fail(name, extra, fail_site()) end
 
 function H.skip(name, reason)
-	skipped = skipped + 1
+	if cur then cur.skips = cur.skips + 1 end
 	print('SKIP ' .. name .. (reason ~= nil and (': ' .. reason) or ''))
 end
 
@@ -83,7 +123,7 @@ function H.ok(name, cond)
 	if cond then
 		H.pass(name)
 	else
-		H.fail(name)
+		H.fail(name, 'got ' .. tostring(cond))
 	end
 end
 
@@ -103,7 +143,13 @@ function H.contains(name, haystack, needle)
 	end
 end
 
-function H.counts() return passed, failed, skipped end
+function H.not_contains(name, haystack, needle)
+	if not haystack or not haystack:find(needle, 1, true) then
+		H.pass(name)
+	else
+		H.fail(name, tostring(haystack) .. ' contains ' .. tostring(needle))
+	end
+end
 
 function H.summary() print(('\n%d passed, %d failed, %d skipped'):format(passed, failed, skipped)) end
 
@@ -115,13 +161,14 @@ function H.now()
 	return tonumber(tv.tv_sec) + tonumber(tv.tv_usec) / 1e6
 end
 
----Polls fn every 50ms until it returns truthy or the timeout (seconds,
----default 10) expires; returns the last fn() result.
+---Polls fn every 10ms until it returns truthy or the timeout (seconds,
+---default 1) expires; returns the last fn() result. All tests are instant,
+---so a wait past 1s is a failure, not patience.
 function H.wait_for(fn, timeout)
-	local deadline = H.now() + (timeout or 10)
+	local deadline = H.now() + (timeout or 1)
 	while H.now() < deadline do
 		if fn() then return true end
-		ffi.C.usleep(50000)
+		ffi.C.usleep(10000)
 	end
 	return fn()
 end
@@ -143,11 +190,32 @@ end
 function H.file_exists(path) return ffi.C.access(path, 0) == 0 end
 
 ---Runs a shell command and returns its combined stdout+stderr.
-function H.sh(cmd)
-	local p = io.popen(cmd .. ' 2>&1')
+function H.shell(cmd)
+	local p = assert(io.popen(cmd .. ' 2>&1'), 'shell failed')
 	local out = p:read '*a'
 	p:close()
 	return out
+end
+
+---Captures every notify fired inside fn (a log without a file routes through
+---notify too), so a check names the reporting file instead of matching text.
+---@param sai_proxy table
+---@param fn fun()
+---@return table[] records: { msg = string, trace = string, location = string? }
+function H.capture_notify(sai_proxy, fn)
+	local recs = {}
+	local old = sai_proxy.notify
+	-- pass the rest through: a hooked capture must not mute the location
+	-- routing; the trace leads with the hook frame, the caller (the code
+	-- under test) right below it
+	sai_proxy.notify = function(msg, timeout, location)
+		recs[#recs + 1] = { msg = tostring(msg), trace = debug.traceback(), location = location }
+		return old(msg, timeout, location)
+	end
+	local ran, err = pcall(fn)
+	sai_proxy.notify = old
+	if not ran then error(err, 0) end
+	return recs
 end
 
 ---Spawns a shell command in the background with stdout+stderr redirected to
@@ -159,6 +227,10 @@ end
 
 function H.pid_alive(pid)
 	if pid == nil then return false end
+	-- spawn(&) orphans children: kill(0) counts zombies as alive while
+	-- the PID-1 reaper lingers - a zombie already exited, in either case
+	local stat = H.read_file(('/proc/%d/stat'):format(pid))
+	if stat and (stat:gsub('^.*%)%s*', '')):match '^%a' == 'Z' then return false end
 	if ffi.C.kill(pid, 0) == 0 then return true end
 	-- EPERM: the process exists but is not ours to signal (e.g. root-owned)
 	return ffi.C.__errno_location()[0] == 1
@@ -169,7 +241,7 @@ function H.kill(pid, sig)
 end
 
 function H.wait_pid_dead(pid, timeout)
-	return H.wait_for(function() return not H.pid_alive(pid) end, timeout or 10)
+	return H.wait_for(function() return not H.pid_alive(pid) end, timeout or 1)
 end
 
 -- ---------------------------------------------------------------------------
@@ -177,11 +249,7 @@ end
 -- drive real child processes
 -- ---------------------------------------------------------------------------
 
----A child-process fixture under /tmp: the script/log/pid/sock files named
----after `name`, plus the kill/cleanup/scenario machinery around them. The
----socket is unlinked before every spawn; `fx.spawn` waits for the ready
----marker in the log and returns whether it appeared. `fx.track` extends the
----cleanup set with extra files (secondary logs and the like).
+---Child fixture under /tmp (script/log/pid/sock); spawn waits for the ready marker.
 ---@param name string file prefix: /tmp/sai_<name>...
 ---@param ready string log marker the child prints once it is up
 ---@return table fx .sock .script .log .pid .spawn .kill .log_has .wait_log .track .cleanup .scenario
@@ -198,7 +266,7 @@ function H.proc_fixture(name, ready)
 	function fx.spawn(cmd)
 		os.remove(fx.sock)
 		child = H.spawn(cmd, fx.log, fx.pid)
-		return H.wait_for(function() return fx.log_has(ready) end, 15)
+		return H.wait_for(function() return fx.log_has(ready) end, 1)
 	end
 
 	function fx.kill() H.kill(child) end
@@ -236,42 +304,56 @@ end
 
 ---The sai-owned socket files currently on disk: every socket the tests (or
 ---the bridges they drive) create is named after sai and lives in /tmp or the
----runtime dir. Foreign sockets are not tracked.
+---runtime dir. Foreign sockets are not tracked. H.shell's stderr capture would
+---turn ls's no-match error into a bogus path, so only existing files count.
 local function sai_sockets()
 	local out = {}
 	local dirs = { os.getenv 'XDG_RUNTIME_DIR' or '/tmp', '/tmp' }
 	for _, d in ipairs(dirs) do
-		for path in H.sh(('ls %s/*sai*.sock 2>/dev/null'):format(d)):gmatch '[^\r\n]+' do
-			out[path] = true
+		for path in H.shell(('ls %s/*sai*.sock 2>/dev/null'):format(d)):gmatch '[^\r\n]+' do
+			if H.file_exists(path) then out[path] = true end
 		end
 	end
 	return out
 end
 
----Every socket a method brought up must go with its owner: a file left
----behind is a leak (a dead owner cannot unlink anymore, so killed
----processes count too - only the sockets of live owners are excused).
----`before` is the snapshot taken when the method started; leaked files are
----reported as failures and swept so they cannot accumulate system-wide.
+---Debug-harness sockets carry their owner pid: alive owners are not leaks.
+local debug_sock_pid_pat = 'sai%-debug%-(%d+)%.sock$'
+
+---Per-method socket leak check against the `before` snapshot; leaks fail and sweep.
 function H.no_socket_leaks(tag, before)
 	local leaked = {}
 	for path in pairs(sai_sockets()) do
 		if not before[path] then
-			local pid = tonumber(path:match 'sai%-debug%-(%d+)%.sock$')
+			local pid = tonumber(path:match(debug_sock_pid_pat))
 			if not (pid and H.pid_alive(pid)) then leaked[#leaked + 1] = path end
 		end
 	end
 	if #leaked == 0 then return end
 	table.sort(leaked)
-	H.fail(tag .. ' socket leak', table.concat(leaked, ', '))
+	emit_fail(tag .. ' socket leak', table.concat(leaked, ', '))
 	for _, path in ipairs(leaked) do
 		os.remove(path)
 	end
 end
 
+---One buffered output line: same stringification as the C print().
+local function to_line(...)
+	local t = {}
+	for i = 1, select('#', ...) do
+		t[#t + 1] = tostring((select(i, ...)))
+	end
+	return table.concat(t, '\t')
+end
+
 ---Runs all methods of a test module in name order, each pcall-guarded so a
 ---crash fails the method but does not abort the run. filter, when given,
 ---receives the method name and selects the methods to run.
+---Each method is one counted usecase: it fails when any check fails or it
+---crashes, skips when it only skipped, and fails when it ran no check at
+---all. A method's whole output (check results, stray prints) is buffered
+---and dumped only when the usecase fails or skips; VERBOSE=1 keeps the
+---output of every method live.
 function H.run(T, filter)
 	local names = {}
 	for k, v in pairs(T) do
@@ -281,9 +363,43 @@ function H.run(T, filter)
 	for _, name in ipairs(names) do
 		if verbose then print('--- ' .. name .. ' ---') end
 		local sockets = sai_sockets()
+
+		local log, real
+		if not verbose then
+			log = {}
+			real = print
+			rawset(_G, 'print', function(...) log[#log + 1] = to_line(...) end)
+		end
+
+		cur = { fails = 0, skips = 0, passes = 0 }
 		local ok, err = pcall(T[name], H)
-		if not ok then H.fail(name .. ' crashed', err) end
+		if not ok then emit_fail(name .. ' crashed', err) end
 		H.no_socket_leaks(name, sockets)
+		-- a method without a single check cannot have tested its usecase
+		if cur.fails == 0 and cur.skips == 0 and cur.passes == 0 then
+			emit_fail(name .. ' no checks', 'a test without checks is not a test')
+		end
+		local m = cur
+		cur = nil
+
+		-- a failure beats a skip
+		if m.fails > 0 then
+			failed = failed + 1
+		elseif m.skips > 0 then
+			skipped = skipped + 1
+		else
+			passed = passed + 1
+		end
+
+		if log then
+			rawset(_G, 'print', real)
+			if m.fails > 0 or m.skips > 0 then
+				print('--- ' .. name .. ' ---')
+				for _, l in ipairs(log) do
+					print(l)
+				end
+			end
+		end
 	end
 end
 
@@ -298,14 +414,11 @@ function H.maybe_standalone(T)
 end
 
 -- ---------------------------------------------------------------------------
--- Raw api stubs: stand-ins for the C side of swayimg, over which the whole
--- sai api stack can run under plain luajit
+-- Raw api doubles: they model what the app really provides. Anything beyond
+-- Lua's reach (decoded pixels, C++ timers) stays an explicit seam,
+-- documented where it is used.
 -- ---------------------------------------------------------------------------
 
----A stand-in for a raw swayimg mode: any method read resolves to a no-op
----function, so no test needs to enumerate the api surface itself. `fields`
----lands on the stub directly (data fields or method overrides) and wins
----over the generic no-op.
 function H.raw_mode(fields)
 	return setmetatable(fields or {}, {
 		__index = function()
@@ -314,17 +427,20 @@ function H.raw_mode(fields)
 	})
 end
 
----The image every mode stub serves from get_image: a fresh table per call,
----no test can corrupt a shared one.
+---Pixels and exif decoding live in C++ (the seam); fresh table per call.
+---The path stays `'stub'`: path-dependent flows need the recording stack's
+---current-image model instead.
 function H.stub_image() return { width = 500, height = 400, index = 1, path = 'stub', meta = {} } end
 
----A stand-in for the raw swayimg global: the three mode stubs plus the
----fields every part of the api stack reads. `modes` replaces the default
----mode stubs (tests/help.lua records the binds through its own).
+---For stacks that never touch the imagelist (api, reconfigurer, fresh-env
+---tests); list- or image-dependent tests need the recording stack below.
+---`modes` replaces the default mode doubles (tests/help.lua records the
+---binds through its own).
 function H.raw_swayimg(modes)
 	modes = modes or {}
 	return {
 		mode = 'viewer',
+		overlay = true, -- like the app's default: a lone resize is the full init, not the dedup marker
 		viewer = modes.viewer or H.raw_mode { get_image = H.stub_image },
 		slideshow = modes.slideshow or H.raw_mode(),
 		gallery = modes.gallery or H.raw_mode {
@@ -341,6 +457,68 @@ function H.raw_swayimg(modes)
 	}
 end
 
+---Exit-asserting os.execute: stock luajit returns the raw exit code, while
+---lua52-compatible luajit builds (debian/ubuntu) return ok,"exit",code
+---@param cmd string
+---@param msg string? assert failure message
+function H.exec(cmd, msg)
+	local ok = os.execute(cmd)
+	assert(ok == 0 or ok == true, msg or ('command failed: ' .. cmd))
+end
+
+---Set a fixture file's mtime to a fixed epoch: the raw list stats the real
+---file (like the app), so ordering tests need deterministic filesystem times.
+---@param path string
+---@param epoch integer unix timestamp
+function H.touch(path, epoch) H.exec(("touch -d @%d '%s'"):format(epoch, path:gsub("'", "'\\''"))) end
+
+---Copy committed fixtures to /tmp and pin fixed-epoch mtimes: ordering
+---tests need deterministic filesystem times but must not dirty the repo.
+---@param specs table[] { name=basename, epoch=unix timestamp? }; fixture names are unique across modules (sort_* vs filter_*)
+---@return string[] /tmp paths in spec order, the basename kept so basename assertions hold
+function H.fixture_copy(specs)
+	local out = {}
+	for i, s in ipairs(specs) do
+		local dst = '/tmp/' .. s.name
+		H.exec(
+			("cp '%s' '%s'"):format((H.dir .. '/fixtures/' .. s.name):gsub("'", "'\\''"), dst:gsub("'", "'\\''")),
+			'fixture copy failed: ' .. s.name
+		)
+		if s.epoch then H.touch(dst, s.epoch) end
+		out[i] = dst
+	end
+	return out
+end
+
+---Writable pointer stub for the modes reading swayimg.get_mouse_pos. One shared
+---closure: the api proxy caches the getter on first read, so a plain field swap would not take.
+---@return fun(x?: integer|table, y?: integer) at move: coords, a pos table, or nothing (clears); starts nil, like a pointer never moved
+function H.mouse_stub(swayimg)
+	local pos
+	swayimg.get_mouse_pos = function() return pos end
+	return function(x, y)
+		if type(x) == 'table' then
+			pos = x
+		elseif x == nil then
+			pos = nil
+		else
+			pos = { x = x, y = y }
+		end
+	end
+end
+
+---Fire a recorded viewer bind, the way the app delivers a keypress.
+function H.press(raw_binds, bind) raw_binds['viewer:' .. bind]() end
+
+---Numbered item lines for pager/selector window tests.
+function H.items(n)
+	local out = {}
+	for i = 1, n do
+		out[i] = 'item' .. i
+	end
+	return out
+end
+
 ---Drops the cached sai modules except the bridge: the lib modules bind the
 ---eventloop (and each other) at require time, so a cached one keeps firing
 ---into a dead eventloop. The bridge stays - its ffi cdefs cannot re-run.
@@ -350,44 +528,164 @@ function H.drop_sai_stack()
 	end
 end
 
----Binds a pristine api stack to the given raw swayimg stub: whichever
----module ran before this one leaves its records on the shared registry,
----keyed by that stack's objects - a fresh bind gets a clean namespace.
----Installs the stub as the swayimg global (the api modules resolve it at
----require time); the caller restores the raw globals afterwards, after
----everything that must load against the stub has loaded. Returns the stack
----and the sai proxy the module installed as the global.
+---Binds a pristine api stack to the given raw double.
 function H.fresh_api_stack(swi_stub)
 	H.drop_sai_stack()
 	_G.swayimg = swi_stub
 	local stack = require 'sai.api.init'
+	-- the mouse geometry stays on its uncalibrated defaults: the test
+	-- coordinates assume them, a real font lookup would be machine-dependent
+	require('sai.bridge.mouse_box')._stub_metrics = function() end
 	return stack, _G.sai
 end
 
----A full api stack over recording mode stubs, for the tests that exercise
----the mode machinery: the startup a real swayimg session runs (init, the
----default binds, the key help mode), under plain luajit. The binds each raw
----mode receives land in env.raw_binds ('mode:bind' -> callback);
----env.with_env(fn) returns a test method that lends the stubbed globals
----for the duration of its run. `mods` lists extra modules to load against
----the installed stub (those that bind the stack's objects at require time).
+---Real startup over doubles, recording the binds.
 ---@param mods string[]?
 ---@return table env .sai, .sai_proxy, .swayimg, .key_help, .raw_binds, .with_env, .mods
 function H.recording_stack(mods)
 	local raw_binds = {}
+	-- sai reaches the app-side list only through its public imagelist api,
+	-- the app side only through the mode actions below (open/mark).
+	-- Size and mtime come from the real filesystem on every read, like the app.
+	local entries = {}
+	local current = false
+	local raw_il
+	local function find(path)
+		for i, e in ipairs(entries) do
+			if e.path == path then return i, e end
+		end
+	end
+	local function stat(path)
+		local p = io.popen("stat -c '%Y %s' '" .. path:gsub("'", "'\\''") .. "'")
+		if not p then return nil end
+		local out = p:read '*a'
+		p:close()
+		local mt, sz = out:match '(%d+) (%d+)'
+		return mt and tonumber(mt), sz and tonumber(sz)
+	end
+	raw_il = {
+		size = 0,
+		-- fresh bare tables per call, like the app: no meta, real stat fields
+		get = function()
+			local out = {}
+			for i, e in ipairs(entries) do
+				local mt, sz = stat(e.path)
+				out[i] = { path = e.path, index = i, size = sz, mtime = mt, mark = e.mark }
+			end
+			return out
+		end,
+		clear = function()
+			entries = {}
+			raw_il.size = 0
+			current = false
+		end,
+		add = function(x)
+			for _, p in ipairs(type(x) == 'table' and x or { x }) do
+				if not find(p) then entries[#entries + 1] = { path = p, mark = false } end
+			end
+			raw_il.size = #entries
+		end,
+		remove = function(x)
+			local rm = {}
+			for _, p in ipairs(type(x) == 'table' and x or { x }) do
+				rm[p] = true
+			end
+			local kept = {}
+			for _, e in ipairs(entries) do
+				if not rm[e.path] then kept[#kept + 1] = e end
+			end
+			entries = kept
+			raw_il.size = #entries
+			if current and rm[current] then current = false end
+		end,
+	}
+	local function current_image()
+		local i = current and find(current) or nil
+		-- no explicit selection: the app displays the first image
+		if not i and #entries > 0 then i = 1 end
+		if not i then
+			-- empty list: the app still reports a dummy current image
+			return { path = '', index = 0, width = 500, height = 400, meta = {} }
+		end
+		-- the displayed image: the viewer proxy caches it in the exiv2
+		-- bridge by path (like the decoded image in the app), so it must
+		-- carry the real decoded data, not a bare dummy. It carries the
+		-- file's size but no mtime:
+		-- - a matching one would make the bridge serve it the list entry's
+		--   snapshot, which stubbed writes mutate apart from the file
+		-- - no mtime keeps the display re-reading
+		local _, sz = stat(entries[i].path)
+		local img = {
+			path = entries[i].path,
+			index = i,
+			size = sz,
+			width = 500,
+			height = 400,
+			meta = {},
+			mark = entries[i].mark,
+		}
+		require('sai.bridge.exiv2').load_all { img }
+		return img
+	end
 	local function recording_mode(name)
-		return H.raw_mode {
+		local mode = H.raw_mode {
 			on_key = function(b, fn) raw_binds[name .. ':' .. b] = fn end,
 			on_mouse = function(b, fn) raw_binds[name .. ':' .. b] = fn end,
-			get_image = H.stub_image,
+			-- the app calls the installed fn for unmapped keys: expose it
+			on_unassigned_key = function(fn) raw_binds[name .. ':unassigned'] = fn end,
+			open_path = function(p)
+				if not find(p) then return false end
+				current = p
+				return true
+			end,
+			select_path = function(p)
+				if not find(p) then return false end
+				current = p
+				return true
+			end,
+			mark_image = function(state)
+				local _, e = find(current)
+				if e then e.mark = not not state end
+			end,
+			get_image = current_image,
 		}
+		-- placements are independent blocks in the app: a field write sets
+		-- its own placements, the others stand. The key stays absent, so
+		-- every write lands here like on the app's text setter.
+		local text_store = {}
+		local mt = getmetatable(mode)
+		local orig_index = mt.__index
+		mt.__index = function(t, k)
+			if k == 'text' then return text_store end
+			return orig_index(t, k)
+		end
+		mt.__newindex = function(t, k, v)
+			if k == 'text' and type(v) == 'table' then
+				for loc, content in pairs(v) do
+					text_store[loc] = content
+				end
+			else
+				rawset(t, k, v)
+			end
+		end
+		return mode
 	end
 
 	local resize_cb
-	local swayimg = H.raw_swayimg {
+	-- the app's defer is inert here: sai.defer_fn schedules through
+	-- swayimg.defer, so the tests pump the recorded callbacks by hand
+	local defers = {}
+	local swayimg = {
+		mode = 'viewer',
+		overlay = true, -- like the app's default: a lone resize is the full init
 		viewer = recording_mode 'viewer',
 		slideshow = recording_mode 'slideshow',
 		gallery = recording_mode 'gallery',
+		imagelist = raw_il,
+		text = {},
+		defer = function(_, fn) defers[#defers + 1] = fn end,
+		on_window_resize = function() end,
+		get_window_size = function() return { width = 800, height = 600 } end,
 	}
 	swayimg.on_window_resize = function(fn) resize_cb = fn end
 	swayimg.gallery.thumb_size = 128 -- read by the help modes for the backdrop sizing
@@ -415,6 +713,21 @@ function H.recording_stack(mods)
 		end
 	end
 
+	---Run every defer the app scheduled so far, including the ones the
+	---drain itself schedules; the multiclick waits only fire through it.
+	local function flush_defers()
+		local guard = 0
+		while #defers > 0 do
+			guard = guard + 1
+			assert(guard < 1000, 'defer pump runaway')
+			local batch = defers
+			defers = {}
+			for _, fn in ipairs(batch) do
+				fn()
+			end
+		end
+	end
+
 	return {
 		sai = sai,
 		sai_proxy = sai_proxy,
@@ -422,6 +735,7 @@ function H.recording_stack(mods)
 		key_help = key_help,
 		raw_binds = raw_binds,
 		with_env = with_env,
+		flush_defers = flush_defers,
 		mods = loaded,
 	}
 end

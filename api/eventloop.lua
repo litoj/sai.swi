@@ -12,8 +12,8 @@ local tabled = U.tabled
 ---@type sai.eventloop
 local M = {
 	---@type {[event_name_t]:{[string]:hook_cfg[]}}
-	_hooks = {}, ---@private
-	_path = 'sai.eventloop', ---@protected
+	_hooks = {},
+	_path = 'sai.eventloop',
 	debug_trigger = false,
 	debug_subscribe = false,
 	ignore_opts = false, --- to not print multiple times when an option at the top gets set
@@ -45,7 +45,6 @@ local function mk_ptn_tbl(tbl)
 	while i > 0 do
 		local p = t[i]
 		if p and not p:match '[*+?%%^$%[%]()]' then
-			--- make direct matches into indexes
 			if p:sub(1, 1) == '!' then
 				t[p:sub(2)] = false
 			else
@@ -69,7 +68,6 @@ local function mk_hook(cfg)
 		else
 			cfg.pattern = cfg.match
 		end
-		---@diagnostic disable-next-line: inject-field
 		cfg.match = nil
 	end
 	-- using '^' and not '' to be valid against all ev.match values (not just '')
@@ -91,9 +89,9 @@ function M.subscribe(hook)
 			M._hooks[ev] = ev_hooks
 		end
 
-		for k, v in pairs(hook.pattern) do -- register by match
+		for k, v in pairs(hook.pattern) do
 			if v then
-				k = type(k) == 'string' and k or '*' -- determine match group ('*' for luapat)
+				k = type(k) == 'string' and k or '*'
 				local hooks = ev_hooks[k]
 				if not hooks then
 					hooks = {}
@@ -109,7 +107,6 @@ function M.subscribe(hook)
 	return hook
 end
 
----Determines which hooks match the given event pattern/match.
 ---@param ev sai.eventloop.filter.opts
 ---@param ptn_map {[string]:hook_cfg[]}
 ---@return fun():(hook:hook_cfg?,ptn:string,i:integer)
@@ -142,11 +139,11 @@ local function matcher(ev, ptn_map)
 		end
 
 		local ptns = mk_ptn_tbl(ev.pattern or '^') -- defaults to match everything
-		for match, hooks in pairs(ptn_map) do -- test all fixed-text matches
+		for match, hooks in pairs(ptn_map) do
 			if match ~= '*' then
 				local ok = ptns[match]
-				if ok == nil then -- find a match
-					for _, ptn in ipairs(ptns) do -- test against all ev patterns
+				if ok == nil then
+					for _, ptn in ipairs(ptns) do
 						if match:find(ptn) then
 							ok = true
 							break
@@ -164,7 +161,7 @@ local function matcher(ev, ptn_map)
 
 		for i, h in ipairs(ptn_map['*'] or {}) do
 			for _, p in ipairs(h.pattern) do
-				for _, v in ipairs(ptns) do -- test against all ev patterns
+				for _, v in ipairs(ptns) do
 					if p:find(v) then
 						coroutine.yield(h, '*', i)
 						p = nil ---@diagnostic disable-line: cast-local-type
@@ -183,12 +180,15 @@ end
 ---@param f sai.eventloop.filter.opts
 ---@param on_match sai.eventloop.applicator
 ---@diagnostic disable-next-line: inject-field
-function M.apply_filtered(f, on_match)
+function M._apply_filtered(f, on_match)
 	---@type (fun(h:hook_cfg):boolean?)[]
 	local checks = {}
-	if f.id then checks[#checks + 1] = function(h) return f.id == h end end
+	if f.id then
+		checks[#checks + 1] = function(h) return f.id == h end
+		if not f.event then f.event = f.id.event end
+	end
 	if f.group then checks[#checks + 1] = function(h) return f.group == h.group end end
-	if f.mode and #f.mode ~= 3 then -- if there are only some modes
+	if f.mode and #f.mode ~= 3 then
 		local modes = tabled(f.mode)
 		checks[#checks + 1] = function(h)
 			if not h.mode then return true end
@@ -216,7 +216,7 @@ function M.apply_filtered(f, on_match)
 end
 
 function M.unsubscribe(f)
-	M.apply_filtered(f, function(_, ev, ptn, i)
+	M._apply_filtered(f, function(_, ev, ptn, i)
 		local ev_hooks = M._hooks[ev]
 		local ptn_hooks = ev_hooks[ptn]
 
@@ -230,7 +230,7 @@ end
 
 function M.find_all(f)
 	local t = {}
-	M.apply_filtered(f or {}, function(h) t[h] = h end)
+	M._apply_filtered(f or {}, function(h) t[h] = h end)
 	return t
 end
 
@@ -243,11 +243,10 @@ function M.trigger(ev)
 	-- first collect them to ensure they cannot cause a self-removal and mangle indexes (indirectly)
 	-- i.e. if a hook disables a custom mode that unsubs that hook then the next hook would be skipped
 	local found = {}
-	M.apply_filtered(ev, function(hook) found[#found + 1] = hook end)
+	M._apply_filtered(ev, function(hook) found[#found + 1] = hook end)
 
 	for _, hook in ipairs(found) do
 		local ok, ret = xpcall(hook.callback, debug.traceback, ev)
-		---@diagnostic disable-next-line: param-type-mismatch
 		if not ok then sai.log(ret) end
 
 		if hook.once or (ok and ret) then
@@ -257,14 +256,12 @@ function M.trigger(ev)
 end
 
 function M.takeover_subscribe(cfg)
-	---@diagnostic disable-next-line: param-type-mismatch
 	local old = M.find_all(cfg)
 	if not next(old) then
 		M.subscribe(cfg)
 		return
 	end
 
-	---@diagnostic disable-next-line: param-type-mismatch
 	M.unsubscribe(cfg)
 	local cb = cfg.callback
 	cfg = U.soft_copy(cfg)

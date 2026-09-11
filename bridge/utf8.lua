@@ -1,6 +1,5 @@
--- Lua wrapper for a utf8 C module: a system-installed one (e.g. the
--- lua51-luautf8 package) is preferred; otherwise the stock Lua 5.3 source is
--- downloaded, patched for LuaJIT and compiled, mirroring the exiv2 bridge module.
+-- Lua wrapper for a utf8 C module: prefer a system-installed one (e.g.
+-- lua51-luautf8), else compile the stock Lua 5.3 source like the exiv2 bridge.
 ---@module 'sai.bridge.utf8'
 
 local shell = require 'sai.bridge.shell'
@@ -36,18 +35,18 @@ local function luajit_compat(src)
 end
 
 ---@class utf8
----@field charpattern string pattern matching exactly one utf8 character
----@field len fun(s:string, i?:integer, j?:integer):integer? number of characters in the range; nil + position if invalid
----@field char fun(...:integer):string characters for the given codepoints
----@field codepoint fun(s:string, i?:integer, j?:integer):...integer codepoints of characters in the range
+---@field charpattern string
+---@field len fun(s:string, i?:integer, j?:integer):integer? nil + position if invalid
+---@field char fun(...:integer):string
+---@field codepoint fun(s:string, i?:integer, j?:integer):...integer
 ---@field offset fun(s:string, n:integer, i?:integer):integer? byte position of the n-th character relative to i
----@field codes fun(s:string):fun(s:string, pos:integer):integer, integer iterator over position + codepoint pairs
+---@field codes fun(s:string):fun(s:string, pos:integer):integer, integer
 ---@field sub fun(s:string, i:integer, j?:integer):string char-aware sub()
 ---@field isvalid fun(s:string):boolean
 ---@field clean fun(s:string, repl?:string):string replace invalid byte sequences
 ---@field find fun(s:string, p:string, init?:integer):integer?, integer? char-aware find() (system module only)
 ---@field gmatch fun(s:string, p:string):fun():string char-aware gmatch() (system module only)
----@field gsub fun(s:string, p:string, r:any, n?:integer):string, integer char-aware gsub() (system module only)
+---@field gsub fun(s:string, p:string, r:string|number|table|function, n?:integer):string, integer char-aware gsub() (system module only)
 
 -- system module names: lua51-luautf8 ships as 'lua-utf8', some distros use 'utf8'
 -- (probing can hit unrelated modules, so verify the core api before using it)

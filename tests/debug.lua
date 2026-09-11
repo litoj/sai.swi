@@ -1,4 +1,3 @@
----@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Tests for sai.bridge.debug: the DAP communication between a raw client
 ---and the harness, end-to-end - each scenario spawns its own debuggee
 ---process and drives it over the socket.
@@ -108,6 +107,7 @@ local function request_ok(c, command, args)
 	if not r or r.success ~= true then
 		fail('request ' .. command .. ': ' .. tostring(r and r.message or 'no response'))
 	end
+	---@type {body: table} successful response (failures already failed the test above)
 	return r
 end
 
@@ -119,7 +119,7 @@ local function wait_stopped(c, reason)
 	local m = wait_event(c, 'stopped')
 	if not m then return nil end
 	if reason and m.body and m.body.reason ~= reason then
-		fail('stopped reason: expected ' .. reason .. ' got ' .. tostring(m.body and m.body.reason))
+		eq('stopped reason', reason, m.body.reason)
 		return nil
 	end
 	return m
@@ -341,7 +341,7 @@ io.stdout:flush()
 	r = request_ok(c, 'scopes', { frameId = old_frame_id })
 	local old_scope_ref = r.body.scopes[1].variablesReference
 	r = request_ok(c, 'evaluate', { expression = 'acc', frameId = old_frame_id })
-	eq('evaluate at stop', '0', r.body.result)
+	eq('evaluate works against the stopped frame', '0', r.body.result)
 
 	-- advance to the next stop: the freeze resets the reference maps
 	request_ok(c, 'continue')
@@ -352,7 +352,7 @@ io.stdout:flush()
 		if not resp then
 			fail('request ' .. command .. ': no response')
 		elseif resp.success ~= false then
-			fail('request ' .. command .. ': expected an error, got success')
+			eq('request ' .. command .. ' errors', false, resp.success)
 		end
 		return resp
 	end
@@ -570,6 +570,91 @@ io.stdout:flush()
 	ok('coroutine body executed', wait_log 'IN_COROUTINE 7' ~= nil)
 	ok('debuggee finished after coroutine', wait_log 'RESULT done' ~= nil)
 
+	client_close(c)
+end)
+
+-- stepIn goes one line deeper; pause answered while stopped is cancelled
+-- by the continue after it (mid-run pause needs the io signal, which the
+-- plain luajit double has no way to deliver)
+T.step_in_and_pause = fx.scenario(function()
+	write_debuggee [[
+local function inner(x)
+	local y = x + 1
+	return y
+end
+
+local function outer()
+	local a = inner(1)
+	local b = a + 1
+	print('RESULT ' .. b)
+end
+outer()
+]]
+
+	local call_line = find_line 'local a = inner(1)'
+	local inside_line = find_line 'local y = x + 1'
+
+	start_debuggee()
+	local c = client_new(sock)
+	handshake(c)
+	request_ok(c, 'setBreakpoints', {
+		source = { path = script_path },
+		breakpoints = { { line = call_line } },
+	})
+	request_ok(c, 'configurationDone')
+
+	wait_stopped(c, 'breakpoint')
+	local r = request_ok(c, 'stackTrace', { threadId = 1 })
+	local frames = r and r.body and r.body.stackFrames
+	eq('stopped at the call line', call_line, frames and frames[1] and frames[1].line)
+
+	request_ok(c, 'stepIn')
+	wait_stopped(c, 'step')
+	r = request_ok(c, 'stackTrace', { threadId = 1 })
+	frames = r and r.body and r.body.stackFrames
+	eq('stepIn landed inside the callee', inside_line, frames and frames[1] and frames[1].line)
+	eq('stepIn went a frame deeper', 'inner', frames and frames[1] and frames[1].name)
+
+	-- pause is answered while stopped; a following continue cancels it —
+	-- mid-run pause travels the io signal, which plain luajit cannot deliver
+	request_ok(c, 'pause')
+	r = request_ok(c, 'continue')
+	eq('continue confirms all threads', true, r and r.body and r.body.allThreadsContinued)
+	local stopped_again = wait_event(c, 'stopped', 2)
+	ok('cancelled pause never stops', stopped_again == nil)
+	ok('debuggee finished', wait_log 'RESULT 3' ~= nil)
+	client_close(c)
+end)
+
+-- unknown commands answer an empty success instead of hanging the client;
+-- terminateDebuggee exits the process after the terminated event
+T.protocol_edges = fx.scenario(function()
+	write_debuggee [[
+print('RESULT alive')
+]]
+
+	start_debuggee()
+	local c = client_new(sock)
+	handshake(c)
+
+	local r = request(c, 'frobnicateFutureProtocol', { foo = 1 })
+	ok('unknown command answered', r ~= nil)
+	eq('unknown command generic success', true, r and r.success)
+
+	-- the session survives: a real request still works
+	r = request_ok(c, 'threads')
+	local names = {}
+	for _, t in ipairs((r and r.body and r.body.threads) or {}) do
+		names[#names + 1] = t.name
+	end
+	eq('thread list still served', 'main', table.concat(names))
+
+	r = request_ok(c, 'disconnect', { terminateDebuggee = true })
+	ok('terminated event', wait_event(c, 'terminated') ~= nil)
+	ok('exited event', wait_event(c, 'exited') ~= nil)
+
+	local pid = tonumber((H.read_file(fx.pid) or ''):match '%d+')
+	ok('debuggee exited on terminate', H.wait_pid_dead(pid))
 	client_close(c)
 end)
 

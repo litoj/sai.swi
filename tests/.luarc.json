@@ -1,0 +1,11 @@
+{
+  "_note": "Two luarc files exist on purpose. This one types the tests: the doubles reach into private fields, so invisible/inject-field/undefined-field checks stay off here. The root .luarc.json types the shipped sources with those checks on. Keep both files.",
+  "runtime": { "version": "LuaJIT" },
+	"type": { "castNumberToInteger": true, "weakNilCheck": true, "weakUnionCheck": true },
+	"diagnostics": {
+		"globals": ["vim", "sai"],
+		"disable": ["invisible", "inject-field", "undefined-field", "missing-fields", "need-check-nil", "undefined-doc-name"],
+		"severity": { "unused-local": "Warning", "unused-vararg": "Warning" }
+	},
+	"workspace": { "checkThirdParty": false, "library": ["/usr/local/share/swayimg/swayimg.lua"] }
+}

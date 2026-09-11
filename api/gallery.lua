@@ -1,4 +1,3 @@
----@diagnostic disable: invisible
 ---@module 'sai.api.gallery'
 
 local e = require 'sai.api.eventloop'
@@ -7,7 +6,6 @@ local U = require 'sai.lib.utils'
 local api = swayimg.gallery
 
 ---@class sai.api.gallery: sai.gallery, sai.api.mode_base
----@diagnostic disable-next-line: missing-fields
 local M = {
 	super = api,
 
@@ -19,7 +17,7 @@ local M = {
 	_selected_scale = 1.15,
 
 	_window_color = 0xff000000,
-	_background_color = 0xff202020,
+	_unselected_color = 0xff202020,
 	_selected_color = 0xff404040,
 	_border_color = 0xffaaaaaa,
 
@@ -31,12 +29,6 @@ local M = {
 	_thumb_size = 200,
 	_padding_size = 5,
 	_embedded_thumb = true,
-
-	-- Custom settings
-	_thumb_size_diff_reload = false,
-
-	-- Private backing fields
-	_cached_thumb_size = 200,
 }
 
 M.text = require('sai.api.mode_text').new {
@@ -66,63 +58,39 @@ M.go = setmetatable({}, {
 		return tbl[idx]
 	end,
 	__call = function(_, x, y)
-		pre_change()
 		if y then -- coordinates
+			pre_change()
 			api.select_at(x, y)
-		elseif type(x) == 'number' then -- direct index
-			local list = sai.imagelist.get()
-			local img = list[x]
-			if not img then
-				sai.log('No image at index ' .. x)
-				return
-			end
-			api.select_path(img.path)
-		else -- image path
-			api.select_path(x)
-			e.trigger { event = 'OptionSet', mode = 'gallery', match = 'sai.imagelist.size', data = sai.imagelist.size() }
+		else
+			sai.imagelist.select(x)
 		end
 	end,
 })
 
-function M.get_at(x, y)
-	local old = api.get_image()
-	if not old then return end
-	api.select_at(x, y)
-	local img = M.get_image()
-	return img
-end
-
+---@protected
 function M:set_cache_size(x)
 	x = math.floor(x)
 	self.super.cache = x
 	self._cache_size = x
 	return true
 end
-function M:set_thumb_size(x)
-	x = math.floor(x)
-	self.super.thumb_size = x
-	-- reset cache if rendering would be really bad for old images
-	if self._thumb_size_diff_reload and x / 2.2 - 25 > self._cached_thumb_size then
-		if sai.mode == 'gallery' then self.super.reload() end
-		self._cached_thumb_size = x
-	elseif x < self._cached_thumb_size then
-		self._cached_thumb_size = x
-	end
-	self._thumb_size = x
-	return true
-end
 
+---@protected
+---@param x number
+---@param idx string
+---@return true
 local function set_int(self, x, idx)
 	x = math.floor(x)
 	self.super[idx] = x
-	rawset(self, '_' .. idx, x)
+	self['_' .. idx] = x
 	return true
 end
 
+M.set_thumb_size = set_int
 M.set_padding_size = set_int
 M.set_border_size = set_int
 
--- injecting function to also affect mode_text
+-- NOTE: injecting function to also affect mode_text
 local api_get_img = api.get_image
 function api.get_image()
 	local img = api_get_img()

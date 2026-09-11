@@ -1,4 +1,3 @@
----@diagnostic disable: invisible
 ---@module 'sai.bridge.ipc'
 
 local sock = require 'sai.bridge.socket'
@@ -12,16 +11,17 @@ local function unpack_u32_le(s) return s:byte(1) + s:byte(2) * 256 + s:byte(3) *
 
 ---IPC: remote Lua code execution via Unix domain socket.
 ---@class sai.bridge.ipc
----@field enabled boolean starts/stops the server or client
----@field protected _socket_path string note - set at construction
+---@field enabled boolean
+---@field _socket_path string note - set at construction
 ---@field private _leave_hook hook.base|false
 local M = {
-	_enabled = false, ---@protected
-	_max_msg_size = 1024 * 1024, ---@private
-	_timeout = 5, ---@private
+	_enabled = false,
+	_max_msg_size = 1024 * 1024,
+	_timeout = 5,
 	_leave_hook = false, ---@private
 }
 
+---@protected
 function M:set_enabled(val)
 	if self._enabled == val then return false end
 	self._enabled = val
@@ -53,7 +53,7 @@ local backer_meta = {
 local server = {
 	super = sock.Server,
 	---@type 'USR1'|'USR2'|false
-	_signal = 'USR2', ---@protected signal for the socket io or false to require manual poll(0) calls
+	_signal = 'USR2', -- signal for the socket io or false to require manual poll(0) calls
 }
 setmetatable(server, { __index = server.super })
 
@@ -65,7 +65,6 @@ function server:new()
 	return setmetatable(self, backer_meta)
 end
 
----@protected
 function server:set_enabled(val)
 	if self._enabled == val then return false end
 
@@ -82,12 +81,10 @@ function server:set_enabled(val)
 	end
 end
 
---- Handle a connection. `io` is a bidirectional channel:
---- `io()` reads and returns the next client message (nil on disconnect).
---- `io(result)` sends a result, then reads and returns the next message.
---- `io(nil, err)` sends an error, then reads and returns the next message.
---- Override to implement custom protocols.
----@param io fun(result?: string, err?: string): string?
+---Override for custom protocols.
+---@param io fun(result?: string, err?: string): string? bidirectional channel:
+---  `io()` reads the next message (nil on disconnect), `io(result)` sends a result
+---  then reads next, `io(nil, err)` sends an error then reads next
 function server.handle(io)
 	local code = io()
 	while code do
@@ -105,7 +102,6 @@ function server.handle(io)
 	end
 end
 
----Serves one connection to completion.
 ---@param conn sai.bridge.socket.conn
 function server:on_conn(conn)
 	conn:set_timeouts(self._timeout)
@@ -143,11 +139,8 @@ function client:new()
 	return setmetatable(self, backer_meta)
 end
 
----Send Lua code to execute on the server. A function is sent as bytecode
----(`load` on the server accepts both): it must be self-contained - client
----upvalue values do not travel and globals resolve on the server.
----@param code string|function
----@return string? result
+---@param code string|function self-contained chunk; functions go as bytecode (`load` accepts both), upvalues do not travel and globals resolve on the server
+---@return string? result server reply
 ---@return string? err
 function client:send(code)
 	if self._fd < 0 then return nil, 'not connected' end
@@ -175,7 +168,6 @@ function client:send(code)
 	return nil, data
 end
 
----@protected
 function client:set_enabled(val)
 	if self._enabled == val then return false end
 
@@ -193,23 +185,19 @@ function client:set_enabled(val)
 	end
 end
 
----@param path string?
----@return sai.bridge.ipc.server
+---@param path string? default runtime-dir socket
+---@return sai.bridge.ipc.server running server
 function M.server(path)
 	---@diagnostic disable-next-line: missing-fields
 	local self = server.new {
-		_socket_path = path or ('%s/%s-%d.socket'):format( -- default path
-			os.getenv 'XDG_RUNTIME_DIR' or '/tmp',
-			sai.app_id,
-			sai.pid
-		),
+		_socket_path = path or ('%s/%s-%d.socket'):format(os.getenv 'XDG_RUNTIME_DIR' or '/tmp', sai.app_id, sai.pid),
 	}
 	self:set_enabled(true)
 	return self
 end
 
 ---@param path string
----@return sai.bridge.ipc.client
+---@return sai.bridge.ipc.client connected client
 function M.client(path)
 	---@diagnostic disable-next-line: missing-fields
 	local self = client.new { _socket_path = path }

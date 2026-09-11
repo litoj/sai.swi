@@ -1,10 +1,10 @@
 ---@module 'sai.api.proxy'
 
 local e = require 'sai.api.eventloop'
+local backer = require 'sai.lib.backer'
 
----Api conversion provider
 ---@class sai.api.proxy: sai.lib.backer
----@field protected super table the api that we are replacing and redirecting calls to
+---@field protected super table
 
 ---@private
 ---@class proxy: sai.api.proxy
@@ -37,10 +37,9 @@ function M.__newindex(self, idx, val)
 	local fn = rawget(self, fnname)
 	if fn then
 		-- set the field only if the setter allows it
-		---@diagnostic disable-next-line: cast-local-type
 		fn = fn(self, val, idx)
 		if fn == nil then
-			rawset(self, '_' .. idx, val)
+			self['_' .. idx] = val
 		elseif fn then
 			val = self['_' .. idx]
 		else
@@ -48,17 +47,17 @@ function M.__newindex(self, idx, val)
 		end
 	else
 		self.super[idx] = val
-		rawset(self, '_' .. idx, val) -- set in case a getter isn't available
+		self['_' .. idx] = val -- set in case a getter isn't available
 	end
 	e.trigger { event = 'OptionSet', match = ('%s.%s'):format(self._path, idx), data = val, old_data = old }
 end
 
-M.__tostring = require('sai.lib.backer').__tostring
+M.__tostring = backer.__tostring
 
 ---Create a dynamic table where variable I/O can be custom-defined
 ---Practically a metatable designed for automatic passthrough to a different api.
 ---@generic O: sai.api.proxy
----@return O self
+---@return O
 function M:new() return setmetatable(self, M) end
 
 return M

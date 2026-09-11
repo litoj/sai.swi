@@ -1,18 +1,30 @@
----@diagnostic disable: invisible
 ---@module 'sai.api.viewer'
 
 local e = require 'sai.api.eventloop'
 local U = require 'sai.lib.utils'
 local mode_base = require 'sai.api.mode_base'
 local mode_text = require 'sai.api.mode_text'
+local exiv2 = require 'sai.bridge.exiv2'
 
 ---@class sai.api.viewer: sai.viewer, sai.api.mode_base
 ---@field super swayimg.viewer
----@field _last {w:integer,h:integer,x:integer,y:integer}|false
----@field text sai.api.mode_text.base
+---@field text sai.api.mode_text
+---@field _original_default_scale default_scale_t
 local M = {
-	_scale = false, ---@type number|one_time_scale_t|false
-	_default_scale = 'optimal', ---@type default_scale_t
+	---@type number|one_time_scale_t|false
+	_scale = false, ---@package
+	---@type default_scale_t
+	_default_scale = 'optimal', ---@package
+
+	_position = false, ---@deprecated proxy faking value, not actually used
+
+	---@type hook.base[]
+	_custom_scaling_hooks = {}, ---@package
+
+	---@alias lastimg {w:integer,h:integer,x:integer,y:integer}
+
+	---@type lastimg|false
+	_last = false, ---@package
 }
 
 ---@return sai.viewer.panner
@@ -33,10 +45,10 @@ local function new_panner(self)
 	return pan
 end
 
--- TODO: add debounce for repeated presses and viewer.open to then jump to the file
--- directly
----@param api swayimg.viewer
+-- TODO: debounce repeats, jump to file directly
+---@param api swayimg.viewer raw viewer api to drive
 ---@param api_name 'viewer'|'slideshow'
+---@return sai.viewer.go
 local function new_go(api, api_name)
 	return setmetatable({}, {
 		__index = function(tbl, idx)
@@ -46,31 +58,12 @@ local function new_go(api, api_name)
 			end
 			return tbl[idx]
 		end,
-		__call = function(_, x)
-			e.trigger { event = 'ImgChangedPre', mode = api_name, match = api_name, data = U.lazyimg(api) }
-			if type(x) == 'number' then -- direct index
-				local list = sai.imagelist.get()
-				local img = list[x]
-				if not img then
-					sai.log('No image at index ' .. x)
-					return
-				end
-				api.open_path(img.path)
-			else -- image path
-				api.open_path(x)
-				e.trigger {
-					event = 'OptionSet',
-					mode = api_name,
-					match = 'sai.imagelist.size',
-					data = sai.imagelist.size,
-				}
-			end
-		end,
+		__call = function(_, x) sai.imagelist.select(x) end,
 	})
 end
 
 ---@param api_name 'viewer'|'slideshow'
----@return sai.viewer|sai.slideshow
+---@return sai.api.viewer|sai.slideshow
 function M.new(api_name)
 	local api = swayimg[api_name] ---@type swayimg.viewer
 	local self = {
@@ -134,7 +127,7 @@ function M.new(api_name)
 
 	self.export = function(path)
 		sai.notify('Exporting to ' .. path)
-		-- run out-of-sync to wait for the text to be drawn first (lua calls lock the application)
+		-- out-of-sync: let text draw first
 		e.subscribe {
 			event = 'Redraw',
 			callback = function()
@@ -156,6 +149,19 @@ function M.new(api_name)
 	end
 	self.new = nil
 
+	local ogi = api.get_image
+	api.get_image = function() -- make sure exif data gets cached
+		local img = ogi()
+		if img then
+			for k, v in pairs(img.meta) do
+				if k:find('0x', 1, true) or #v > 127 then img.meta[k] = nil end
+			end
+			---@diagnostic disable-next-line: invisible
+			exiv2._loaded[img.path] = img
+		end
+		return img
+	end
+
 	self = mode_base.new(self, api_name) ---@type sai.api.viewer
 
 	return self
@@ -165,36 +171,42 @@ end
 ---@return fun(self:sai.api.viewer,x:default_scale_t):string
 local function gen_keep(factor_fn)
 	return function(self, x)
-		---@alias lastimg {w:integer,h:integer,x:integer,y:integer}
-		rawset(self, '_last', { w = 0, h = 0, x = 0, y = 0 })
-		e.subscribe {
-			event = 'ImgChangedPre',
-			pattern = self.text._api_name,
-			callback = function(ev)
-				if self._default_scale ~= x then return true end
+		self._last = { w = 0, h = 0, x = 0, y = 0 }
+		for _, id in ipairs(self._custom_scaling_hooks) do
+			e.unsubscribe { id = id }
+		end
+		local ids = {
+			e.subscribe {
+				event = 'ImgChangedPre',
+				---@diagnostic disable-next-line: invisible
+				pattern = self.text._api_name,
+				callback = function(ev)
+					if self._default_scale ~= x then return true end
 
-				local img = ev.data or error()
-				---@diagnostic disable-next-line: assign-type-mismatch
-				self._last = self.super.get_position() ---@type lastimg
-				self._last.w = img.width
-				self._last.h = img.height
-			end,
+					local img = ev.data or error()
+					---@diagnostic disable-next-line: assign-type-mismatch
+					self._last = self.super.get_position() ---@type lastimg
+					self._last.w = img.width
+					self._last.h = img.height
+				end,
+			},
+			e.subscribe {
+				event = 'ImgChanged',
+				---@diagnostic disable-next-line: invisible
+				pattern = self.text._api_name,
+				callback = function(ev)
+					if self._default_scale ~= x then return true end
+
+					local last = self._last
+					if not last then return end -- adjust only when ImgChangedPre was fired
+					self._last = false
+
+					self.super.set_abs_scale(self.super.scale * factor_fn(last, ev.data), 0, 0)
+					self.super.set_abs_position(last.x, last.y)
+				end,
+			},
 		}
-		e.subscribe {
-			event = 'ImgChanged',
-			pattern = self.text._api_name,
-			callback = function(ev)
-				if self._default_scale ~= x then return true end
-
-				local last = self._last
-				if not last then return end -- adjust only when ImgChangedPre was fired
-				---@diagnostic disable-next-line: assign-type-mismatch
-				self._last = false
-
-				self.super.set_abs_scale(self.super.scale * factor_fn(last, ev.data), 0, 0)
-				self.super.set_abs_position(last.x, last.y)
-			end,
-		}
+		self._custom_scaling_hooks = ids
 
 		return 'keep'
 	end
@@ -209,22 +221,19 @@ M.custom_scale_handlers = {
 	keep_fill = gen_keep(function(last, img) return math.max(last.w / img.width, last.h / img.height) end),
 }
 
----@param x default_scale_t
+---@protected
+---@type fun(self: sai.api.viewer, x: default_scale_t):nil
 function M:set_default_scale(x)
 	local handled
 	if M.custom_scale_handlers[x] then handled = M.custom_scale_handlers[x](self, x) end
-	if not handled then
-		for _, f in ipairs(M.custom_scale_handlers) do
-			handled = f(self, x)
-			if handled then break end
-		end
-		if not handled then handled = x end
-	end
+	if not handled then handled = x end
 
 	self._original_default_scale = handled
 	self.super.default_scale = handled
 end
 
+---@protected
+---@type fun(self: sai.api.viewer, x: one_time_scale_t|number):nil
 function M:set_scale(x)
 	if type(x) == 'string' then
 		self.super.set_fix_scale(x)
@@ -232,12 +241,15 @@ function M:set_scale(x)
 		self.super.scale = x
 	end
 end
+---@protected
 function M:get_scale()
 	if self._scale then return self._scale end
 	if self._original_default_scale == 'keep' then return self.super.scale end
 	return self._default_scale
 end
 
+---@protected
+---@type fun(self: sai.api.viewer, x: fixed_position_t|{x:integer,y:integer}):nil
 function M:set_position(x)
 	if type(x) == 'string' then
 		self.super.set_fix_position(x)
@@ -246,8 +258,12 @@ function M:set_position(x)
 	end
 end
 
+---@protected
+---@type fun(self: sai.api.viewer, x: integer|bkgmode_t):nil
 function M:set_window_background(x) self.super.set_window_background(x) end
 
+---@protected
+---@type fun(self: sai.api.viewer, x: integer|checkerboard):nil
 function M:set_image_background(x)
 	if type(x) == 'table' then
 		self.super.set_image_chessboard(x.size, x[1], x[2])
@@ -256,8 +272,10 @@ function M:set_image_background(x)
 	end
 end
 
+---@protected
 function M:set_auto_center(x) self.super.autocenter = x end
 
+---@protected
 function M:set_preload_size(x)
 	x = math.floor(x)
 	self.super.preload = x
@@ -265,6 +283,7 @@ function M:set_preload_size(x)
 	return true
 end
 
+---@protected
 function M:set_history_size(x)
 	x = math.floor(x)
 	self.super.history = x

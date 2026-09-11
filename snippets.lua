@@ -2,19 +2,18 @@
 local M = {}
 
 local e = require 'sai.api.eventloop'
+local S = require 'sai.bridge.shell'
+local remapper = require 'sai.lib.remapper'
+local editor = require 'sai.mode.editor'
 
 function M.update()
-	-- recompile and hot-swap every bridge module whose sources have been updated
 	local bridge_dir = debug.getinfo(1, 'S').source:match '/.+/sai/' .. 'bridge/'
 	sai.exec(('cd %s && git pull'):format(bridge_dir))
 
-	local S = require 'sai.bridge.shell'
 	local p = io.popen('ls -1 ' .. bridge_dir .. '*.so') or error('Could not list cpp modules in: ' .. bridge_dir)
 	for so_path in p:lines() do
-		-- recompile if the source has been updated
 		if os.execute(string.format('[ %s -nt %s ]', so_path:gsub('.so$', '.cpp'), so_path)) ~= 1 then
 			S.compile_so(so_path)
-			-- hot-swap the instance if the module is already loaded in memory
 			local old = package.loaded['sai.bridge.' .. so_path:match '([^/]+)%.so$']
 			for k, v in pairs(old and S.load_so(so_path) or {}) do
 				old[k] = v
@@ -76,7 +75,7 @@ function M.print_option_changes(timeout)
 
 	local function register_printer()
 		-- register after base config has been loaded
-		e.subscribe { -- Print messages on option update
+		e.subscribe {
 			event = 'OptionSet',
 			pattern = { '!sai.imagelist.size', '!sai.text.status', '^' },
 			group = 'print_var_change',
@@ -89,7 +88,7 @@ function M.print_option_changes(timeout)
 					else
 						v = ('%.2f'):format(v)
 					end
-				elseif type(v) == 'table' then
+				elseif type(v) ~= 'string' then
 					return -- ignore window size and position changes
 				end
 
@@ -118,13 +117,14 @@ function M.resize_image_with_window()
 		event = 'WinResized',
 		mode = { 'viewer', 'slideshow' },
 		callback = function(ev)
+			---@diagnostic disable-next-line: assign-type-mismatch
 			local v = sai[ev.mode] ---@type sai.api.viewer
-			---@diagnostic disable-next-line: invisible
 			if type(v.scale) == 'string' then v.super.set_fix_scale(v.scale) end
 		end,
 	}
 end
 
+---Auto-play videos in an external player (mpv by default), killing it on image change.
 ---@param cmd? string string to run with % or %f as the template for the video file
 function M.auto_open_video(cmd)
 	cmd = cmd or 'mpv --no-terminal %f'
@@ -162,7 +162,7 @@ function M.cycle_values(values, current)
 end
 
 function M.cycle_scale()
-	local api = sai[sai.mode] ---@type sai.api.viewer
+	local api = sai.modes[1] ---@cast api sai.api.viewer
 	local modes = {
 		'optimal',
 		'width',
@@ -182,7 +182,7 @@ function M.cycle_scale()
 end
 
 function M.cycle_position()
-	local api = sai[sai.mode] ---@type sai.viewer
+	local api = sai.modes[1] ---@cast api sai.api.viewer
 	local modes = {
 		'center',
 		'topcenter',
@@ -199,8 +199,10 @@ function M.cycle_position()
 	api.position = M.cycle_values(modes, current)
 end
 
+---@param key string?
+---@return sai.lib.remapper
 function M.two_pane_mode(key)
-	local super = require 'sai.lib.remapper'
+	local super = remapper
 	---@class tp: sai.lib.remapper
 	local tp = { _path = 'snippets.two_pane_mode' }
 	function tp:set_enabled(val)
@@ -215,7 +217,6 @@ function M.two_pane_mode(key)
 
 	tp.sai.save_user_changes = true
 	tp.sai.mode = 'gallery'
-	---@diagnostic disable-next-line: param-type-mismatch
 	tp.sai.gallery(function(g) ---@param g sai.gallery
 		g.padding_size = 0
 		g.cache_size = 0
@@ -236,6 +237,61 @@ function M.two_pane_mode(key)
 	tp.map(key, function() tp.enabled = false end, 'Disable Two-pane mode')
 
 	return tp
+end
+
+---@return sai.mode.editor lua prompt with its own history
+function M.lua_mode()
+	---@param out string[]|false
+	---@return boolean?|false verdict
+	---@return string? msg message the editor notifies after the mode settles
+	local on_confirm = function(_, out)
+		if not out then return end
+		local text = table.concat(out, '\n')
+		if text == '' then return end
+
+		-- the editor owns the lifecycle and emits the message after the
+		-- mode settles; this only runs and decides
+		local cb, syntax = S.make_runnable(text)
+		if not cb then return false, syntax end
+
+		local ran, res = pcall(cb)
+		if not ran then return false, 'Runtime error: ' .. res:gsub('^.-:%d:%s*', '') end
+		return true, res
+	end
+	---@diagnostic disable-next-line: missing-fields
+	return editor.new {
+		_path = 'snippets.lua_mode',
+		_prompt = 'Lua',
+		-- TODO: add autocompletion, likely just for paths and potentially variables
+		on_confirm = on_confirm,
+	}
+end
+
+---@return sai.mode.editor shell prompt with its own history
+function M.shell_mode()
+	---@param out string[]|false
+	---@return boolean?|false verdict
+	---@return string? msg message the editor notifies after the mode settles
+	local on_confirm = function(_, out)
+		if not out then return end
+		local text = table.concat(out, '\n')
+		if text == '' then return end
+
+		-- the editor owns the lifecycle and emits the message; a throw
+		-- (bad % expansion, no shell to run in) counts as a failed run
+		local ok, res, code, err = pcall(sai.exec, text)
+		if not ok then return false, res end
+		if tonumber(code or '') ~= 0 then
+			return false, ('Shell exited %s: %s'):format(tostring(code), err ~= '' and err or res)
+		end
+		return true, res
+	end
+	---@diagnostic disable-next-line: missing-fields
+	return editor.new {
+		_path = 'snippets.shell_mode',
+		_prompt = 'Shell',
+		on_confirm = on_confirm,
+	}
 end
 
 return M

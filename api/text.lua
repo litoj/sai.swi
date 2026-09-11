@@ -1,5 +1,6 @@
----@diagnostic disable: invisible
 ---@module 'sai.api.text'
+local mouse_box = require 'sai.bridge.mouse_box'
+
 ---@class sai.api.text: sai.text, sai.api.proxy
 local M = {
 	super = swayimg.text,
@@ -21,6 +22,8 @@ local M = {
 
 function M.is_visible() return swayimg.text.visible end
 
+---@protected
+---@type fun(self: sai.api.text, val: boolean|number):nil
 function M:set_enabled(val)
 	if val == true then
 		self.super.visible = true
@@ -33,24 +36,39 @@ function M:set_enabled(val)
 end
 
 -- transform scale factor into a pixel value
+---@protected
 function M:set_line_spacing(val) self.super.spacing = math.floor((val - 1) * self._size) end
 
+---@protected
 function M:set_size(val)
 	self.super.size = val
 
 	-- update line spacing
 	self._size = val
 	self:set_line_spacing(self._line_spacing)
+
+	-- the cell is a whole pixel count: it changes with the size
+	mouse_box.calibrate(self._font, val)
 	return true
 end
 
+---@protected
+function M:set_font(val)
+	self.super.font = val
+	self._font = val
+
+	mouse_box.calibrate(val, self._size)
+	return true
+end
+
+---@protected
 function M:set_foreground(val) self.super.color = val end
 
 local function set_location(_, val, location)
-	sai[swayimg.mode].text[location] = val
+	sai.modes[1].text[location] = val
 	return false
 end
-local function get_location(_, location) return sai[swayimg.mode].text[location] end
+local function get_location(_, location) return sai.modes[1].text[location] end
 
 -- the text blocks are per-mode in the app: purely redirect them to the
 -- current mode's text api, never cache anything on this global layer
@@ -62,4 +80,5 @@ for _, v in pairs { 'topleft', 'topright', 'bottomleft', 'bottomright' } do
 	M['get_' .. v] = get_location
 end
 
-return require('sai.api.proxy').new(M)
+require('sai.api.proxy').new(M)
+return M

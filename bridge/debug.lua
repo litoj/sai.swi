@@ -1,11 +1,7 @@
 ---@module 'sai.bridge.debug'
----@class sai.bridge.debug
----Development tool: a DAP server-side debug harness for swayimg's LuaJIT
----runtime, a port of one-small-step-for-vimkind's debuggee logic (the
----debug.sethook flow control and the DAP request handlers), with no
----client-side concerns. Not loaded during normal swayimg operation.
----See the README (Development) for how to start it; nvim-dap users get the
----companion adapter module sai/nvim_dap.lua.
+---Development tool: a debug harness for swayimg's LuaJIT runtime, ported from one-small-step-for-vimkind.
+---Not loaded during normal operation; see the README (Development) for how to start it.
+---@class sai.bridge.debug server half of the DAP harness (client half: sai/nvim_dap.lua)
 
 local cjson = require 'cjson'
 local ffi = require 'ffi'
@@ -108,12 +104,9 @@ local function source_path(src)
 	return norm_path(src:sub(2))
 end
 
----Walks the stack and locates the user code being debugged.
----Returns two levels relative to the caller: the innermost user frame
----(first frame past the outermost harness frame, skipping C frames such as
----the pcall bridge or an error handler) and the outermost valid level.
----Valid from any call depth: the outermost harness frame on the stack
----(the line hook, an error handler or a manual pump entry) marks the boundary.
+---Frame levels come back relative to the caller.
+---@return integer base innermost user frame level: first past the outermost harness frame, skipping C frames
+---@return integer top outermost valid level
 local function user_stack()
 	local surface, top = 0, 0
 	local off = 1
@@ -143,8 +136,8 @@ local function user_depth()
 	return top - base
 end
 
----Collects locals and upvalues of the frame at `level` (relative to
----`frame_env` itself) into a lookup environment with `_G` fallback.
+---@param level integer? frame level relative to `frame_env` itself, nil for an empty env
+---@return table
 local function frame_env(level)
 	local locals, ups = {}, {}
 	if level then
@@ -171,8 +164,10 @@ local function frame_env(level)
 	return locals
 end
 
----Evaluates `code` in the context of the frame `level` (relative to `eval_in`
----itself: `debug.getinfo(level)` from here must return the target frame).
+---@param level integer? frame level relative to `eval_in` itself (`debug.getinfo(level)` from here is the target)
+---@param code string
+---@return boolean? ok true on success
+---@return unknown result or error message
 local function eval_in(level, code)
 	-- expression first: LuaJIT compiles bare expressions like `f(x)` or
 	-- `a ~= b` as chunks too, silently discarding their result (or erroring)
@@ -189,7 +184,10 @@ local function eval_in(level, code)
 	return true, res
 end
 
----`level` is the target frame relative to the caller (the line hook).
+---Expand `{expr}` holes in a log-point message against a frame.
+---@param level integer target frame level relative to the caller (the line hook)
+---@param fmt string message template with `{expr}` holes
+---@return string
 local function interpolate(level, fmt)
 	return (
 		fmt:gsub('{(.-)}', function(expr)
@@ -302,7 +300,7 @@ function handlers.initialize(req)
 		supportsSetVariable = true,
 		supportsLogPoints = true,
 		exceptionBreakpointFilters = {
-			{ filter = 'lua_error', label = 'Lua errors', default = false },
+			{ filter = 'lua_error', label = 'Lua errors', default = true },
 		},
 	})
 	event 'initialized'
@@ -480,10 +478,10 @@ function handlers.variables(req)
 		end
 	end
 
-	-- sort by name so the interactive variable list is stable: getlocal
-	-- gives declaration order, pairs() is arbitrary hash order; the index
-	-- tiebreak keeps same-named locals and upvalues from flipping around.
-	-- All-digit names (array indexes) sort numerically, not as text
+	-- sort by name so the interactive variable list is stable:
+	-- - getlocal gives declaration order, pairs() is arbitrary hash order
+	-- - the index tiebreak keeps same-named locals and upvalues from flipping around
+	-- - all-digit names (array indexes) sort numerically, not as text
 	for i, v in ipairs(vars) do
 		v._i = i
 	end
@@ -595,7 +593,6 @@ local function drain_queue()
 	end
 end
 
--- the harness server: a socket server extension
 local dbg_srv = {
 	super = sock.Server,
 	_arm_conns = true,
@@ -722,6 +719,19 @@ local function traceback_hook(...)
 	end
 	if explicit then return orig_traceback(...) end
 
+	-- Freeze only when no outer Lua pcall will see this error path: the
+	-- dispatch xpcall itself always catches it (and logs it), a further
+	-- pcall/xpcall frame down the stack means handled context.
+	local calls = 0
+	off = 1
+	while true do
+		local info = debug.getinfo(off, 'f')
+		if not info then break end
+		if info.func == pcall or info.func == xpcall then calls = calls + 1 end
+		off = off + 1
+	end
+	if calls > 1 then return orig_traceback(...) end
+
 	local args = { ... }
 	S.exc_msg = tostring(args[1] or '')
 	local trace = {}
@@ -819,6 +829,8 @@ end
 
 local M = {}
 
+---@param opts? {path?:string, signal?:string|false, log?:boolean|string, break_on_exception?:boolean, blocking?:boolean}
+---@return string socket path the server listens on
 function M.start(opts)
 	opts = opts or {}
 	if S.state ~= 'off' then return S.path end
@@ -850,6 +862,7 @@ function M.start(opts)
 	return S.path
 end
 
+---Block until a client attaches or the server stops.
 function M.wait_attached()
 	while not S.attached and S.state ~= 'off' do
 		S.srv:poll(50)
@@ -859,8 +872,10 @@ end
 
 function M.stop() session_reset(true) end
 
+---@return boolean
 function M.is_attached() return S.attached end
 
+---@param timeout? integer poll wait in milliseconds
 function M.pump(timeout)
 	if not S.srv then return end
 	S.srv:poll(timeout or 0)

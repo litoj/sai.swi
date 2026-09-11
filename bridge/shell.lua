@@ -3,29 +3,41 @@
 ---@class sai.bridge.shell
 local M = {}
 
+---Single-quote a string for the shell: wrapped, ticks escaped.
+---@param s string
+---@return string
+function M.quote(s) return "'" .. s:gsub("'", "'\\''") .. "'" end
+
 ---@param cmd string
 ---@return string
 function M.parse_shell_cmd(cmd)
-	cmd = cmd:gsub('([^%%])%%([^%%])', function(a, type)
-		if type == 'm' or type == 's' then
+	local mode = sai.mode
+	local function expand(lead, ph)
+		if ph == 'm' or ph == 's' then
 			local marked = sai.imagelist.marked.get()
 
-			if #marked > 0 then
-				return ("%s'%s'"):format(a, table.concat(marked, "' '"))
-			elseif type == 'm' then
+			if #marked > 0 and (ph ~= 's' or mode == 'gallery') then
+				local quoted = {}
+				for i, p in ipairs(marked) do
+					quoted[i] = M.quote(p)
+				end
+				return lead .. table.concat(quoted, ' ')
+			elseif ph == 'm' then
 				error 'No marked files'
-			else -- type == 's'
-				type = 'f'
+			else -- ph == 's'
+				ph = 'f'
 			end
 		end
 
 		local path = sai.imagelist.get_current().path
-		if type == 'f' then
-			return ("%s'%s'"):format(a, path)
+		if ph == 'f' then
+			return lead .. M.quote(path)
 		else
-			return ('%s%s%s'):format(a, path, type)
+			return ('%s%s%s'):format(lead, path, ph)
 		end
-	end):gsub('%%%%', '%%')
+	end
+	-- leading space: the pattern needs a char before `%`, drop it after
+	cmd = (' ' .. cmd):gsub('([^%%])%%([^%%])', expand):sub(2):gsub('%%%%', '%%')
 	return cmd
 end
 
@@ -55,14 +67,13 @@ function M.exec(cmd, async)
 	os.remove(tf)
 
 	local code = out:match '(%d+)\n$'
-	out = out:sub(1, -#code - 2)
+	out = out:sub(1, -#code - 3)
 
 	sai.eventloop.trigger { event = 'User', match = 'ShellCmdPost', data = { cmd = cmd, stdout = out, stderr = err } }
 	return out, code, err
 end
 
----Get the current Wayland clipboard content via wl-paste.
----@return string? text clipboard content, or nil on failure
+---@return string?
 function M.clipboard_get()
 	local p = io.popen('wl-paste -n', 'r')
 	if not p then return end
@@ -71,9 +82,8 @@ function M.clipboard_get()
 	return text
 end
 
----Set the Wayland clipboard content via wl-copy.
----@param text string text to copy to clipboard
----@return boolean ok true on success
+---@param text string
+---@return boolean ok
 function M.clipboard_set(text)
 	local p = io.popen('wl-copy', 'w')
 	if not p then return false end
@@ -82,14 +92,17 @@ function M.clipboard_set(text)
 	return p:close()
 end
 
----The transform doubles as a content check: returning false rejects and
----removes the download (e.g. the remote file changed unexpectedly).
----@param url string remote location of the file
+---@param url string
 ---@param path string destination path relative to sai as pwd
----@param transform fun(content:string):string|false? content filter
+---@param transform fun(content:string):string|false? `false` rejects and removes the download
 function M.download(url, path, transform)
 	local h = io.popen(
-		('{ curl -fsSL -o "%s" "%s" || wget -q -O "%s" "%s"; } 2>&1 >/dev/null'):format(path, url, path, url)
+		('{ curl -fsSL -o %s %s || wget -q -O %s %s; } 2>&1 >/dev/null'):format(
+			M.quote(path),
+			M.quote(url),
+			M.quote(path),
+			M.quote(url)
+		)
 	) or error 'Error in download command'
 	local out = h:read 'a'
 	h:close()
@@ -116,30 +129,32 @@ function M.download(url, path, transform)
 	end
 end
 
+---Wrap `code` in a function declaring `params` (a plain chunk without
+---them): the runnable takes their values in order, the code sees them as locals.
 ---@param code string
----@return (fun(self?:any):any)?
-function M.make_runnable(code)
+---@param params? string[] parameter names the code declares
+---@return (fun(...:unknown):unknown)? runnable
+---@return string? err syntax error description; nil when a runnable is returned
+function M.make_runnable(code, params)
 	if not code:find 'return[^\n]*$' and not code:find '[^=]=[^=][^\n]*$' then
 		code = code:gsub('([^\n]+)$', 'return %1', 1)
 	end
+	local wrapped = params ~= nil and #params > 0
+	if wrapped then code = ('return function(%s) %s end'):format(table.concat(params, ', '), code) end
 
-	local cb, err = loadstring(code)
+	-- the chunk name lands in runtime error locations: the '=' renders it
+	-- literally (no [string ...] wrapping), reading better than the
+	-- wrapped source dump
+	local cb, err = loadstring(code, '=input')
 	---@diagnostic disable-next-line: need-check-nil
-	if not cb or err then return sai.notify(err:gsub('^.-:%d:', 'Syntax error:')) end
-	return function(self)
-		-- if self == false then return end
-		_G.self = self
-		err = cb()
-		_G.self = nil
-		return err
-	end
+	if not cb or err then return nil, err end
+	if wrapped then return cb() end -- the chunk built the declared function
+	return cb
 end
 
----Find the source file of a compiled module: either an in-repo `.cpp`
----or a downloaded/generated `.c` sibling.
 ---@param so_path string path relative to sai as pwd
----@return string? src
----@return string? compiler
+---@return string? src matching `.cpp` or generated `.c` source
+---@return string? compiler `g++` or `gcc` for the source
 local function source_of(so_path)
 	for _, src_type in ipairs { { 'cpp', 'g++' }, { 'c', 'gcc' } } do
 		local src = so_path:gsub('so$', src_type[1])
@@ -166,6 +181,8 @@ function M.compile_so(so_path)
 	if out ~= '' then error('Failed to compile module: ' .. out) end
 end
 
+---@param so_path string path relative to sai as pwd
+---@return unknown
 function M.load_so(so_path)
 	if not source_of(so_path) then error('No source file for module: ' .. so_path) end
 	if not os.rename(so_path, so_path) then M.compile_so(so_path) end

@@ -1,11 +1,11 @@
----@diagnostic disable: invisible, inject-field, undefined-field, missing-fields, need-check-nil
 ---Test runner: discovers and runs every test module in this directory.
 ---Development tool: not used during normal swayimg operation.
 ---
 ---Each module is a table of named test methods (see tests/harness.lua); a
 ---method may h.skip() itself when its environment is unavailable. The
 ---nvim_dap module for instance needs a Wayland session, nvim with nvim-dap +
----nvim-nio and images at ~/Pictures/*/*.jpg, and skips itself without them.
+---nvim-nio, images at ~/Pictures/*/*.jpg and a visible (non-fullscreen)
+---swayimg window, and skips itself without them.
 
 local dir = debug.getinfo(1, 'S').source:match '^@(.*)/'
 if not dir:match '^/' then dir = (os.getenv 'PWD' or '.') .. '/' .. dir end
@@ -16,7 +16,8 @@ _G._TEST_RUNNER = true
 local H = require 'harness'
 
 local modules = {}
-local p = assert(io.popen('ls ' .. dir))
+-- %q-quoted: a spaced checkout path would otherwise break the listing
+local p = assert(io.popen(('ls -1 %q'):format(dir)))
 for name in p:read('*a'):gmatch '[^\r\n]+' do
 	local mod = name:match '^([%w_]+)%.lua$'
 	if mod and mod ~= 'init' and mod ~= 'harness' then modules[#modules + 1] = mod end
@@ -25,6 +26,8 @@ p:close()
 table.sort(modules)
 
 local args = { ... }
+-- a plain substring match on the full name: `sort` also selects sort_by
+-- methods, `debug` selects debug.* - narrow by prefixing with the module
 local function selected(mod, method)
 	if #args == 0 then return true end
 	local full = mod .. '.' .. method
