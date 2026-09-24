@@ -71,17 +71,18 @@ end
 
 local fndbg = debug.getinfo
 
----Inject the mode instance into single-argument callbacks.
+---Inject the mode instance into single-argument callbacks; the captured
+---arguments ride along after it.
 ---@param b string
 ---@param cfg bindcfg?
----@param fn string|fun(row:integer?,location:block_position_t)|fun(self:self)?
+---@param fn string|fun(...)? the action the cfg carries
 function M:_rawmap(b, cfg, fn)
 	-- one cfg per map() call, shared by all its binds: wrapping keys off
 	-- the action, so a single wrap covers every bind mapped with it
 	if cfg and not cfg._wrapped then
-		---@diagnostic disable-next-line: inject-field
+		---@diagnostic disable-next-line: inject-field -- internal wrap memo
 		cfg._wrapped = true
-		if type(fn) == 'function' and fndbg(fn, 'u').nparams == 1 then cfg.cb = function() fn(self) end end
+		if type(fn) == 'function' and fndbg(fn, 'u').nparams == 1 then cfg.cb = function(...) fn(self, ...) end end
 	end
 
 	if not self._enabled then return end

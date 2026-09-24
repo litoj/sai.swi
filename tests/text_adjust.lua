@@ -42,20 +42,20 @@ T.f2_takes_and_releases_the_block_wheels = with_env(function(h)
 	local p = block('sai.mode.host.pager', 'topleft')
 
 	at(100, 10 + 42 + 21) -- the first content row of the topleft block
-	raw_binds['viewer:ScrollDown']()
+	H.wheel(raw_binds, '', 'ScrollDown')
 	h.eq('before the takeover: the wheel scrolled the window', 2, p._scroll)
 
 	raw_binds['viewer:F2']()
 	h.ok('the mode is on', text_adjust._enabled)
 	h.eq('the owner lookup skips our own record', p, text_adjust:owner_at 'topleft')
 
-	raw_binds['viewer:ScrollDown']()
+	H.wheel(raw_binds, '', 'ScrollDown')
 	h.eq('the wheel resized the block instead', 2, p._scroll)
 	h.eq('a top block grows on wheel down', 6, p.max_height)
 
 	raw_binds['viewer:F2']()
 	h.ok('the mode is off', not text_adjust._enabled)
-	raw_binds['viewer:ScrollDown']()
+	H.wheel(raw_binds, '', 'ScrollDown')
 	h.eq('the block wheel works again', 3, p._scroll)
 
 	p.enabled = false
@@ -70,27 +70,27 @@ T.wheel_resizes_by_anchor_side = with_env(function(h)
 	text_adjust.enabled = true
 
 	at(100, 10 + 42 + 21)
-	raw_binds['viewer:ScrollUp']()
+	H.wheel(raw_binds, '', 'ScrollUp')
 	h.eq('top block shortened', 4, top.max_height)
-	raw_binds['viewer:ScrollDown']()
+	H.wheel(raw_binds, '', 'ScrollDown')
 	h.eq('the top block lengthens back', 5, top.max_height)
 
 	at(100, 600 - 10 - 21) -- the bottom-left block's last row
-	raw_binds['viewer:ScrollUp']()
+	H.wheel(raw_binds, '', 'ScrollUp')
 	h.eq('bottom block lengthened', 6, bottom.max_height)
-	raw_binds['viewer:ScrollDown']()
+	H.wheel(raw_binds, '', 'ScrollDown')
 	h.eq('the bottom block shortens back', 5, bottom.max_height)
 
 	-- a re-seeded pointer for the top block: a full window covers the row
 	-- the bottom checks clicked, and a shrunk one falls short of it
 	top.max_height = 2
 	at(100, 10 + 42 + 21)
-	raw_binds['viewer:ScrollUp']()
+	H.wheel(raw_binds, '', 'ScrollUp')
 	h.eq('the two-line floor holds', 2, top.max_height)
 	top.max_height = 1
-	raw_binds['viewer:ScrollUp']()
+	H.wheel(raw_binds, '', 'ScrollUp')
 	h.eq('a full-window block goes fractional', 0.9, top.max_height)
-	raw_binds['viewer:ScrollDown']()
+	H.wheel(raw_binds, '', 'ScrollDown')
 	h.eq('a fraction tops out at the full window', 1, top.max_height)
 
 	text_adjust.enabled = false
@@ -108,15 +108,15 @@ T.shift_wheel_steps_the_follow_margin = with_env(function(h)
 	text_adjust.enabled = true
 	at(100, 10 + 42 + 21)
 
-	raw_binds['viewer:Shift+ScrollUp']()
+	H.wheel(raw_binds, 'Shift', 'ScrollUp')
 	h.eq('the margin steps a tenth smaller', 0.4, s.scroll_ahead)
-	raw_binds['viewer:Shift+ScrollDown']()
+	H.wheel(raw_binds, 'Shift', 'ScrollDown')
 	h.eq('the margin steps back to half', 0.5, s.scroll_ahead)
 
 	s.scroll_ahead = 2
-	raw_binds['viewer:Shift+ScrollUp']()
+	H.wheel(raw_binds, 'Shift', 'ScrollUp')
 	h.eq('the margin parks at two lines', 2, s.scroll_ahead)
-	raw_binds['viewer:Shift+ScrollDown']()
+	H.wheel(raw_binds, 'Shift', 'ScrollDown')
 	h.eq('the margin steps a whole line up', 3, s.scroll_ahead)
 
 	text_adjust.enabled = false
@@ -125,7 +125,7 @@ T.shift_wheel_steps_the_follow_margin = with_env(function(h)
 	local p = block('sai.mode.host.plain', 'topleft')
 	text_adjust.enabled = true
 	at(100, 10 + 42 + 21)
-	raw_binds['viewer:Shift+ScrollDown']()
+	H.wheel(raw_binds, 'Shift', 'ScrollDown')
 	h.eq('a plain pager keeps its height', 5, p.max_height)
 	text_adjust.enabled = false
 	p.enabled = false
@@ -220,7 +220,7 @@ T.notification_is_no_block_owner = with_env(function(h)
 	h.eq('a notice does not take the block over', s, text_adjust:owner_at 'status')
 
 	at(1200, 600 - 10 - 21)
-	raw_binds['viewer:ScrollDown']() -- wheel down on a bottom block: shorter
+	H.wheel(raw_binds, '', 'ScrollDown') -- wheel down on a bottom block: shorter
 	h.eq('the status box shrank under the notice', 0.9, s.max_height)
 
 	text_adjust.enabled = false
@@ -273,17 +273,17 @@ T.off_block_keys_fall_through = with_env(function(h)
 	local recs = H.capture_notify(sai, function()
 		at() -- no pointer over a block: the section binds stay out of it
 		raw_binds['viewer:w']()
-		raw_binds['viewer:Shift+ScrollUp']()
+		H.wheel(raw_binds, 'Shift', 'ScrollUp')
 	end)
 	h.contains('the off-block keys go unassigned', recs[1].trace, 'api/mode_base.lua')
 
 	-- the scroll box's viewer bind survives under the mode: the
 	-- unqualified wheel never took a no-op (its raw pan stub over-indexes
 	-- in this harness, so the mapping table is the probe)
-	h.eq('the plain wheel keeps the viewer bind below', 'Pan up 20px', sai.viewer._mappings['ScrollUp'].desc)
+	h.eq('the plain wheel keeps the viewer bind below', 'Pan by scroll', sai.viewer._mappings['Scroll'].desc)
 
 	text_adjust.enabled = false
-	h.eq('the viewer bind back where it was', 'Pan up 20px', sai.viewer._mappings['ScrollUp'].desc)
+	h.eq('the viewer bind back where it was', 'Pan by scroll', sai.viewer._mappings['Scroll'].desc)
 end)
 
 H.maybe_standalone(T)

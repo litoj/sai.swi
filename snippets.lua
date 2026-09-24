@@ -88,7 +88,7 @@ function M.print_option_changes(timeout)
 					else
 						v = ('%.2f'):format(v)
 					end
-				elseif type(v) ~= 'string' then
+				elseif type(v) == 'table' then
 					return -- ignore window size and position changes
 				end
 

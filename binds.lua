@@ -134,36 +134,24 @@ function M.default()
 	map('v', 'Shift+Next', function() v.frame = v.frame + 1 end, 'Next frame')
 	map('v', 'Shift+Prior', function() v.frame = v.frame - 1 end, 'Previous frame')
 	-- Scale (zoom)
-	map('v', { 'equal', 'Shift+plus', 'Ctrl+ScrollUp' }, function() v.scale = v.get_abs_scale() * 1.1 end, 'Zoom in')
-	map('v', { 'minus', 'Ctrl+ScrollDown' }, function() v.scale = v.get_abs_scale() / 1.1 end, 'Zoom out')
+	map('v', { 'equal', 'Shift+plus' }, function() v.scale = v.get_abs_scale() * 1.1 end, 'Zoom in')
+	map('v', 'minus', function() v.scale = v.get_abs_scale() / 1.1 end, 'Zoom out')
+	-- the wheel zooms raw: proportional to the vertical magnitude
+	map('v', 'Ctrl+ScrollVertical', function(mv) v.scale = v.get_abs_scale() * (1 - mv * 0.1) end, 'Zoom by scroll')
 	map('v', 'BackSpace', v.reset, 'Reset scale and position')
 	-- Image position / panning
 	map('v', 'Left', v.pan.left, 'Pan left')
 	map('v', 'Right', v.pan.right, 'Pan right')
 	map('v', 'Up', v.pan.up, 'Pan up')
 	map('v', 'Down', v.pan.down, 'Pan down')
-	map('v', 'ScrollUp', function() v.pan.up(20) end, 'Pan up 20px')
-	map('v', 'ScrollDown', function() v.pan.down(20) end, 'Pan down 20px')
-	map('v', 'ScrollLeft', function() v.pan.left(20) end, 'Pan left 20px')
-	map('v', 'ScrollRight', function() v.pan.right(20) end, 'Pan right 20px')
-	-- Mouse zoom (centered at pointer)
-	map('v', 'Ctrl+ScrollUp', function()
-		local s = v.get_abs_scale() * 1.1
-		local m = sai.get_mouse_pos()
-		v.scale_centered(s, m.x, m.y)
-	end, 'Zoom in on cursor')
-	map('v', 'Ctrl+ScrollDown', function()
-		local s = v.get_abs_scale() / 1.1
-		local m = sai.get_mouse_pos()
-		v.scale_centered(s, m.x, m.y)
-	end, 'Zoom out at cursor')
+	map('v', 'Scroll', function(mh, mv) v.pan.by(mh * 10, mv * 10) end, 'Pan by scroll')
 end
 
 ---@private
 ---@generic O: keybind_processor
 ---@param modeapi sai.lib.keybind_processor|`O`
 ---@param defaults? bindcfg|{}
----@return fun(b:string|string[], action:fun(O), desc:string?)
+---@return fun(b:string|string[], action:fun(O, ...), desc:string?)
 function M.gen_mapadd(modeapi, defaults)
 	local deftrace = U.pretty_trace('custom_map', debug.traceback())
 	defaults = defaults or {}
@@ -197,9 +185,9 @@ function M.help(self)
 end
 
 ---Keyboard scrolling binds of a pager that owns its input.
----@param pager sai.lib.pager a full overlay mode's display; the wheel is its own block bind
-function M.pager_scrolls(pager)
-	local map = M.gen_mapadd(pager, { kind = 'private' })
+---@param p sai.lib.pager a full overlay mode's display; the wheel is its own block bind
+function M.pager_scrolls(p)
+	local map = M.gen_mapadd(p, { kind = 'private' })
 	map({ 'Up', 'k' }, function(p) p.scroll = p.scroll - 1 end)
 	map({ 'Down', 'j' }, function(p) p.scroll = p.scroll + 1 end)
 	map('Prior', function(p) p.scroll = p.scroll - p.page_size end)

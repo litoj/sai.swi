@@ -4,6 +4,7 @@ local B = require 'sai.lib.bindmods'
 
 ---@class sai.lib.keybind_processor.bindcfg: bindcfg
 ---@field package _traced? boolean
+---@field package _wrapped? boolean the action already carries its mode injection
 
 ---@class sai.lib.keybind_processor.bindmap: {[string]: sai.lib.keybind_processor.bindcfg}
 
@@ -12,8 +13,7 @@ local B = require 'sai.lib.bindmods'
 ---@field _mappings? sai.lib.keybind_processor.bindmap
 ---@field warn_on_duplicates? boolean warn on duplicate plain binds
 --- TODO: make modebase translate multimaps (`cd`) correctly and use sig USR1 for fallback
----@field map? fun(bind:string|string[],fn:fun(row:integer?,location:block_position_t)|fun(self:self),opts?:string|bindopts) single-arg callbacks receive the mode
----@field _rawmap? fun(self:self,bind:string,cfg:bindcfg,action:fun()) must be overridden by inheriting class
+---@field _rawmap? fun(self:self,bind:string,cfg:bindcfg,action:fun(...)) must be overridden by inheriting class
 ---@field _rawunmap? fun(self:self,bind:string)
 local M = {
 	---Default custom handler tries to solve common layout differences (toggled shift)

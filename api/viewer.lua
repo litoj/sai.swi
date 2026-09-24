@@ -27,14 +27,14 @@ local M = {
 	_last = false, ---@package
 }
 
----@return sai.viewer.panner
 local function new_panner(self)
 	local pan
+	---@class sai.viewer.panner
 	pan = {
 		default_size = 50,
 		by = function(x, y)
 			local p = self.position
-			self.position = { x = p.x - x, y = p.y - y }
+			self.position = { x = math.floor(p.x - x + 0.5), y = math.floor(p.y - y + 0.5) }
 		end,
 		left = function(p) pan.by(-(p or pan.default_size), 0) end,
 		right = function(p) pan.by((p or pan.default_size), 0) end,

@@ -411,17 +411,24 @@ do
 	---@field on_unassigned fun(key:string) unbound key handler
 	local keybind_processor = {}
 
-	---Map a bind; mouse binds may carry a block-position prefix (`TL+`/`TR+`/`BL+`/`BR+`):
-	--- - the bind fires only when the pointer is over the text block
-	---   rendered in that corner (the block spans its longest line)
-	--- - the callback receives the text row within the block and the
-	---   block position; the row counts from the content top (for the
-	---   bottom corners from the window's bottom edge), nil off the
-	---   content rows
-	--- - an unprefixed mouse bind serves the clicks no qualified bind claimed
-	---
-	---@param bind string|string[] 1 or more mouse or keyboard events, e.g. `Alt+s`
-	---@param action fun()|string the callback to run, or a shell command to execute
+	---Map a bind to an action.
+	---The callback receives the event payload:
+	--- - a bind with a block-position prefix (`TL+`/`TR+`/`BL+`/`BR+`/`ST+`):
+	---   the text row within the block, then the block position;
+	--- - `ScrollVertical`/`ScrollHorizontal`: the raw axis value;
+	--- - `Scroll`: the horizontal and the vertical delta;
+	--- - any other bind: nothing, so a function passed directly
+	---   (`sai.exit`, `viewer.pan.left`) works as is.
+	---A prefixed bind fires only under its text block (the block spans
+	---its longest line). The row counts from the content top - for the
+	---bottom corners from the window's bottom edge; nil off the content
+	---rows. An unprefixed mouse bind serves the clicks no qualified bind
+	---claimed.
+	---In a custom mode (a remapper layer) a single-parameter callback
+	---receives the mode instead: such a callback on a payload-carrying
+	---bind needs a second parameter to see the payload.
+	---@param bind string|string[] 1 or more mouse, wheel or keyboard events, e.g. `Alt+s`
+	---@param action fun(...)|string the callback to run, or a shell command to execute
 	---@param opts bindopts|string? extra options, or a short description
 	function keybind_processor.map(bind, action, opts) end
 
@@ -520,12 +527,12 @@ end
 ---| "keep_fill"   # Keep zoom level relative to shorter side of the image
 
 ---@class sai.viewer.panner Move around the image with ready-to-map functions
----@field default_size integer Default size of the step to make (in pixels)
----@field by fun(x:integer,y:integer) Pan the image by x and y pixels in their directions
----@field left fun(p:integer?) Step left by `p` px (default: step.default_size)
----@field right fun(p:integer?) Step right by `p` px (default: step.default_size)
----@field down fun(p:integer?) Step down by `p` px (default: step.default_size)
----@field up fun(p:integer?) Step up by `p` px (default: step.default_size)
+---@field default_size number Default size of the step to make (in pixels)
+---@field by fun(x:number,y:number) Pan the image by x and y pixels in their directions
+---@field left fun(p:number?) Step left by `p` px (default: step.default_size)
+---@field right fun(p:number?) Step right by `p` px (default: step.default_size)
+---@field down fun(p:number?) Step down by `p` px (default: step.default_size)
+---@field up fun(p:number?) Step up by `p` px (default: step.default_size)
 
 ---@class sai.viewer.go: sai.mode_base.go
 ---@field [vdir_t] fun()

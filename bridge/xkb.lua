@@ -137,6 +137,8 @@ M.key_map.LMS = 'ScrollLeft'
 M.key_map.RMS = 'ScrollRight'
 M.key_map.UMS = 'ScrollUp'
 M.key_map.DMS = 'ScrollDown'
+M.key_map.VMS = 'ScrollVertical'
+M.key_map.HMS = 'ScrollHorizontal'
 
 M.rev_key_map = U.rev_idx(M.key_map)
 
@@ -144,10 +146,12 @@ M.rev_key_map = U.rev_idx(M.key_map)
 M.key_map.Space = 'space'
 M.key_map.PageUp = 'Prior'
 M.key_map.PageDown = 'Next'
-M.key_map.SML = 'ScrollLeft'
-M.key_map.SMR = 'ScrollRight'
-M.key_map.SMU = 'ScrollUp'
-M.key_map.SMD = 'ScrollDown'
+M.key_map.SL = 'ScrollLeft'
+M.key_map.SR = 'ScrollRight'
+M.key_map.SU = 'ScrollUp'
+M.key_map.SD = 'ScrollDown'
+M.key_map.SV = 'ScrollVertical'
+M.key_map.SH = 'ScrollHorizontal'
 
 for i = string.byte 'A', string.byte 'Z' do
 	local lc = string.char(i + 32)

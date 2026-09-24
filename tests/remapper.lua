@@ -471,21 +471,21 @@ T.pager_block_scrolls = with_env(function(h)
 	p.lines = lines
 
 	at(400, 600 - 10 - 21) -- the status box, bottom row
-	raw_binds['viewer:ScrollDown']()
+	H.wheel(raw_binds, '', 'ScrollDown')
 	h.eq('the status wheel scrolled the window', 2, p._scroll)
 
 	at(700, 100) -- off the block: the pager must not move
-	raw_binds['viewer:ScrollDown']()
+	H.wheel(raw_binds, '', 'ScrollDown')
 	h.eq('off the block: the pager stays', 2, p._scroll)
 
 	-- the block moves: the bind follows it to the new corner
 	p:set_location 'bottomleft'
 	at(100, 600 - 10 - 21) -- over the bottom-left block
-	raw_binds['viewer:ScrollDown']()
+	H.wheel(raw_binds, '', 'ScrollDown')
 	h.eq('the wheel followed the block', 3, p._scroll)
 
 	at(400, 600 - 10 - 21) -- the old status spot is dead
-	raw_binds['viewer:ScrollDown']()
+	H.wheel(raw_binds, '', 'ScrollDown')
 	h.eq('the old location stays inert', 3, p._scroll)
 
 	p.enabled = false

@@ -510,6 +510,11 @@ end
 ---Fire a recorded viewer bind, the way the app delivers a keypress.
 function H.press(raw_binds, bind) raw_binds['viewer:' .. bind]() end
 
+---Deliver one wheel tick to the mode's on_scroll handler, as the app
+---does for a scroll event. `dir` names the event
+---('ScrollUp'/'ScrollDown'); magnitudes are not simulated.
+function H.wheel(raw_binds, kmods, dir) raw_binds['viewer:scroll'](kmods, 0, dir == 'ScrollDown' and 1 or -1) end
+
 ---Numbered item lines for pager/selector window tests.
 function H.items(n)
 	local out = {}
@@ -631,6 +636,8 @@ function H.recording_stack(mods)
 		local mode = H.raw_mode {
 			on_key = function(b, fn) raw_binds[name .. ':' .. b] = fn end,
 			on_mouse = function(b, fn) raw_binds[name .. ':' .. b] = fn end,
+			-- one scroll handler per mode: expose it so tests drive the wheel
+			on_scroll = function(fn) raw_binds[name .. ':scroll'] = fn end,
 			-- the app calls the installed fn for unmapped keys: expose it
 			on_unassigned_key = function(fn) raw_binds[name .. ':unassigned'] = fn end,
 			open_path = function(p)

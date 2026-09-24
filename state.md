@@ -65,7 +65,7 @@ The raw swayimg gallery's `get_image` is replaced with a wrapper that applies `U
 
 ### 2.3. Direct host writes under the hood
 - `api/init.lua:90` — `swayimg.text.status_timeout = 0` bypasses the sai proxy entirely.
-- `api/mode_base.lua:84` and `:104` — `self.super.on_key(...)` and `self.super.on_mouse(...)` write handlers straight onto the host mode objects.
+- `api/mode_base.lua` — `_set_handler` writes `on_key`/`on_mouse` handlers straight onto the host mode objects, `new` installs the single `on_scroll` handler.
 
 Why these exist:
 
@@ -112,10 +112,14 @@ Suggested structure change:
 - Request the swayimg `imagelist` change event (already tracked as an upstream issue).
 - Until then, put all cache invalidation behind one function, for example `imagelist._resync()`, and call it from every mutation point (`remove`, `clear`, `add`, `set_order`, the shell heuristic). Today the resync logic is scattered across `M.get`, `M.has`, `marked.get_size`, and `apply_order`.
 
-### 3.4. `_rawunmap` claims app slots to redirect keys
-- `api/mode_base.lua:81-86` and `:98-106`
+### 3.4. `_install` claims app slots to redirect keys
+- `api/mode_base.lua` — `_install`, the retire branch
 
-Unmapping a key registers a no-op `on_key` handler so the key falls to the unassigned path instead of the native swayimg default. This is a deliberate "claim the slot" trick. Document it better and move it to one helper.
+When the last bind of an event goes away, a key gets a no-op `on_key`
+handler so it falls to the unassigned path instead of the native swayimg
+default, a button retires to the "Unhandled mouse" notice, and a wheel
+event simply leaves `_m_scroll` (the single `on_scroll` handler owns the
+slot). This is the deliberate "claim the slot" trick, now in one place.
 
 ---
 
@@ -163,18 +167,9 @@ This is the single change that reduces the most complexity. It is invasive, but 
 
 ### 4.2. One function does two jobs: map and unmap
 
-- `api/mode_base.lua:129` — `M._rawunmap = M._rawmap`
-
-The same function branches on `action == nil` to decide between mapping and unmapping. The name `_rawunmap` is a lie: it is the same function.
-
-Why it exists:
-
-- The unmap path needs the map path's lookup logic to clean the per-event family tables.
-
-Suggested structure change:
-
-- Split into `_rawmap` and `_rawunmap`, and share only the small lookup helper.
-- The shared helper does not need the nil-action branch.
+- `api/mode_base.lua` — `M._rawunmap = M._rawmap` (split in the creator
+  refactor: `_rawmap` registers, `_rawunmap` removes, a nil action
+  delegates to the unmap path; `parse_bind` is the shared lookup).
 
 ### 4.3. Cross-module private access, hidden from the type checker
 

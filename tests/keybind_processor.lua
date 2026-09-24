@@ -55,6 +55,7 @@ T.duplicate_plain_bind_warns = with_env(function(h)
 	o.warn_on_duplicates = true
 	local logged = {}
 	local old_log = _G.sai.log
+	---@diagnostic disable-next-line: duplicate-set-field -- the stub shadows the declared sai.log for the test window
 	_G.sai.log = function(msg) logged[#logged + 1] = msg end
 	local ran, err = pcall(function()
 		o.map('a', function() end)

@@ -43,6 +43,11 @@ self._seqix = {
   `g`-alone-and-`g d` conflict, resolved by timeout.
 - Removal mutates nodes in place (never rebuild a node object), so a
   deferred fire captured mid-burst sees removals.
+- Superseded (2026-09-24): the `qualified` sub-table moves out of the
+  node. A live qualifier (`section`) resolves once per press through
+  the per-event creator wrapper (`sai.lib.dispatch`), not through the
+  trie. The trie node keeps `terminal` and `branch`; the resolved token
+  payload rides the pending record as before.
 
 ### Pending state
 
@@ -90,7 +95,7 @@ ride the pending record; the terminal check re-resolves nothing.
   - transient remapper layer per (owner, prefix), cached: its
     `help_pager` shows the continuations while armed, `component` keeps
     the mode events quiet. Costs registry churn per prefix press.
-- Mouse keeps per-button trampolines (`_m_raw`): `on_mouse` has no
+- Mouse keeps per-button trampolines (`_m_handlers`): `on_mouse` has no
   unassigned hook, so a button must stay registered while any of its
   binds exists.
 

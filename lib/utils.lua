@@ -15,6 +15,7 @@ U.dummy_image = {
 	size = 0,
 	-- the app hands the modification time over as a string, like {time} in
 	-- the text scheme: the dummy mirrors the field's declared type
+	---@diagnostic disable-next-line: assign-type-mismatch
 	mtime = '0',
 	mark = false,
 }
