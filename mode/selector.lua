@@ -117,23 +117,23 @@ end
 ---Sync the scroll offset with the current line.
 ---The window moves only when the line exits the margin band.
 function M:_sync_scroll()
-	local ps = self._page_size
+	local page_size = self._page_size
 	if self._location == 'status' then
 		self.scroll = self._line
 		return
 	end
-	if #self._lines <= ps then return end
+	if #self._lines <= page_size then return end
 	-- the line exits the band only past the margin: window snaps then
-	local m = self._scroll_ahead < 1 and math.floor(self._scroll_ahead * (ps - 1)) or self._scroll_ahead
-	m = math.max(0, math.min(math.floor((ps - 1) / 2), m))
+	local margin = self._scroll_ahead < 1 and math.floor(self._scroll_ahead * (page_size - 1)) or self._scroll_ahead
+	margin = math.max(0, math.min(math.floor((page_size - 1) / 2), margin))
 	local top = self._scroll
 	local rel = self._line - top
-	if rel < m then
-		top = self._line - m
-	elseif rel > ps - 1 - m then
-		top = self._line - (ps - 1 - m)
+	if rel < margin then
+		top = self._line - margin
+	elseif rel > page_size - 1 - margin then
+		top = self._line - (page_size - 1 - margin)
 	end
-	top = math.max(1, math.min(#self._lines - ps + 2, top))
+	top = math.max(1, math.min(#self._lines - page_size + 2, top))
 	if top ~= self._scroll then self.scroll = top end
 end
 
@@ -152,14 +152,14 @@ end
 ---@type fun(self: sai.mode.selector, list: integer[]):false
 function M:set_selected(list)
 	local prev = self._selected_idx
-	local selected, si = {}, {}
+	local selected, seen = {}, {}
 	for _, idx in ipairs(list) do
-		if idx >= 1 and idx <= #self._lines and not si[idx] then
+		if idx >= 1 and idx <= #self._lines and not seen[idx] then
 			selected[#selected + 1] = idx
-			si[idx] = true
+			seen[idx] = true
 		end
 	end
-	self._selected, self._selected_idx = selected, si
+	self._selected, self._selected_idx = selected, seen
 	for idx in pairs(prev) do
 		self._lines:touch(idx)
 	end

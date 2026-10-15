@@ -40,19 +40,19 @@ local stack_meta = {
 ---@param record? sai.lib.registry.record<O>
 ---@return O? restore value when the removed record was on top, nil to keep the newer value
 function stack_meta:set(layer, record)
-	local i
+	local found
 	for j = 1, #self do
 		if self[j].layer == layer then
-			i = j
+			found = j
 			break
 		end
 	end
-	local old = i and self[i].old
-	local top = i == #self
+	local old = found and self[found].old
+	local top = found == #self
 
-	if i then
-		if not top then self[i + 1].old = old end
-		table.remove(self, i)
+	if found then
+		if not top then self[found + 1].old = old end
+		table.remove(self, found)
 	end
 
 	if record then

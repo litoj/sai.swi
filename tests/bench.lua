@@ -1,6 +1,11 @@
----Benchmarks over the recording api stack: the timings print per method
----(VERBOSE=1 shows them live, a failure dumps them); the assertions only
----keep the scenarios honest, the numbers themselves are not under test.
+---Benchmarks of the keybind resolution: the time from an input's delivery
+---to the mapped action's entry, over a recording stack. Blackbox by
+---design: the binds map through the public mode api and the inputs arrive
+---the way swayimg delivers them - its own key resolution first, the
+---unassigned call for keys only, the registered handler for mouse and
+---wheel - so the bind implementation behind them can be swapped without
+---touching this file. The timings always print (module load output is not
+---buffered): these are not tests, nothing asserts the numbers.
 ---Development tool: not used during normal swayimg operation.
 
 local dir = debug.getinfo(1, 'S').source:match '^@(.*)/' or ''
@@ -13,96 +18,93 @@ local H = require 'harness'
 local env = H.recording_stack {}
 local sai, with_env = env.sai, env.with_env
 local remapper = require 'sai.lib.remapper'
-local mouse_box = require 'sai.bridge.mouse_box'
 local at = H.mouse_stub(env.swayimg)
+local raw_binds = env.raw_binds
 
----Warm up, then time `n` rounds; prints ns per round.
-local function timed(name, n, fire)
-	for _ = 1, n do
-		fire()
-	end -- warmup: the jit and the caches settle
-	local t = os.clock()
-	for _ = 1, n do
-		fire()
-	end
-	print(('BENCH %-28s %8.0f ns/op'):format(name, (os.clock() - t) / n * 1e9))
+-- the stopwatch: armed at an input's delivery, stopped by the mapped
+-- action on entry
+local t0, total, hits
+local function action()
+	total = total + (os.clock() - t0)
+	hits = hits + 1
 end
 
+---A keypress the way swayimg runs one: its own resolution over the
+---registered handlers, the unassigned call only when none took it.
+local function press(key)
+	t0 = os.clock()
+	local fn = raw_binds['viewer:' .. key]
+	if fn then
+		fn()
+	else
+		raw_binds['viewer:unassigned'](key)
+	end
+end
+
+---A mouse or wheel event: only the registered handler, swayimg knows no
+---unassigned call for these.
+local function click(btn)
+	t0 = os.clock()
+	raw_binds['viewer:' .. btn]()
+end
+
+local function wheel(kmods, h, v)
+	t0 = os.clock()
+	raw_binds['viewer:scroll'](kmods, h, v)
+end
+
+---Warm up, then time `n` rounds; prints ns from delivery to action entry.
+local function bench(name, n, deliver)
+	total, hits = 0, 0
+	for _ = 1, n do
+		deliver()
+	end -- warmup: the jit and the caches settle
+	total, hits = 0, 0
+	for _ = 1, n do
+		deliver()
+	end
+	if hits == 0 then return print(('BENCH %-20s the action never ran'):format(name)) end
+	print(('BENCH %-20s %4.2f ms'):format(name, total / hits * 1e3))
+end
+
+with_env(function()
+	local mode = remapper.new { _path = 'sai.bench' }
+	mode.enabled = true
+
+	-- inputs per measured loop: enough to smooth the clock, quick to run
+	local n = 10000
+
+	mode.map('j', action, 'bench key')
+	bench('key', n, function() press 'j' end)
+	mode.map('Ctrl+j', action, 'bench key combo')
+	bench('key combo', n, function() press 'Ctrl+j' end)
+	mode.map('Ctrl+Shift+j', action, 'bench two-mod key combo')
+	bench('two-mod key combo', n, function() press 'Ctrl+Shift+j' end)
+
+	mode.map('MouseLeft', action, 'bench click')
+	bench('click', n, function() click 'MouseLeft' end)
+	mode.map('2+MouseLeft', action, 'bench double click')
+	bench('double click', n, function()
+		click 'MouseLeft'
+		click 'MouseLeft'
+		-- the first press arms a burst wait: pump it here (after the
+		-- action stopped the clock) so the shared heap never piles up
+		env.flush_defers()
+	end)
+
+	sai.viewer.text.topleft = { 'head', 'row one', 'row two' }
+	at(100, 10 + 42 + 21) -- over the first content row
+	mode.map('TL+MouseLeft', action, 'bench section click')
+	bench('section click', n, function() click 'MouseLeft' end)
+
+	mode.map('ScrollDown', action, 'bench wheel')
+	bench('wheel', n, function() wheel('', 0, 1) end)
+
+	mode.enabled = false
+	env.flush_defers() -- drain the burst waits: the shared heap must end empty
+end)()
+
 local T = {}
-
--- presses per measured loop: enough to smooth the clock, quick to run
-local N = 10000
-
--- the plain keypress: the universal handler runs the bind, no pointer
-T.key_press = with_env(function(h)
-	local mode = remapper.new { _path = 'sai.bench.keys' }
-	local hits = 0
-	mode.map('j', function() hits = hits + 1 end, 'bench key')
-	mode.enabled = true
-
-	timed('key press', N, function() env.raw_binds['viewer:unassigned'] 'j' end)
-	h.eq('the bind fired every press', 2 * N, hits)
-
-	mode.enabled = false
-end)
-
--- the mouse press: every press probes the block geometry before any bind
--- claims it - over rendered text, over a blanked layer, over nothing
-T.mouse_press = with_env(function(h)
-	local mode = remapper.new { _path = 'sai.bench.mouse' }
-	local hits = 0
-	mode.map('TL+MouseLeft', function() hits = hits + 1 end, 'bench corner')
-	mode.map('MouseLeft', function() hits = hits + 1 end, 'bench plain')
-	mode.enabled = true
-
-	sai.viewer.text.topleft = { 'head', 'row one', 'row two' }
-	at(100, 10 + 42 + 21) -- over the first content row
-	timed('mouse press, text on', N, function() env.raw_binds['viewer:MouseLeft']() end)
-	h.eq('the qualified bind fired every press', 2 * N, hits)
-
-	-- the layer went down, the corner text stays configured: exactly one
-	-- bind must still fire per press (which one differs by design)
-	hits = 0
-	sai.text.enabled = false
-	timed('mouse press, layer off', N, function() env.raw_binds['viewer:MouseLeft']() end)
-	h.eq('exactly one bind fired every press', 2 * N, hits)
-
-	hits = 0
-	sai.viewer.text.topleft = {}
-	timed('mouse press, nothing to hit', N, function() env.raw_binds['viewer:MouseLeft']() end)
-	h.eq('the plain bind fired every press', 2 * N, hits)
-
-	sai.text.enabled = true
-	mode.enabled = false
-end)
-
--- the hit-test unit itself, outside the bind dispatch: the gate sits
--- between the caller and the geometry
-T.block_probe = with_env(function(h)
-	sai.viewer.text.topleft = { 'head', 'row one', 'row two' }
-	at(100, 10 + 42 + 21) -- over the first content row
-
-	h.eq('the probe finds the corner', 'TL', mouse_box.block_at { 'TL', 'TR', 'BL', 'BR', 'ST' })
-	timed('block_at, text on', N, function() mouse_box.block_at { 'TL', 'TR', 'BL', 'BR', 'ST' } end)
-
-	sai.text.enabled = false
-	timed('block_at, layer off', N, function() mouse_box.block_at { 'TL', 'TR', 'BL', 'BR', 'ST' } end)
-
-	sai.text.enabled = true
-end)
-
--- the recalibration: every font or size write re-measures through the
--- real fontconfig/freetype probe; the probe's libraries load once
-T.recalibration = with_env(function(h)
-	mouse_box._stub_metrics = nil
-	timed('font recalibration', 300, function() mouse_box.calibrate('monospace', 24) end)
-
-	local wf = mouse_box.width_factor
-	mouse_box._stub_metrics = function() end
-	mouse_box.width_factor, mouse_box.hpad_factor = 1, 0
-	if wf <= 0 or wf == 1 then return h.skip('font lookup unavailable', wf) end
-	h.ok('a character cell measured', wf > 0 and wf < 1)
-end)
 
 H.maybe_standalone(T)
 

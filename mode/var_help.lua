@@ -107,16 +107,18 @@ function M:varset_lines(mode, own_sai)
 	end
 	table.sort(nested, function(a, b) return a.name < b.name end)
 
-	for _, sub in ipairs(nested) do
+	for _, nested_obj in ipairs(nested) do
 		local sublines = {}
-		for _, var in ipairs(sub.vars) do
-			if readable(sub.obj, var.name) then
-				sublines[#sublines + 1] =
-					{ line = M.generate_var_updater('    ', sub.obj, var.name), action = prompt_for(sub.obj, var.name) }
+		for _, var in ipairs(nested_obj.vars) do
+			if readable(nested_obj.obj, var.name) then
+				sublines[#sublines + 1] = {
+					line = M.generate_var_updater('    ', nested_obj.obj, var.name),
+					action = prompt_for(nested_obj.obj, var.name),
+				}
 			end
 		end
 		if sublines[1] then
-			out[#out + 1] = { line = ('  %s:'):format(sub.name) }
+			out[#out + 1] = { line = ('  %s:'):format(nested_obj.name) }
 			for _, entry in ipairs(sublines) do
 				out[#out + 1] = entry
 			end
@@ -131,12 +133,12 @@ function M:varset_lines(mode, own_sai)
 		local v = stack[mode.sai]
 		if v then overrides[name] = v.new end
 	end
-	for name, sub in pairs(mode.sai) do
+	for name, sub_config in pairs(mode.sai) do
 		-- rawget: sibling fields on a reconfigurer error on unknown keys
-		local super = type(sub) == 'table' and rawget(sub, 'super')
+		local super = type(sub_config) == 'table' and rawget(sub_config, 'super')
 		if super then
 			for k, stack in pairs(vars[super]) do
-				local v = stack[sub]
+				local v = stack[sub_config]
 				if v then overrides[('%s.%s'):format(name, k)] = v.new end
 			end
 		end
@@ -192,11 +194,11 @@ function M:gen_tabs()
 	for gi = #groups, 1, -1 do
 		local group = groups[gi]
 		local entries = self:varset_lines(group.root)
-		for _, sub in ipairs(group.subs) do
+		for _, sub_mode in ipairs(group.subs) do
 			-- ' ' not '' - the app skips truly empty lines
 			if entries[1] then entries[#entries + 1] = { line = ' ' } end
-			entries[#entries + 1] = { line = ('[%s]'):format(U.pretty_name(sub._path, group.root._path)) }
-			for _, entry in ipairs(self:varset_lines(sub, false)) do
+			entries[#entries + 1] = { line = ('[%s]'):format(U.pretty_name(sub_mode._path, group.root._path)) }
+			for _, entry in ipairs(self:varset_lines(sub_mode, false)) do
 				entries[#entries + 1] = entry
 			end
 		end

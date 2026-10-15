@@ -124,19 +124,19 @@ local function matcher(ev, ptn_map)
 			local match = ev.match ---@cast match string
 			local hooks = ptn_map[match]
 			if hooks then
-				for i, h in ipairs(hooks) do
-					coroutine.yield(h, match, i)
+				for i, hook in ipairs(hooks) do
+					coroutine.yield(hook, match, i)
 				end
 			end
 
 			hooks = ptn_map['*']
 			if hooks then
-				for i, h in ipairs(hooks) do
-					if h.pattern[match] == nil then -- `true` was already processed, `false` is to skip it
+				for i, hook in ipairs(hooks) do
+					if hook.pattern[match] == nil then -- `true` was already processed, `false` is to skip it
 						-- TODO: could also support negation here, but it'd be really slow
-						for _, ptn in ipairs(h.pattern) do
+						for _, ptn in ipairs(hook.pattern) do
 							if match:find(ptn) then
-								coroutine.yield(h, '*', i)
+								coroutine.yield(hook, '*', i)
 								break
 							end
 						end
@@ -160,18 +160,18 @@ local function matcher(ev, ptn_map)
 				end
 
 				if ok then
-					for i, h in ipairs(hooks) do
-						coroutine.yield(h, match, i)
+					for i, hook in ipairs(hooks) do
+						coroutine.yield(hook, match, i)
 					end
 				end
 			end
 		end
 
-		for i, h in ipairs(ptn_map['*'] or {}) do
-			for _, p in ipairs(h.pattern) do
+		for i, hook in ipairs(ptn_map['*'] or {}) do
+			for _, p in ipairs(hook.pattern) do
 				for _, v in ipairs(ptns) do
 					if p:find(v) then
-						coroutine.yield(h, '*', i)
+						coroutine.yield(hook, '*', i)
 						p = nil ---@diagnostic disable-line: cast-local-type
 						break
 					end
@@ -182,25 +182,25 @@ local function matcher(ev, ptn_map)
 	end)
 end
 
----@alias sai.eventloop.applicator fun(h:hook_cfg,ev:event_name_t, pnt:string,i:integer)
+---@alias sai.eventloop.applicator fun(hook:hook_cfg,ev:event_name_t, ptn:string,i:integer)
 
 ---@private
 ---@param f sai.eventloop.filter.opts
 ---@param on_match sai.eventloop.applicator
 ---@diagnostic disable-next-line: inject-field
 function M._apply_filtered(f, on_match)
-	---@type (fun(h:hook_cfg):boolean?)[]
+	---@type (fun(hook:hook_cfg):boolean?)[]
 	local checks = {}
 	if f.id then
-		checks[#checks + 1] = function(h) return f.id == h end
+		checks[#checks + 1] = function(hook) return f.id == hook end
 		if not f.event then f.event = f.id.event end
 	end
-	if f.group then checks[#checks + 1] = function(h) return f.group == h.group end end
+	if f.group then checks[#checks + 1] = function(hook) return f.group == hook.group end end
 	if f.mode and #f.mode ~= 3 then
 		local modes = tabled(f.mode)
-		checks[#checks + 1] = function(h)
+		checks[#checks + 1] = function(hook)
 			for _, m in ipairs(modes) do
-				if h.mode[m] then return true end
+				if hook.mode[m] then return true end
 			end
 		end
 	end
@@ -236,9 +236,9 @@ function M.unsubscribe(f)
 end
 
 function M.find_all(f)
-	local t = {}
-	M._apply_filtered(f or {}, function(h) t[h] = h end)
-	return t
+	local hooks = {}
+	M._apply_filtered(f or {}, function(h) hooks[h] = h end)
+	return hooks
 end
 
 function M.trigger(ev)
@@ -247,8 +247,8 @@ function M.trigger(ev)
 	if not ev.match and not ev.pattern then ev.match = '' end
 	if M.debug_trigger then print_debug('trigger', ev) end
 
-	-- first collect them to ensure they cannot cause a self-removal and mangle indexes (indirectly)
-	-- i.e. if a hook disables a custom mode that unsubs that hook then the next hook would be skipped
+	-- first collect them so they cannot mangle indexes through a self-removal:
+	-- a hook disabling a custom mode that unsubs it would skip the next hook
 	local found = {}
 	M._apply_filtered(ev, function(hook) found[#found + 1] = hook end)
 

@@ -59,11 +59,9 @@ end
 ---@return sai.lib.filter<T>
 function M.new(cfg) return setmetatable(cfg or {}, { __index = M }) end
 
----Line operators:
----  - `<` `>` `<=` `>=` compare coerced values, `!` negates presence,
----    `:` runs code, `~` fuzzy-matches
----  - `==` / `!=` match a luapat wrapped in `^...$`, with `-` escaped
----    (a bare `-` would quantify)
+---Operators, longest first so e.g. `<=` wins over `<`.
+---`<`..`>=` compare coerced values, `!` negates presence, `:` runs code,
+---`~` fuzzy-matches, `==`/`!=` match a luapat in `^...$` (`-` escaped, bare would quantify).
 local operators = { '!=', '<=', '>=', '<', '>', '==', '=', '!', ':', '~' }
 
 ---@param line string
@@ -73,37 +71,37 @@ function M:parse(line)
 	line = line:match '^%s*(.-)%s*$'
 	if line == '' then return end
 
-	local tag, val, oper
+	local tag, val, operator
 	for _, op in ipairs(operators) do
 		tag, val = line:match('^%s*([0-9A-Za-z.]*)%s*' .. op .. '%s*(.-)%s*$')
 		if tag then
-			oper = op == '=' and '==' or op
+			operator = op == '=' and '==' or op
 			break
 		end
 	end
 
-	if not oper then
-		local df = self.default_filter
+	if not operator then
+		local default_filter = self.default_filter
 		local base = line
 		return {
 			self.default_var,
-			df == 0 and function(p) return p ~= nil and tostring(p):find(base, 1, true) end
-				or function(p) return p ~= nil and M.rate(base, tostring(p), false, df) end,
+			default_filter == 0 and function(p) return p ~= nil and tostring(p):find(base, 1, true) end
+				or function(p) return p ~= nil and M.rate(base, tostring(p), false, default_filter) end,
 		}
-	elseif #tag == 0 and oper ~= ':' then
+	elseif #tag == 0 and operator ~= ':' then
 		return nil, 'Tag can be omitted only with the ":" (code) operator'
-	elseif #val == 0 and oper ~= '!' then
+	elseif #val == 0 and operator ~= '!' then
 		return nil, 'Value can be omitted only with the "!" (negation) operator'
 	end
 
-	local num_val = self.coerce and self.coerce(val) or val
+	local coerced = self.coerce and self.coerce(val) or val
 
 	---@type {[string]:(fun(val:unknown):boolean)|fun():((fun(val:string):boolean)?, string?)}
 	local cmp = {
-		['<'] = function(r) return r ~= nil and r < num_val end,
-		['>'] = function(r) return r ~= nil and r > num_val end,
-		['<='] = function(r) return r ~= nil and r <= num_val end,
-		['>='] = function(r) return r ~= nil and r >= num_val end,
+		['<'] = function(r) return r ~= nil and r < coerced end,
+		['>'] = function(r) return r ~= nil and r > coerced end,
+		['<='] = function(r) return r ~= nil and r <= coerced end,
+		['>='] = function(r) return r ~= nil and r >= coerced end,
 		['!='] = function()
 			local pat = '^' .. val:gsub('%-', '%%-') .. '$'
 			return function(r) return r == nil or not tostring(r):find(pat) end
@@ -126,12 +124,12 @@ function M:parse(line)
 		end,
 	}
 
-	oper = cmp[oper]
+	local impl = cmp[operator]
 	local err
-	if debug.getinfo(oper, 'u').nparams ~= 1 then
-		oper, err = oper()
+	if debug.getinfo(impl, 'u').nparams ~= 1 then
+		impl, err = impl()
 	end
-	if oper then return { tag, oper } end
+	if impl then return { tag, impl } end
 	return nil, err
 end
 

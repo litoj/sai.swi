@@ -2,13 +2,11 @@
 
 local ffi = require 'ffi'
 
--- the monotonic clock, not os.time():
--- - os.time() has whole-second resolution: a due time recorded just before a
---   second boundary lands up to 1s early
--- - each earlier push re-arms the single swayimg.defer slot at itself, so the
---   chain would fire callbacks far too soon
--- ffi.cdef is process-global: a re-require (like the test runner dropping
--- the module cache) must not declare the struct a second time
+-- the monotonic clock, not os.time(): os.time() has whole-second resolution
+-- (a due time recorded just before a second boundary lands up to 1s early),
+-- and each earlier push re-arms the single swayimg.defer slot at itself, so
+-- the chain would fire callbacks far too soon
+-- ffi.cdef is process-global: a re-require must not declare the struct twice
 if not pcall(ffi.typeof, 'struct sai_monotonic_ts') then
 	ffi.cdef [[
 	struct sai_monotonic_ts { long tv_sec; long tv_nsec; };
@@ -19,7 +17,7 @@ local CLOCK_MONOTONIC = 1
 -- lls cannot resolve cdef'd struct fields on cdata: type the struct's fields
 ---@type {tv_sec: number, tv_nsec: number}
 local ts = ffi.new 'struct sai_monotonic_ts'
-local function now_ms()
+local function now_ms() -- current time in milliseconds
 	ffi.C.clock_gettime(CLOCK_MONOTONIC, ts)
 	-- tonumber: int64 cdata does not auto-convert for math.floor
 	return tonumber(ts.tv_sec) * 1000 + math.floor(tonumber(ts.tv_nsec) / 1e6)
@@ -75,9 +73,8 @@ function M:time_to_next()
 	return math.max(0, self[1].time - now_ms())
 end
 
--- the single swayimg defer slot is re-armed on every push: stale armed
--- fires must stay silent, so each arm stamps a generation and only the
--- newest one may pop
+-- the single swayimg defer slot is re-armed on every push: stale armed fires
+-- must stay silent, so each arm stamps a generation and only the newest may pop
 local gen = 0
 function M:arm()
 	gen = gen + 1

@@ -54,6 +54,20 @@ package.path = H.dir .. '/?.lua;' .. H.swayimg_dir .. '/?.lua;' .. package.path
 require 'sai.bridge.socket'
 require 'sai.bridge.debug'
 
+-- the exiv2 bridge's .so resolves its symbols from the process's global
+-- pool: the app links libexiv2 itself, a plain luajit host does not - the
+-- pool is ours to fill. The handle must stay referenced for the process
+-- lifetime: luajit dlcloses a collected ffi.load clib, taking the global
+-- symbols with it
+H._exiv2 = select(2, pcall(ffi.load, 'exiv2', true))
+
+-- the mouse geometry stays on its uncalibrated defaults: the test
+-- coordinates assume them, a real font lookup would be machine-dependent.
+-- The real probe stays reachable for the tests that measure with it
+local mouse_box = require 'sai.bridge.mouse_box'
+H.font_probe = mouse_box.font_metrics
+mouse_box.font_metrics = function() end
+
 ffi.cdef [[
 int gettimeofday(struct timeval *tv, void *tz);
 ]]
@@ -455,6 +469,7 @@ function H.raw_swayimg(modes)
 		text = {},
 		defer = function() end,
 		on_window_resize = function() end,
+		on_redrawn = function() end,
 		get_window_size = function() return { width = 800, height = 600 } end,
 	}
 end
@@ -540,9 +555,6 @@ function H.fresh_api_stack(swi_stub)
 	H.drop_sai_stack()
 	_G.swayimg = swi_stub
 	local stack = require 'sai.api.init'
-	-- the mouse geometry stays on its uncalibrated defaults: the test
-	-- coordinates assume them, a real font lookup would be machine-dependent
-	require('sai.bridge.mouse_box')._stub_metrics = function() end
 	return stack, _G.sai
 end
 
@@ -692,7 +704,7 @@ function H.recording_stack(mods)
 	local defers = {}
 	local swayimg = {
 		mode = 'viewer',
-		overlay = true, -- like the app's default: a lone resize is the full init
+		overlay = true, -- like the app's startup state: the teardown below clears it
 		viewer = recording_mode 'viewer',
 		slideshow = recording_mode 'slideshow',
 		gallery = recording_mode 'gallery',
@@ -700,6 +712,7 @@ function H.recording_stack(mods)
 		text = {},
 		defer = function(_, fn) defers[#defers + 1] = fn end,
 		on_window_resize = function() end,
+		on_redrawn = function() end,
 		get_window_size = function() return { width = 800, height = 600 } end,
 	}
 	swayimg.on_window_resize = function(fn) resize_cb = fn end
@@ -708,7 +721,10 @@ function H.recording_stack(mods)
 
 	local old_swi, old_sai = _G.swayimg, rawget(_G, 'sai')
 	local sai, sai_proxy = H.fresh_api_stack(swayimg)
-	resize_cb() -- app initialization: also registers the default binds
+	-- the app's startup: the first resize arms the api's teardown step,
+	-- the second (the overlay teardown) fully initializes it
+	resize_cb()
+	resize_cb()
 	local key_help = require 'sai.mode.key_help'
 	local loaded = { ['sai.mode.key_help'] = key_help }
 	for _, name in ipairs(mods or {}) do

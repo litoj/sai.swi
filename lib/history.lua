@@ -12,17 +12,17 @@ local e = require 'sai.api.eventloop'
 ---@field package _leave_hook? table|false exit save hook once installed
 local M = {}
 
----The store holds one entry per line, so escape the newline.
----@param s string
+---The store holds one entry per line, so escape backslashes and newlines.
+---@param text string
 ---@return string
-local function encode(s) return (s:gsub('\\', '\\\\'):gsub('\n', '\\n')) end
+local function encode(text) return (text:gsub('\\', '\\\\'):gsub('\n', '\\n')) end
 
 ---Inverse of encode.
----@param s string
+---@param text string
 ---@return string
-local function decode(s)
+local function decode(text)
 	return (
-		s:gsub('\\(.)', function(c)
+		text:gsub('\\(.)', function(c)
 			if c == 'n' then return '\n' end
 			if c == '\\' then return '\\' end
 			return '\\' .. c
@@ -109,8 +109,8 @@ end
 ---@param match string
 ---@return boolean
 local function any_match(self, match)
-	for _, e in ipairs(self) do
-		if e:find(match, 1, true) then return true end
+	for _, entry in ipairs(self) do
+		if entry:find(match, 1, true) then return true end
 	end
 	return false
 end
@@ -199,8 +199,8 @@ function M:load()
 	if not f then return end
 	local out = {}
 	for line in f:lines() do
-		local e = decode(line)
-		if e ~= '' then out[#out + 1] = e end
+		local entry = decode(line)
+		if entry ~= '' then out[#out + 1] = entry end
 	end
 	f:close()
 	while #self > 0 do
@@ -217,8 +217,8 @@ end
 function M:save()
 	if type(self.file) ~= 'string' then return end
 	local f = io.open(self.file, 'w') or error('Could not write file: ' .. self.file)
-	for _, e in ipairs(self) do
-		f:write(encode(e), '\n')
+	for _, entry in ipairs(self) do
+		f:write(encode(entry), '\n')
 	end
 	f:close()
 end

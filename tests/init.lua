@@ -1,4 +1,5 @@
----Test runner: discovers and runs every test module in this directory.
+---Test runner: discovers and runs every test module under this directory,
+---mirroring the source layout (tests/api/ for api/, and so on).
 ---Development tool: not used during normal swayimg operation.
 ---
 ---Each module is a table of named test methods (see tests/harness.lua); a
@@ -18,17 +19,18 @@ local H = require 'harness'
 
 local modules = {}
 -- %q-quoted: a spaced checkout path would otherwise break the listing
-local p = assert(io.popen(('ls -1 %q'):format(dir)))
+local p = assert(io.popen(('find %q -mindepth 1 -name "*.lua" -type f'):format(dir)))
 for name in p:read('*a'):gmatch '[^\r\n]+' do
-	local mod = name:match '^([%w_]+)%.lua$'
-	if mod and mod ~= 'init' and mod ~= 'harness' then modules[#modules + 1] = mod end
+	-- api/proxy.lua -> api.proxy: the module name mirrors the source tree
+	local mod = name:sub(#dir + 2, -5):gsub('/', '.')
+	if mod ~= 'init' and mod ~= 'harness' then modules[#modules + 1] = mod end
 end
 p:close()
 table.sort(modules)
 
 local args = { ... }
--- a plain substring match on the full name: `sort` also selects sort_by
--- methods, `debug` selects debug.* - narrow by prefixing with the module
+-- a plain substring match on the full name: `filter` also selects the mode's
+-- filter methods, `bridge.debug` selects debug.* - narrow with the dotted path
 local function selected(mod, method)
 	if #args == 0 then return true end
 	local full = mod .. '.' .. method
@@ -39,7 +41,7 @@ local function selected(mod, method)
 end
 
 for _, mod in ipairs(modules) do
-	local chunk, err = loadfile(dir .. '/' .. mod .. '.lua')
+	local chunk, err = loadfile(dir .. '/' .. mod:gsub('%.', '/') .. '.lua')
 	if not chunk then
 		H.fail(mod .. ' load error', err)
 	else

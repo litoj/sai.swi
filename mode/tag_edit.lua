@@ -197,8 +197,8 @@ end
 function M:_resolve(tag)
 	if tag:find('.', 1, true) then return { tag } end
 	local keys = {}
-	for _, t in ipairs(self._all_tags) do
-		if t:match '[^.]*$' == tag then keys[#keys + 1] = t end
+	for _, tag_key in ipairs(self._all_tags) do
+		if tag_key:match '[^.]*$' == tag then keys[#keys + 1] = tag_key end
 	end
 	return #keys > 0 and keys or { 'Exif.Image.' .. tag }
 end
@@ -219,9 +219,9 @@ function M:_accept(tag)
 	-- dedup and sort: the menu order must not follow the hash order
 	local seen = {}
 	local values = {}
-	for _, e in ipairs(l.get(true)) do
-		for _, k in ipairs(self._keys) do
-			local v = e.meta[k]
+	for _, entry in ipairs(l.get(true)) do
+		for _, key in ipairs(self._keys) do
+			local v = entry.meta[key]
 			if v ~= nil then
 				v = tostring(v)
 				if not seen[v] then
@@ -280,9 +280,9 @@ end
 function M:_write(value)
 	local out, code, err = sai.exec(self:make_cmd(self._keys, value))
 	if tonumber(code) ~= 0 then
-		local fb = self:make_fallback_cmd(self._keys, value)
-		if fb then
-			out, code, err = sai.exec(fb)
+		local fallback = self:make_fallback_cmd(self._keys, value)
+		if fallback then
+			out, code, err = sai.exec(fallback)
 		end
 		if tonumber(code) ~= 0 then
 			sai.notify(err ~= '' and err or (out ~= '' and out or 'the write failed'), -10)
@@ -302,15 +302,15 @@ end
 function M:_apply_meta(value)
 	-- mirrors `%s`: the marked files, else the current one
 	local targets = {}
-	for _, p in ipairs(l.marked.get()) do
-		targets[p] = true
+	for _, path in ipairs(l.marked.get()) do
+		targets[path] = true
 	end
 	if not next(targets) then targets[l.get_current().path] = true end
 
-	for _, e in ipairs(l.get(true)) do
-		if targets[e.path] then
-			for _, k in ipairs(self._keys) do
-				e.meta[k] = value
+	for _, entry in ipairs(l.get(true)) do
+		if targets[entry.path] then
+			for _, key in ipairs(self._keys) do
+				entry.meta[key] = value
 			end
 		end
 	end
@@ -326,12 +326,12 @@ function M:set_enabled(val)
 		local cur_path = l.get_current().path
 		local tags = {}
 		local seen = {}
-		for _, e in ipairs(l.get(true)) do
-			if e.path == cur_path then self._cur_meta = e.meta end
-			for k in pairs(e.meta) do
-				if not seen[k] then
-					seen[k] = true
-					tags[#tags + 1] = k
+		for _, entry in ipairs(l.get(true)) do
+			if entry.path == cur_path then self._cur_meta = entry.meta end
+			for tag in pairs(entry.meta) do
+				if not seen[tag] then
+					seen[tag] = true
+					tags[#tags + 1] = tag
 				end
 			end
 		end

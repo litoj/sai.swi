@@ -93,7 +93,7 @@ if not M.clean then
 	end
 end
 
--- callable form: coerce a string into a valid utf8 string (invalid sequences get replaced)
+-- callable form: coerce a string into a valid utf8 string (invalid sequences get replaced).
 return setmetatable(M, {
 	__call = function(_, s)
 		if type(s) ~= 'string' or M.isvalid(s) then return s end

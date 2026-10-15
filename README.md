@@ -308,17 +308,18 @@ as usual - your nvim-dap bindings pick it up.
 
 ### Tests
 
-Each test module is named after the sai module it exercises. All tests run end-to-end, over real
-processes. The modules also double as usage documentation: the headers of tests/eventloop.lua,
-tests/reconfigurer.lua and tests/ipc.lua state the api idiom their scenarios demonstrate,
-tests/utf8.lua or tests/xkb.lua read as input/output tables for their bridges, and
-tests/remapper.lua shows how to write a custom mode (each test builds its modes with the public api
-calls). Run it from anywhere:
+Each test module is named and placed after the sai module it exercises: tests mirror the source
+tree (tests/api/ for api/, tests/bridge/ for bridge/, and so on). All tests run end-to-end, over
+real processes. The modules also double as usage documentation: the headers of
+tests/api/eventloop.lua, tests/lib/reconfigurer.lua and tests/bridge/ipc.lua state the api idiom
+their scenarios demonstrate, tests/bridge/utf8.lua or tests/bridge/xkb.lua read as input/output
+tables for their bridges, and tests/lib/remapper.lua shows how to write a custom mode (each test
+builds its modes with the public api calls). Run it from anywhere:
 
 ```sh
-luajit tests/init.lua                     # all tests
-luajit tests/debug.lua                    # one module
-luajit tests/init.lua debug.breakpoints   # one method
+luajit tests/init.lua                        # all tests
+luajit tests/bridge/debug.lua                # one module
+luajit tests/init.lua bridge.debug.breakpoints # one method
 ```
 
 ### TODOs

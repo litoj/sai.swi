@@ -125,8 +125,8 @@ end
 ---@return swayimg.entry? nil when the current image is not listed
 local function current_entry()
 	local path = l.get_current().path
-	for _, e in ipairs(l.get()) do
-		if e.path == path then return e end
+	for _, entry in ipairs(l.get()) do
+		if entry.path == path then return entry end
 	end
 end
 
@@ -166,16 +166,16 @@ function M:sort_fn()
 	if extra == 1 then criteria[#criteria + 1] = { self._preview.name, 1, self._preview.xf } end
 
 	return function(a, b)
-		for _, k in ipairs(criteria) do
-			local xf, av, bv = k[3], value(a, k[1]), value(b, k[1])
+		for _, crit in ipairs(criteria) do
+			local xf, av, bv = crit[3], value(a, crit[1]), value(b, crit[1])
 			if xf then
 				av, bv = xf(av), xf(bv)
 			end
 			if av ~= bv then
 				if av == nil then
-					return k[2] < 0
+					return crit[2] < 0
 				elseif bv == nil then
-					return k[2] > 0
+					return crit[2] > 0
 				end
 				-- numbers compare numerically, everything else as strings
 				local lt
@@ -184,7 +184,7 @@ function M:sort_fn()
 				else
 					lt = tostring(av) < tostring(bv)
 				end
-				if k[2] < 0 then lt = not lt end
+				if crit[2] < 0 then lt = not lt end
 				return lt
 			end
 		end
@@ -194,8 +194,8 @@ end
 
 function M:_refresh_lists()
 	local picked = {}
-	for _, k in ipairs(self._criteria) do
-		picked[k] = true
+	for _, name in ipairs(self._criteria) do
+		picked[name] = true
 	end
 
 	local unpicked = {}
@@ -358,17 +358,17 @@ function M:_accept(dir, item)
 	end
 
 	item = item or self.completion.lines[self.completion.line]
-	local n = item and item.text
-	if not n then return end
-	self:add_criterion(n, dir or 1)
+	local name = item and item.text
+	if not name then return end
+	self:add_criterion(name, dir or 1)
 	self.text = ''
 end
 
 ---Remove the sort criterion `name`; the field returns to the pool.
 ---@param name string
 function M:remove_criterion(name)
-	for i, k in ipairs(self._criteria) do
-		if k == name then
+	for i, criterion in ipairs(self._criteria) do
+		if criterion == name then
 			table.remove(self._criteria, i)
 			self._dir[name] = nil
 			self._code[name] = nil
@@ -395,16 +395,16 @@ end
 ---@param delta integer
 function M:move_criterion(name, delta)
 	local from
-	for i, k in ipairs(self._criteria) do
-		if k == name then from = i end
+	for i, criterion in ipairs(self._criteria) do
+		if criterion == name then from = i end
 	end
 	local to = from and from + delta
 	if not to or to < 1 or to > #self._criteria then return end
 	self._criteria[from], self._criteria[to] = self._criteria[to], self._criteria[from]
 	self:_render_sort_by()
 	-- the cursor follows the criterion it moved away from
-	for i, k in ipairs(self.sort_by.lines) do
-		if k == name then self.sort_by.line = i end
+	for i, criterion in ipairs(self.sort_by.lines) do
+		if criterion == name then self.sort_by.line = i end
 	end
 	self:_apply()
 end
@@ -418,14 +418,14 @@ function M:set_enabled(val)
 		local tags = { 'index', 'path', 'size', 'mtime', 'mark' }
 		local seen = {} ---@type {[string]:true}
 		-- a meta key equal to a list field must not duplicate it
-		for _, t in ipairs(tags) do
-			seen[t] = true
+		for _, tag in ipairs(tags) do
+			seen[tag] = true
 		end
-		for _, e in ipairs(l.get(true)) do
-			for k in pairs(e.meta) do
-				if not seen[k] then
-					seen[k] = true
-					tags[#tags + 1] = k
+		for _, entry in ipairs(l.get(true)) do
+			for tag in pairs(entry.meta) do
+				if not seen[tag] then
+					seen[tag] = true
+					tags[#tags + 1] = tag
 				end
 			end
 		end

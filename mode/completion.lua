@@ -60,12 +60,12 @@ setmetatable(M, { __index = M.super })
 ---@return false
 function M:on_confirm(item)
 	if item == false then return false end
-	local t = self.target
-	if not t then return false end
-	local line = t.line
-	t.visual = { line = line, col = 1 }
-	t.col = utf8.len(t.lines[line]) + 1
-	t:insert(item.insert or item.text)
+	local target = self.target
+	if not target then return false end
+	local line = target.line
+	target.visual = { line = line, col = 1 }
+	target.col = utf8.len(target.lines[line]) + 1
+	target:insert(item.insert or item.text)
 	return false
 end
 
@@ -92,24 +92,24 @@ function M:update(base)
 	if self.source and #base >= (self.min_chars or 2) then
 		if base == '' then
 			-- only reachable with min_chars at zero: list every candidate
-			for _, it in ipairs(self.source(base)) do
-				items[#items + 1] = it
+			for _, item in ipairs(self.source(base)) do
+				items[#items + 1] = item
 			end
 		else
 			local hits = {}
-			for _, it in ipairs(self.source(base)) do
+			for _, item in ipairs(self.source(base)) do
 				-- the source rates: match the short name, show the full item
-				local cand = it.rate or it.text
+				local cand = item.rate or item.text
 				if self.ignore_case then
 					cand = cand:lower()
 					base = base:lower()
 				end
-				local r = flt.rate(base, cand, false)
-				if r then hits[#hits + 1] = { r, it.text, it } end
+				local rating = flt.rate(base, cand, false)
+				if rating then hits[#hits + 1] = { rating, item.text, item } end
 			end
 			table.sort(hits, function(a, b) return a[1] < b[1] or (a[1] == b[1] and a[2] < b[2]) end)
-			for _, h in ipairs(hits) do
-				items[#items + 1] = h[3]
+			for _, hit in ipairs(hits) do
+				items[#items + 1] = hit[3]
 			end
 		end
 	end

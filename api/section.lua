@@ -29,19 +29,19 @@ M.mod = {
 	end,
 	render = function(token) return token end,
 	resolve = function(cands)
-		local q, row, loc = mouse_box.block_at(cands)
+		local section, row, loc = mouse_box.block_at(cands)
 		if not loc then return end
-		return q, row, loc ---@diagnostic disable-line: redundant-return-value -- the row and the block position ride along as the payload
+		return section, row, loc ---@diagnostic disable-line: redundant-return-value -- the row and the block position ride along as the payload
 	end,
 }
 
 ---Qualify a bind with its block's section code.
 ---@param loc text_location the block the bind follows
----@param b string the declared bind key
+---@param bind string the declared bind key
 ---@return string the block's code in front of any unprefixed bind; a prefixed bind passes unchanged
-function M.key(loc, b)
-	if M.mod.parse(b) then return b end
-	return loc_section[loc] .. '+' .. b
+function M.key(loc, bind)
+	if M.mod.parse(bind) then return bind end
+	return loc_section[loc] .. '+' .. bind
 end
 
 return M

@@ -15,7 +15,6 @@ local section = require 'sai.api.section'
 ---@field _lines? sai.lib.formatter<I>
 ---@field title_fmt? fun(pager:sai.lib.pager<I>, title:string, page_block?:string):string composes the header row; `''` hides it
 ---@field line_fmt? fun(pager:sai.lib.pager<I>, item:I, idx:integer):string|I paints one row; a host that needs live state (a cursor, a selection) overrides this
--- setup options
 ---@field location? text_location
 ---@field title? string `''` hides it; a construction without one derives it from the last segment of `_path`, first word capitalized (`sai.mode.help_pager` -> `Help pager:\t`)
 ---@field lines? I[] the output to be paged: raw items, rendered through `line_fmt`
@@ -45,15 +44,13 @@ local M = {
 	_page_size = 1,
 	_total_pages = 1,
 
-	-- plain field, set at creation: a swap after rows exist leaves their
-	-- paint stale; '' hides the row
+	-- plain field, set at creation: a swap after rows exist leaves their paint stale
 	title_fmt = function(_, title, page_block)
 		if not page_block then return (title:gsub('\t$', '')) end
 		return title .. page_block
 	end,
 
-	-- plain field, set at creation: a swap after rows exist leaves their
-	-- paint stale
+	-- plain field, set at creation: a swap after rows exist leaves their paint stale
 	line_fmt = function(_, item) return item end,
 
 	-- Private state
@@ -165,8 +162,8 @@ function M:line_at(p)
 	if visible < 1 then return end
 
 	if self._location == 'topleft' or self._location == 'topright' then
-		local y0 = p.pad + (self:_header_visible() and p.linepx or 0)
-		local rel = math.floor((p.m.y - y0) / p.linepx) + 1
+		local top = p.pad + (self:_header_visible() and p.linepx or 0)
+		local rel = math.floor((p.m.y - top) / p.linepx) + 1
 		if rel < 1 or rel > visible then return end
 		return from + rel - 1
 	end
@@ -309,8 +306,8 @@ function M:_on_dst_change(loc)
 		-- section.key of an empty bind is the code prefix ('TL+')
 		local was, now = section.key(old, ''), section.key(loc, '')
 		local moves = {}
-		for b, cfg in pairs(self._mappings) do
-			if b:sub(1, #was) == was then moves[#moves + 1] = { b, now .. b:sub(#was + 1), cfg } end
+		for bind, cfg in pairs(self._mappings) do
+			if bind:sub(1, #was) == was then moves[#moves + 1] = { bind, now .. bind:sub(#was + 1), cfg } end
 		end
 		for _, move in ipairs(moves) do
 			self:_setmap(move[1], nil)

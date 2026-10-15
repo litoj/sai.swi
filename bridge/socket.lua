@@ -47,15 +47,16 @@ local M = {}
 ---@return boolean
 local function signal_handled(signal)
 	local num = signal == 'USR1' and SIGUSR1 or SIGUSR2
-	local f = io.open('/proc/self/status', 'r')
-	if not f then return false end
-	local txt = f:read '*a'
-	f:close()
+	local file = io.open('/proc/self/status', 'r')
+	if not file then return false end
+	local txt = file:read '*a'
+	file:close()
 	local mask = tonumber(txt:match 'SigCgt:%s*(%x+)' or '', 16)
 	if not mask then return false end
 	return bit.band(mask, bit.lshift(1, num - 1)) ~= 0
 end
 
+---Point the IO signal of `fd` at this process.
 local function arm_fd(fd, signal, nonblocking)
 	ffi.C.fcntl(fd, F_SETOWN, ffi.new('int', ffi.C.getpid()))
 	ffi.C.fcntl(fd, F_SETSIG, ffi.new('int', signal == 'USR1' and SIGUSR1 or SIGUSR2))
@@ -89,11 +90,11 @@ local Conn = {
 function Conn:drain()
 	local buf = ffi.new 'char[65536]'
 	while true do
-		local r = ffi.C.recv(self._fd, buf, 65536, MSG_DONTWAIT)
-		if r > 0 then
-			self._buffer = self._buffer .. ffi.string(buf, r)
+		local got = ffi.C.recv(self._fd, buf, 65536, MSG_DONTWAIT)
+		if got > 0 then
+			self._buffer = self._buffer .. ffi.string(buf, got)
 		else
-			return r == 0
+			return got == 0
 		end
 	end
 end
@@ -137,9 +138,9 @@ end
 
 ---@param seconds integer
 function Conn:set_timeouts(seconds)
-	local tv = ffi.new('struct timeval', { tv_sec = seconds, tv_usec = 0 })
-	ffi.C.setsockopt(self._fd, SOL_SOCKET, SO_RCVTIMEO, tv, ffi.sizeof(tv))
-	ffi.C.setsockopt(self._fd, SOL_SOCKET, SO_SNDTIMEO, tv, ffi.sizeof(tv))
+	local timeout = ffi.new('struct timeval', { tv_sec = seconds, tv_usec = 0 })
+	ffi.C.setsockopt(self._fd, SOL_SOCKET, SO_RCVTIMEO, timeout, ffi.sizeof(timeout))
+	ffi.C.setsockopt(self._fd, SOL_SOCKET, SO_SNDTIMEO, timeout, ffi.sizeof(timeout))
 end
 
 function Conn:close()
@@ -147,12 +148,12 @@ function Conn:close()
 		ffi.C.close(self._fd)
 		self._fd = -1
 	end
-	local srv = self._owner
-	if srv then
+	local server = self._owner
+	if server then
 		self._owner = nil
-		for i, c in ipairs(srv._conns) do
+		for i, c in ipairs(server._conns) do
 			if c == self then
-				table.remove(srv._conns, i)
+				table.remove(server._conns, i)
 				break
 			end
 		end
@@ -207,25 +208,25 @@ function Server:on_data(conn) end
 ---Hook: signal dispatch; also runs after the fds were finally armed.
 function Server:on_io() self:poll(0) end
 
-local function try_arm(srv)
-	if not srv._signal then return true end
-	if not signal_handled(srv._signal) then return false end
-	arm_fd(srv._listen_fd, srv._signal, true)
-	for _, conn in ipairs(srv._conns) do
-		arm_fd(conn._fd, srv._signal, false)
+local function try_arm(server)
+	if not server._signal then return true end
+	if not signal_handled(server._signal) then return false end
+	arm_fd(server._listen_fd, server._signal, true)
+	for _, conn in ipairs(server._conns) do
+		arm_fd(conn._fd, server._signal, false)
 	end
 	return true
 end
 
 ---swayimg installs its signal handlers only after the config script
 ---finished: keep retrying until then, then dispatch what arrived unarmed.
-local function arm_retry(srv, attempt)
-	if srv._listen_fd < 0 or attempt > 100 then return end
-	if try_arm(srv) then
-		srv:on_io()
+local function arm_retry(server, attempt)
+	if server._listen_fd < 0 or attempt > 100 then return end
+	if try_arm(server) then
+		server:on_io()
 		return
 	end
-	if sai and sai.defer_fn then sai.defer_fn(function() arm_retry(srv, attempt + 1) end, 100) end
+	if sai and sai.defer_fn then sai.defer_fn(function() arm_retry(server, attempt + 1) end, 100) end
 end
 
 function Server:accept()

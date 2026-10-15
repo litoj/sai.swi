@@ -64,10 +64,9 @@ function M:new()
 
 	binds.help(self)
 
-	-- the pager rides the mode's own sai tree: one shared layer,
-	-- so the mode's takeover keeps its own header and records pop with its lifecycle.
-	-- a selector with a blank cursor: confirming a line runs it, idle it reads as a plain list.
-	-- persist with the host: a flip parks (never downs) the shared tree
+	-- the pager rides the mode's own sai tree (one shared layer: a mode
+	-- flip parks, never downs it), as a plain list that confirms its lines
+	-- (a run) instead of a cursor walk
 	self.pager = selector.new {
 		_path = self._path .. '.pager',
 		sai = self.sai,
@@ -138,7 +137,7 @@ function M:new()
 			self:set_tab(1)
 		end,
 	}
-	-- image to a small backdrop for the overlay
+	-- shrink the image to a small backdrop for the overlay
 	self.sai.viewer.default_scale = 'keep_width'
 	self.sai.slideshow.default_scale = 'keep_width'
 	if sai.text.background < 0x88000000 then self.sai.text.background = 0xaa1c1c1c end

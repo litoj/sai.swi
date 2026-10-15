@@ -14,10 +14,8 @@ local M = {
 local exiv2 = {}
 setmetatable(exiv2, {
 	__index = function(_, idx)
-		-- the .so resolves exiv2 symbols from the global pool: swayimg provides
-		-- them (its own linked libexiv2), a standalone luajit (tests) does not;
-		-- the handle stays unused, the load itself is the side effect
-		local _ = not _G.sai and require('ffi').load('exiv2', true)
+		-- the .so takes its exiv2 symbols from the process's global pool:
+		-- the app links libexiv2 itself, any other host preloads it beforehand
 		exiv2 = require('sai.bridge.shell').load_so(debug.getinfo(1, 'S').short_src:sub(1, -4) .. 'so')
 		return exiv2[idx]
 	end,

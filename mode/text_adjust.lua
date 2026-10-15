@@ -22,10 +22,10 @@ local locmap = {
 	status = 'ST',
 }
 
----@param loc text_location
+---@param location text_location
 ---@return sai.lib.pager?
-function M:owner_at(loc)
-	local stack = reg.binds[sai.modes[1]][locmap[loc] .. '+ScrollUp']
+function M:owner_at(location)
+	local stack = reg.binds[sai.modes[1]][locmap[location] .. '+ScrollUp']
 	for i = #stack, 1, -1 do
 		local layer = stack[i].layer
 		if layer ~= self and layer ~= self.help_pager then return layer end
@@ -40,17 +40,17 @@ local function add_in_dir(val, dir)
 	end
 end
 
----@param loc text_location
+---@param location text_location
 ---@param dir -1|1 scroll direction: up = -1, down = 1
-function M:adjust_height(loc, dir)
-	local target = self:owner_at(loc)
+function M:adjust_height(location, dir)
+	local target = self:owner_at(location)
 	if not target then
-		sai.notify('No active pager in location: ' .. loc)
+		sai.notify('No active pager in location: ' .. location)
 		return
 	end
 	local val = target.max_height
 	target.max_height = add_in_dir(val, dir)
-	if loc ~= 'status' then
+	if location ~= 'status' then
 		sai.eventloop.trigger {
 			event = 'OptionSet',
 			match = target._path .. '.max_height',
@@ -60,19 +60,19 @@ function M:adjust_height(loc, dir)
 	end
 end
 
----@param loc text_location
+---@param location text_location
 ---@param dir -1|1 scroll direction: up = -1, down = 1
-function M:adjust_scrolloff(loc, dir)
-	local target = self:owner_at(loc)
+function M:adjust_scrolloff(location, dir)
+	local target = self:owner_at(location)
 	-- ignore pager
 	if not target or not rawget(target, '_scroll_ahead') then
-		sai.notify('No active selector in location: ' .. loc)
+		sai.notify('No active selector in location: ' .. location)
 		return
 	end
 	---@cast target sai.mode.selector
 	local val = target.scroll_ahead
 	target.scroll_ahead = add_in_dir(val, dir)
-	if loc ~= 'status' then
+	if location ~= 'status' then
 		sai.eventloop.trigger {
 			event = 'OptionSet',
 			---@diagnostic disable-next-line: invisible
@@ -91,9 +91,9 @@ function M:swap(src, dst)
 		sai.notify('No active pager in location: ' .. src)
 		return
 	end
-	local next = self:owner_at(dst)
+	local occupant = self:owner_at(dst)
 	target.location = dst
-	if next then next.location = src end
+	if occupant then occupant.location = src end
 end
 
 M.super.new(M)

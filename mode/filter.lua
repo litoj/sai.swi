@@ -30,8 +30,8 @@ end
 ---@return number?
 function M:filter_rate(text, item)
 	if text == '' then return 0 end
-	local r = flt.rate(text, self:filter_render(item), false)
-	if r then return -r end
+	local rating = flt.rate(text, self:filter_render(item), false)
+	if rating then return -rating end
 end
 
 ---Default process: rate every source item, stable best-first.

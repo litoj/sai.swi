@@ -24,17 +24,17 @@ end
 function M.__newindex(self, idx, val)
 	local old = rawget(self, '_' .. idx)
 
-	local oio = e.ignore_opts
+	local muted = e.ignore_opts
 	e.ignore_opts = true
 	local setter = rawget(self, 'set_' .. idx)
 	if not setter then
-		e.ignore_opts = oio
+		e.ignore_opts = muted
 		error('tried to set: ' .. self._path .. '.' .. idx)
 	end
 	-- restore the flag even when the setter throws: a stuck flag
 	-- would silence every later OptionSet event
 	local ok, res = pcall(setter, self, val, idx)
-	e.ignore_opts = oio
+	e.ignore_opts = muted
 	if not ok then error(res, 0) end
 
 	if res == nil then -- set the field only if the setter allows it

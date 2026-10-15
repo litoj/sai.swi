@@ -16,15 +16,13 @@ local M = {
 	initialized = false,
 
 	_dnd_button = 'MouseRight',
-	_overlay = true,
+	_overlay = true, ---@package
 	_decoration = true,
 	_antialiasing = true,
 	_exif_orientation = true, ---automatically applied only to raw files
 
 	_fullscreen = false, ---@deprecated fake backing value for declaring the existence of the field
 	_mode = 'viewer', ---@deprecated fake backing value for declaring the existence of the field
-
-	_old_winsize = false, ---@type {width:integer,height:integer}|boolean
 }
 
 M._formats, M.set_formats = U.deep_backer({
@@ -174,29 +172,12 @@ function M.set_title(x) swayimg.title = x end
 proxy.new(M)
 _G.sai = M
 
+---@type {width:integer,height:integer}
+local old_winsize
 swayimg.on_window_resize(function()
-	if type(M._old_winsize) == 'table' then -- handle as normal resize event
-		local ws = swayimg.get_window_size()
-		local ows = M._old_winsize
-		if ows.width ~= ws.width or ows.height ~= ws.height then
-			-- TODO: find a way to distinguish focus events from resizing (both can happen at once)
-			e.trigger { event = 'WinResized', data = ws }
-			M._old_winsize = ws
-		end
-	else -- handle as initialization
-		-- deduplicate initial resizing
-		if not M._old_winsize and not sai.overlay then
-			M._old_winsize = true
-			return
-		elseif M._old_winsize and swayimg.mode ~= 'gallery' then
-			---@diagnostic disable-next-line: assign-type-mismatch
-			local x = M.modes[1] ---@type sai.api.viewer
-			---@diagnostic disable-next-line: invisible
-			x.scale = x._original_default_scale -- fix incorrect initial size with overlay disabled
-		end
-
+	local function init()
 		M.initialized = true
-		M._old_winsize = swayimg.get_window_size()
+		old_winsize = swayimg.get_window_size()
 
 		local ev = { event = 'SwiEnter', data = false }
 		e.trigger(ev)
@@ -224,7 +205,32 @@ swayimg.on_window_resize(function()
 		}
 
 		binds.default()
+
+		swayimg.on_window_resize(function() -- register normal resize hook
+			local ws = swayimg.get_window_size()
+			local ows = old_winsize
+			if ows.width ~= ws.width or ows.height ~= ws.height then
+				-- TODO: find a way to distinguish focus events from resizing (both can happen at once)
+				e.trigger { event = 'WinResized', data = ws }
+				old_winsize = ws
+			end
+		end)
 	end
+
+	swayimg.on_window_resize(function()
+		sai._overlay = false
+		if swayimg.mode ~= 'gallery' then
+			---@diagnostic disable-next-line: assign-type-mismatch
+			local x = M.modes[1] ---@type sai.api.viewer
+			---@diagnostic disable-next-line: invisible
+			x.scale = x._original_default_scale -- fix incorrect initial size with overlay disabled
+		end
+
+		init()
+	end)
+	sai.defer_fn(function()
+		if not M.initialized then init() end
+	end, 10)
 end)
 
 e.subscribe {

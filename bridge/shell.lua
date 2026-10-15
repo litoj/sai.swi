@@ -46,24 +46,24 @@ function M.exec(cmd, async)
 
 	if async then return cmd, select(1, os.execute(('{ %s; } >/dev/null </dev/null &'):format(cmd))) end
 
-	local h = io.popen 'mktemp' or error 'Failed to execute mktemp'
-	local tf = h:read 'l'
-	h:close()
+	local handle = io.popen 'mktemp' or error 'Failed to execute mktemp'
+	local temp_file = handle:read 'l'
+	handle:close()
 
 	local err
-	h, err = io.popen(('{ %s; } 2>%s\necho $?'):format(cmd, tf), 'r')
-	if not h then error('Error executing command: ' .. (err or '')) end
-	local out = h:read 'a'
-	h:close()
+	handle, err = io.popen(('{\n%s\n} 2>%s\necho $?'):format(cmd, temp_file), 'r')
+	if not handle then error('Error executing command: ' .. (err or '')) end
+	local out = handle:read 'a'
+	handle:close()
 
-	h = io.open(tf, 'r')
-	if not h then
+	handle = io.open(temp_file, 'r')
+	if not handle then
 		err = ''
 	else
-		err = h:read 'a'
-		h:close()
+		err = handle:read 'a'
+		handle:close()
 	end
-	os.remove(tf)
+	os.remove(temp_file)
 
 	local code = out:match '(%d+)\n$'
 	out = out:sub(1, -#code - 3)
@@ -74,21 +74,21 @@ end
 
 ---@return string?
 function M.clipboard_get()
-	local p = io.popen('wl-paste -n', 'r')
-	if not p then return end
-	local text = p:read '*a'
-	p:close()
+	local pipe = io.popen('wl-paste -n', 'r')
+	if not pipe then return end
+	local text = pipe:read '*a'
+	pipe:close()
 	return text
 end
 
 ---@param text string
 ---@return boolean ok
 function M.clipboard_set(text)
-	local p = io.popen('wl-copy', 'w')
-	if not p then return false end
-	p:write(text)
+	local pipe = io.popen('wl-copy', 'w')
+	if not pipe then return false end
+	pipe:write(text)
 	sai.notify 'Copied text to clipboard'
-	return p:close()
+	return pipe:close()
 end
 
 ---@param url string
@@ -106,25 +106,25 @@ function M.download(url, path, transform)
 	local out = h:read 'a'
 	h:close()
 
-	local f = io.open(path, 'r')
-	if out ~= '' or not f or f:seek 'end' == 0 then
+	local handle = io.open(path, 'r')
+	if out ~= '' or not handle or handle:seek 'end' == 0 then
 		os.remove(path)
 		error('Failed to download ' .. url .. ': ' .. out)
 	end
-	f:close()
+	handle:close()
 
 	if transform then
-		f = io.open(path, 'r') or error('Could not read downloaded file: ' .. path)
-		local content = f:read 'a'
-		f:close()
+		handle = io.open(path, 'r') or error('Could not read downloaded file: ' .. path)
+		local content = handle:read 'a'
+		handle:close()
 		content = transform(content)
 		if not content then
 			os.remove(path)
 			error('Unexpected contents at ' .. url)
 		end
-		f = io.open(path, 'w') or error('Could not write file: ' .. path)
-		f:write(content)
-		f:close()
+		handle = io.open(path, 'w') or error('Could not write file: ' .. path)
+		handle:write(content)
+		handle:close()
 	end
 end
 
@@ -163,14 +163,14 @@ end
 
 ---@param so_path string path relative to sai as pwd
 function M.compile_so(so_path)
-	local src, cc = source_of(so_path)
+	local src, compiler = source_of(so_path)
 	if not src then error('No source file for module: ' .. so_path) end
 	-- stock Lua C sources expect the luajit include path and the 5.2+ module
 	-- export macro that LuaJIT headers do not define
-	local cflags = cc == 'gcc' and '-I/usr/include/luajit-2.1 -DLUAMOD_API=' or ''
+	local cflags = compiler == 'gcc' and '-I/usr/include/luajit-2.1 -DLUAMOD_API=' or ''
 	local h = io.popen(string.format( --
 		'%s -O2 -shared -fPIC %s -o "%s" "%s" 2>&1 >/dev/null',
-		cc,
+		compiler,
 		cflags,
 		so_path,
 		src

@@ -191,9 +191,9 @@ local function apply_order()
 	-- the cached entries outlive the raw ones: refresh the positional and
 	-- mutable fields before the comparator sees them
 	marked:get_size()
-	for i, e in ipairs(list) do
-		e.index = i
-		e.mark = mmap[e.path] ~= nil
+	for i, entry in ipairs(list) do
+		entry.index = i
+		entry.mark = mmap[entry.path] ~= nil
 	end
 
 	table.sort(list, M._order)
@@ -213,7 +213,6 @@ local function apply_order()
 		if mmap[list[j].path] then re_marks[#re_marks + 1] = list[j].path end
 		list[j].index = j
 	end
-
 	if i == 1 then -- the whole list is out of order
 		api.clear()
 	else
@@ -226,17 +225,17 @@ local function apply_order()
 	mark_raw(re_marks, true, current)
 end
 
-function M.add(x, adjacent)
+function M.add(paths, adjacent)
 	local old = api.size
 	if adjacent == nil then adjacent = M.adjacent end
 
-	if type(x) == 'string' and adjacent and not U.is_dir(x) then
+	if type(paths) == 'string' and adjacent and not U.is_dir(paths) then
 		api.recursive = false
-		x = x:match '.+/'
+		paths = paths:match '.+/'
 	else
 		api.recursive = M.recursive
 	end
-	api.add(x)
+	api.add(paths)
 
 	if old == api.size then return false end
 
@@ -274,7 +273,7 @@ function M:set_order(val)
 	return true
 end
 
--- ensure that we return backed value (possibly fn) and not the api value ('none' for fn)
+-- return the backed value (possibly fn), not the api value ('none' for fn)
 ---@protected
 function M:get_order() return self._order end
 
@@ -341,11 +340,11 @@ function marked.set_current(enabled)
 end
 
 function marked.get()
-	local t = {}
-	for p, _ in pairs(mmap) do
-		t[#t + 1] = p
+	local paths = {}
+	for path in pairs(mmap) do
+		paths[#paths + 1] = path
 	end
-	return t
+	return paths
 end
 
 proxy.new(marked)

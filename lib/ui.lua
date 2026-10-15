@@ -50,13 +50,13 @@ function M.input(opts)
 	if not opts.on_confirm and not co then error('run in coroutine.wrap()ped fn or provide on_confirm', 2) end
 	cfg.on_confirm = co and resumable(co) or function(_, text) opts.on_confirm(text) end
 
-	local inst = editor.new(cfg)
-	if opts.text then inst.text = opts.text end
-	inst.unmap 'Ctrl+Escape'
-	inst.map('Ctrl+Escape', function() inst:confirm(false) end, 'Abort input')
-	inst.enabled = true
+	local editor_mode = editor.new(cfg)
+	if opts.text then editor_mode.text = opts.text end
+	editor_mode.unmap 'Ctrl+Escape'
+	editor_mode.map('Ctrl+Escape', function() editor_mode:confirm(false) end, 'Abort input')
+	editor_mode.enabled = true
 	if co then return coroutine.yield() end
-	return inst
+	return editor_mode
 end
 
 ---The user-facing hook takes the values only, not the selector.
@@ -67,7 +67,7 @@ end
 ---@field on_confirm? fun(result:I|I[]|false) async verdict hook; absent parks the caller (sync style)
 ---@field location? text_location
 
----Marked come back in marking order.
+---Marked items come back in marking order.
 ---@generic I
 ---@param opts? sai.lib.ui.select_opts<I>
 ---@return I|I[]|false|sai.mode.selector the verdict (sync style), or the enabled selector mode (callback style)

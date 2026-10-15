@@ -85,14 +85,8 @@ do
 	function sai.log(msg, file, location) end
 
 	---Execute a shell command.
-	---Escape sequences:
-	--- - `%`: current file unquoted
-	--- - `%f`: current file quoted with singlequotes
-	--- - `%s`: all marked files or current file quoted with singlequotes
-	--- - `%m`: only marked files or don't execute
-	--- - `%%`: normal percentage sign (`%`)
 	---@see event.User.ShellCmdPost
-	---@param cmd string
+	---@param cmd string with escapes: `%` current file, `%f` current file quoted, `%s` marked files (or current) quoted, `%m` only marked files or don't execute, `%%` literal percent
 	---@param async? boolean should the command be launched in the bg (no event will be emitted)
 	---@return string stdout or the expanded command when in async mode
 	---@return integer exitcode
@@ -118,7 +112,7 @@ end
 ---| 'ModeChanged' # match: 'o:n' as in old:new, mode: current mode, data: old mode
 ---| 'Signal' # USR1 or USR2 received by swayimg
 ---| 'OptionSet' # after setting any option in the api, match: opt object path, data: opt value
----| 'Subscribed' # hook sub, match: event, mode: hook's modecfg, data: hook config
+---| 'Subscribed' # hook sub, match: event, mode: hook's mode config, data: hook config
 ---| 'User' # custom user-emitted/triggered signaling
 ---| 'WinResized' # when a window is resized, data: new size
 ---| 'SwiEnter' # just after loading config and initializing imagelist
@@ -319,9 +313,7 @@ end
 
 ---Image list; content changes emit OptionSet(`sai.imagelist.size`).
 ---@class sai.imagelist: sai.api.proxy
----@field order order_t|fun(a:swayimg.entry,b:swayimg.entry):boolean the app's own
----  setting (forwarded to the raw api, default `numeric`), a comparator the
----  list is kept ordered by, or `'none'`
+---@field order order_t|fun(a:swayimg.entry,b:swayimg.entry):boolean the app's own setting (forwarded to the raw api, default `numeric`), a comparator the list is kept ordered by, or `'none'`
 ---@field reverse boolean Reverse the sort order
 ---@field recursive boolean Recursive directory reading
 ---@field adjacent boolean Open adjacent files from the same directory
@@ -412,23 +404,18 @@ do
 	local keybind_processor = {}
 
 	---Map a bind to an action.
-	---The callback receives the event payload:
-	--- - a bind with a block-position prefix (`TL+`/`TR+`/`BL+`/`BR+`/`ST+`):
-	---   the text row within the block, then the block position;
-	--- - `ScrollVertical`/`ScrollHorizontal`: the raw axis value;
-	--- - `Scroll`: the horizontal and the vertical delta;
-	--- - any other bind: nothing, so a function passed directly
-	---   (`sai.exit`, `viewer.pan.left`) works as is.
-	---A prefixed bind fires only under its text block (the block spans
-	---its longest line). The row counts from the content top - for the
-	---bottom corners from the window's bottom edge; nil off the content
-	---rows. An unprefixed mouse bind serves the clicks no qualified bind
-	---claimed.
 	---In a custom mode (a remapper layer) a single-parameter callback
 	---receives the mode instead: such a callback on a payload-carrying
 	---bind needs a second parameter to see the payload.
 	---@param bind string|string[] 1 or more mouse, wheel or keyboard events, e.g. `Alt+s`
-	---@param action fun(...)|string the callback to run, or a shell command to execute
+	---@param action fun(...)|string callback to run, or a shell command to execute
+	--- - `TL+`..`ST+` prefixed bind: the text row within the block, then the block position
+	--- - `ScrollVertical`/`ScrollHorizontal`: the raw axis value
+	--- - `Scroll`: the horizontal and the vertical delta
+	--- - any other bind: nothing, a direct function (`sai.exit`) works as is
+	--- a prefixed bind fires only under its text block (spans its longest line), the row
+	--- counts from the content top (bottom corners: from the window's bottom edge),
+	--- nil off the content rows; an unprefixed mouse bind serves unclaimed clicks
 	---@param opts bindopts|string? extra options, or a short description
 	function keybind_processor.map(bind, action, opts) end
 

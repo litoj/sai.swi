@@ -106,15 +106,15 @@ function server:on_conn(conn)
 
 	local function io(result, err)
 		if result ~= nil or err ~= nil then
-			local s = result or err
-			if not conn:send(string.char(result and 0 or 1) .. pack_u32_le(#s) .. s) then return nil end
+			local payload = result or err
+			if not conn:send(string.char(result and 0 or 1) .. pack_u32_le(#payload) .. payload) then return nil end
 		end
 
-		local h = conn:read(4)
-		if not h then return nil end
-		local n = unpack_u32_le(h)
-		if n > self._max_msg_size then return nil end
-		return conn:read(n)
+		local header = conn:read(4)
+		if not header then return nil end
+		local len = unpack_u32_le(header)
+		if len > self._max_msg_size then return nil end
+		return conn:read(len)
 	end
 
 	pcall(self.handle, io)
@@ -128,7 +128,7 @@ local client = {
 }
 setmetatable(client, { __index = client.super })
 
----Requires just _socket_path set
+---Requires just _socket_path set.
 ---@return self
 function client:new()
 	U.new_object(U.new_object(U.new_object(self, client), M), sock.Conn)

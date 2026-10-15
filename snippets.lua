@@ -10,8 +10,8 @@ function M.update()
 	local bridge_dir = debug.getinfo(1, 'S').source:match '/.+/sai/' .. 'bridge/'
 	sai.exec(('cd %s && git pull'):format(bridge_dir))
 
-	local p = io.popen('ls -1 ' .. bridge_dir .. '*.so') or error('Could not list cpp modules in: ' .. bridge_dir)
-	for so_path in p:lines() do
+	local pipe = io.popen('ls -1 ' .. bridge_dir .. '*.so') or error('Could not list cpp modules in: ' .. bridge_dir)
+	for so_path in pipe:lines() do
 		if os.execute(string.format('[ %s -nt %s ]', so_path:gsub('.so$', '.cpp'), so_path)) ~= 1 then
 			S.compile_so(so_path)
 			local old = package.loaded['sai.bridge.' .. so_path:match '([^/]+)%.so$']
@@ -20,30 +20,24 @@ function M.update()
 			end
 		end
 	end
-	p:close()
+	pipe:close()
 end
 
 function M.load_dir_if_single()
-	local function check_n_load()
-		local l = sai.imagelist
-		if l.size ~= 1 then return end
-		local dir = l.get_current().path:match '.+/'
-
-		-- find follows symlinks (-L): symlinked files are added, symlinked dirs are not
-		local p = io.popen(("find -L '%s' -maxdepth 1 -type f"):format(dir:gsub("'", [['\'']])))
-			or error('Could not list files in: ' .. dir)
-		local files = {}
-		for line in p:lines() do
-			files[#files + 1] = line
-		end
-		p:close()
-		l.add(files)
+	local function check_and_load()
+		local imagelist = sai.imagelist
+		if imagelist.size ~= 1 then return end
+		local dir = imagelist.get_current().path:match '.+/'
+		local was_recursive = imagelist.recursive
+		imagelist.recursive = false
+		imagelist.add(dir) -- to preserve fsmon on the directory
+		imagelist.recursive = was_recursive
 	end
 
 	if sai.initialized then
-		check_n_load()
+		check_and_load()
 	else
-		e.subscribe { event = 'SwiEnter', once = true, callback = check_n_load }
+		e.subscribe { event = 'SwiEnter', once = true, callback = check_and_load }
 	end
 end
 
@@ -96,7 +90,7 @@ function M.print_option_changes(timeout)
 				sai.notify(
 					('%s%s: %s'):format(
 						name:sub(1, 1):upper(),
-						name:sub(2):gsub('[_.](.)', function(x) return ' ' .. x:upper() end),
+						name:sub(2):gsub('[_.](.)', function(c) return ' ' .. c:upper() end),
 						v
 					),
 					timeout
@@ -118,8 +112,8 @@ function M.resize_image_with_window()
 		mode = { 'viewer', 'slideshow' },
 		callback = function(ev)
 			---@diagnostic disable-next-line: assign-type-mismatch
-			local v = sai[ev.mode] ---@type sai.api.viewer
-			if type(v.scale) == 'string' then v.super.set_fix_scale(v.scale) end
+			local viewer = sai[ev.mode] ---@type sai.api.viewer
+			if type(viewer.scale) == 'string' then viewer.super.set_fix_scale(viewer.scale) end
 		end,
 	}
 end
@@ -129,27 +123,27 @@ end
 function M.auto_open_video(cmd)
 	cmd = cmd or 'mpv --no-terminal %f'
 	sai.formats.video = { size = 100, columns = 1, rows = 1 }
-	local disable = function() end
+	local kill_player = function() end
 	e.subscribe {
 		event = 'ImgChanged',
 		match = { 'viewer', 'slideshow' },
 		callback = function(ev)
-			disable()
+			kill_player()
 			if ev.data.format:find('Video', 1, true) then
 				sai.exec(cmd, true)
-				disable = function()
+				kill_player = function()
 					os.execute(("pkill -f '%s'"):format(cmd:gsub('%%[f]?', ev.data.path)))
-					disable = function() end
+					kill_player = function() end
 				end
 			end
 		end,
 	}
-	e.subscribe { event = 'ModeChanged', match = { 'v:g', 's:g' }, callback = function() disable() end }
+	e.subscribe { event = 'ModeChanged', match = { 'v:g', 's:g' }, callback = function() kill_player() end }
 	e.subscribe {
 		event = 'SwiLeavePre',
 		mode = { 'viewer', 'slideshow' },
 		callback = function()
-			disable()
+			kill_player()
 			return true
 		end,
 	}
@@ -160,15 +154,15 @@ end
 ---@param current O
 ---@return O?
 function M.cycle_values(values, current)
-	for i, mode in ipairs(values) do
-		if mode == current then return values[i % #values + 1] end
+	for i, value in ipairs(values) do
+		if value == current then return values[i % #values + 1] end
 	end
 end
 
 function M.cycle_scale()
 	local api = sai.modes[1] ---@cast api sai.api.viewer
 	---@type fixed_scale_t[]
-	local modes = {
+	local values = {
 		'optimal',
 		'width',
 		'height',
@@ -178,18 +172,18 @@ function M.cycle_scale()
 		'keep',
 	}
 	for k, _ in pairs(api.custom_scale_handlers) do
-		if type(k) == 'string' then modes[#modes + 1] = k end
+		if type(k) == 'string' then values[#values + 1] = k end
 	end
 
 	local current = api.scale
 	if type(current) ~= 'string' then current = 'keep' end
-	api.scale = M.cycle_values(modes, current)
+	api.scale = M.cycle_values(values, current)
 end
 
 function M.cycle_position()
 	local api = sai.modes[1] ---@cast api sai.api.viewer
 	---@type fixed_position_t[]
-	local modes = {
+	local values = {
 		'center',
 		'topcenter',
 		'leftcenter',
@@ -202,19 +196,19 @@ function M.cycle_position()
 	}
 
 	local current = type(api.position) == 'string' and api.position or 'center'
-	api.position = M.cycle_values(modes, current)
+	api.position = M.cycle_values(values, current)
 end
 
 function M.cycle_auto_pos()
 	local api = sai.modes[1] ---@cast api sai.api.viewer
 	---@type autopos_t[]
-	local modes = {
+	local values = {
 		'center',
 		'follow',
 		'free',
 	}
 
-	api.auto_pos = M.cycle_values(modes, api.auto_pos)
+	api.auto_pos = M.cycle_values(values, api.auto_pos)
 end
 
 ---@param key string?
@@ -272,9 +266,9 @@ function M.lua_mode()
 		local cb, syntax = S.make_runnable(text)
 		if not cb then return false, syntax end
 
-		local ran, res = pcall(cb)
-		if not ran then return false, 'Runtime error: ' .. res:gsub('^.-:%d:%s*', '') end
-		return true, res
+		local ran, result = pcall(cb)
+		if not ran then return false, 'Runtime error: ' .. result:gsub('^.-:%d:%s*', '') end
+		return true, result
 	end
 	---@diagnostic disable-next-line: missing-fields
 	return editor.new {
@@ -297,12 +291,12 @@ function M.shell_mode()
 
 		-- the editor owns the lifecycle and emits the message; a throw
 		-- (bad % expansion, no shell to run in) counts as a failed run
-		local ok, res, code, err = pcall(sai.exec, text)
-		if not ok then return false, res end
+		local ok, out, code, err = pcall(sai.exec, text)
+		if not ok then return false, out end
 		if tonumber(code) ~= 0 then
-			return false, ('Shell exited %s: %s'):format(tostring(code), err ~= '' and err or res)
+			return false, ('Shell exited %s: %s'):format(tostring(code), err ~= '' and err or out)
 		end
-		return true, res
+		return true, out
 	end
 	---@diagnostic disable-next-line: missing-fields
 	return editor.new {

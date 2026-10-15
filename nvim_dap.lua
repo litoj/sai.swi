@@ -20,14 +20,14 @@ local function socket_path(pid) return ('%s/sai-debug-%d.sock'):format(runtime_d
 ---@param probe? sai.nvim_dap.probe
 ---@return { pid: integer, path: string }[]
 function M.sockets(probe)
-	local glob = probe and probe.glob or function(pat) return vim.fn.glob(pat, false, true) end
+	local glob = probe and probe.glob or function(pattern) return vim.fn.glob(pattern, false, true) end
 	local fs_stat = probe and probe.fs_stat or uv().fs_stat
-	local out = {}
+	local found = {}
 	for _, path in ipairs(glob(runtime_dir .. '/sai-debug-*.sock')) do
 		local pid = tonumber(path:match 'sai%-debug%-(%d+)%.sock$')
-		if pid and fs_stat(('/proc/%d'):format(pid)) then out[#out + 1] = { pid = pid, path = path } end
+		if pid and fs_stat(('/proc/%d'):format(pid)) then found[#found + 1] = { pid = pid, path = path } end
 	end
-	return out
+	return found
 end
 
 ---@param config table attach config: explicit `pipe`/`pid` or auto-discovery
@@ -44,6 +44,7 @@ function M.resolve(config, probe)
 		if fs_stat(path) then return path, 1 end
 		return nil, 0
 	end
+	-- a dead pid leaves the socket: /proc/<pid> alive means a live instance
 	local found = M.sockets(probe)
 	if #found == 1 then return found[1].path, 1 end
 	return nil, #found

@@ -12,7 +12,7 @@ local B = require 'sai.lib.bindmods'
 ---@field _path? string path to the module for error processing
 ---@field _mappings? sai.lib.keybind_processor.bindmap
 ---@field warn_on_duplicates? boolean warn on duplicate plain binds
---- TODO: make modebase translate multimaps (`cd`) correctly and use sig USR1 for fallback
+-- TODO: make modebase translate multimaps (`cd`) correctly and use sig USR1 for fallback
 ---@field _rawmap? fun(self:self,bind:string,cfg:bindcfg,action:fun(...)) must be overridden by inheriting class
 ---@field _rawunmap? fun(self:self,bind:string)
 local M = {

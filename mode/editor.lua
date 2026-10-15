@@ -206,32 +206,32 @@ function M:select_all()
 	self.col = utf8.len(self._lines[#self._lines]) + 1
 end
 
----@return integer l1, integer c1, integer l2, integer c2 the ordered span, end-exclusive
+---@return integer line1, integer col1, integer line2, integer col2 the ordered span, end-exclusive
 function M:selection()
-	local l1, c1, l2, c2 = self._line, self._col, self._line, self._col
-	local v = self._visual
-	if v and (v.line < l1 or (v.line == l1 and v.col < c1)) then
-		l1, c1, l2, c2 = v.line, v.col, l1, c1
-	elseif v then
-		l2, c2 = v.line, v.col
+	local line1, col1, line2, col2 = self._line, self._col, self._line, self._col
+	local anchor = self._visual
+	if anchor and (anchor.line < line1 or (anchor.line == line1 and anchor.col < col1)) then
+		line1, col1, line2, col2 = anchor.line, anchor.col, line1, col1
+	elseif anchor then
+		line2, col2 = anchor.line, anchor.col
 	end
-	return l1, c1, l2, c2
+	return line1, col1, line2, col2
 end
 
 function M:copy()
 	if not self._visual then return end
 	-- the selection end is exclusive, like for insert/delete
-	local l1, c1, l2, c2 = self:selection()
+	local line1, col1, line2, col2 = self:selection()
 	local lines = self._lines
 	local text
-	if l1 == l2 then
-		text = utf8.sub(lines[l1], c1, c2 - 1)
+	if line1 == line2 then
+		text = utf8.sub(lines[line1], col1, col2 - 1)
 	else
-		local parts = { utf8.sub(lines[l1], c1) }
-		for i = l1 + 1, l2 - 1 do
+		local parts = { utf8.sub(lines[line1], col1) }
+		for i = line1 + 1, line2 - 1 do
 			parts[#parts + 1] = lines[i]
 		end
-		parts[#parts + 1] = utf8.sub(lines[l2], 1, c2 - 1)
+		parts[#parts + 1] = utf8.sub(lines[line2], 1, col2 - 1)
 		text = table.concat(parts, '\n')
 	end
 	S.clipboard_set(text)
@@ -352,26 +352,26 @@ end)
 -- Text state
 -- ---------------------------------------------------------------------------
 
----Replace the span from (l1,c1) inclusive to (l2,c2) exclusive with text.
+---Replace the span from (line1,col1) inclusive to (line2,col2) exclusive with text.
 ---The caller places the cursor: the line/col setters clamp it into the new lines.
----@param l1 integer
----@param c1 integer
----@param l2 integer
----@param c2 integer
+---@param line1 integer
+---@param col1 integer
+---@param line2 integer
+---@param col2 integer
 ---@param text string already sanitized
-local function splice(self, l1, c1, l2, c2, text)
+local function splice(self, line1, col1, line2, col2, text)
 	local lines = self._lines
 	local middle = split_lines(text)
-	middle[1] = utf8.sub(lines[l1], 1, c1 - 1) .. middle[1]
-	middle[#middle] = middle[#middle] .. utf8.sub(lines[l2], c2)
+	middle[1] = utf8.sub(lines[line1], 1, col1 - 1) .. middle[1]
+	middle[#middle] = middle[#middle] .. utf8.sub(lines[line2], col2)
 	local out = {}
-	for i = 1, l1 - 1 do
+	for i = 1, line1 - 1 do
 		out[#out + 1] = lines[i]
 	end
 	for i = 1, #middle do
 		out[#out + 1] = middle[i]
 	end
-	for i = l2 + 1, #lines do
+	for i = line2 + 1, #lines do
 		out[#out + 1] = lines[i]
 	end
 	self.lines = out
@@ -382,19 +382,19 @@ function M:insert(text)
 	-- coerce bad bytes to '?'; keep utf8.len() valid
 	text = utf8(text)
 	-- selection() already orders the span, end-exclusive
-	local l1, c1, l2, c2 = self:selection()
+	local line1, col1, line2, col2 = self:selection()
 	self._visual = false
 
 	local pieces = split_lines(text)
-	local cl, cc
+	local cursor_line, cursor_col
 	if #pieces == 1 then
-		cl, cc = l1, c1 + utf8.len(text)
+		cursor_line, cursor_col = line1, col1 + utf8.len(text)
 	else
-		cl, cc = l1 + #pieces - 1, utf8.len(pieces[#pieces]) + 1
+		cursor_line, cursor_col = line1 + #pieces - 1, utf8.len(pieces[#pieces]) + 1
 	end
-	splice(self, l1, c1, l2, c2, text)
-	self.line = cl
-	self.col = cc
+	splice(self, line1, col1, line2, col2, text)
+	self.line = cursor_line
+	self.col = cursor_col
 
 	if self.on_text_changed then self:on_text_changed(self.text) end
 end
@@ -410,11 +410,11 @@ function M:delete(from, to)
 			if abs == 1 then return end
 			from = abs - 1
 		else
-			local l1, c1, l2, c2 = self:selection()
+			local line1, col1, line2, col2 = self:selection()
 			self._visual = false
-			splice(self, l1, c1, l2, c2, '')
-			self.line = l1
-			self.col = c1
+			splice(self, line1, col1, line2, col2, '')
+			self.line = line1
+			self.col = col1
 			if self.on_text_changed then self:on_text_changed(self.text) end
 			return
 		end
@@ -426,27 +426,27 @@ function M:delete(from, to)
 	end
 
 	if from == 0 then return end
-	if from < 0 or to <= 0 then error 'Only positive indexes allwed in delete()' end
-	local l1, c1 = line_col(self._lines, from)
-	local l2, c2 = line_col(self._lines, to + 1)
+	if from < 0 or to <= 0 then error 'Only positive indexes allowed in delete()' end
+	local line1, col1 = line_col(self._lines, from)
+	local line2, col2 = line_col(self._lines, to + 1)
 	if self._visual then self._visual = false end
-	splice(self, l1, c1, l2, c2, '')
-	self.line = l1
-	self.col = c1
+	splice(self, line1, col1, line2, col2, '')
+	self.line = line1
+	self.col = col1
 
 	if self.on_text_changed then self:on_text_changed(self.text) end
 end
 
 ---`true` files the input and closes, `false` stays open, anything else closes;
 ---a second return value is the message to notify, emitted after the mode settles.
----@param res string[]|false
-function M:_handle_result(res)
-	if not res then return end
+---@param result string[]|false
+function M:_handle_result(result)
+	if not result then return end
 	self._verdict = 1
 	-- torn down first: the callback works outside the mode, its message
 	-- lands after the re-enable render that would otherwise cover it
 	self.enabled = false
-	local verdict, msg = self:on_confirm(res)
+	local verdict, msg = self:on_confirm(result)
 	if verdict == false then
 		self.enabled = true
 	else
@@ -454,7 +454,7 @@ function M:_handle_result(res)
 			if self.history then
 				-- the input is consumed: the cycle must not recall its own entry
 				if self.update_history then
-					self.history:add(table.concat(res, '\n'))
+					self.history:add(table.concat(result, '\n'))
 				else
 					self.history:reset()
 				end

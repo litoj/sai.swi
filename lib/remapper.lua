@@ -20,15 +20,15 @@ local var_reg = require('sai.lib.registry').vars
 ---@field component? boolean machinery: hosted below a mode, no ModePush/ModePop of its own
 ---@field map_filter? false|fun(bind:string,bindcfg:bindcfg):boolean filter for the binds to map on enable, true to remove
 local M = {
-	warn_on_duplicates = true, --- for keybind_process
-	help_pager = false, --- the mode opted out of the corner display
-	component = false, --- machinery: hosted below a mode, no ModePush/ModePop of its own
+	warn_on_duplicates = true, -- for keybind_process
+	help_pager = false, -- the mode opted out of the corner display
+	component = false, -- machinery: hosted below a mode, no ModePush/ModePop of its own
 
 	-- map filter, true to remove
 	---@type false|fun(bind:string,bindcfg:bindcfg):boolean
 	map_filter = false,
 	persist_mode_change = false,
-	on_unassigned = false, --- plain field: direct assignment, no backer
+	on_unassigned = false, -- plain field: direct assignment, no backer
 
 	---@type sai.api.mode_base|false
 	_mode_api = false, -- the app mode the layer is bound to
@@ -57,8 +57,8 @@ function M:new()
 	}
 
 	-- the corner display: its own tree (a shared one would release the
-	-- layer's records whenever the display toggles alone); an actual
-	-- mode's own, machinery below a host brings none
+	-- layer's records whenever the display toggles alone); an actual mode's
+	-- own, machinery below a host brings none
 	if mode_layer and self._path and self.help_pager == nil then
 		-- lazy require + opt-out: the display is a pager, its own
 		-- construction would recurse into this block
@@ -72,7 +72,7 @@ function M:new()
 	return backer.new(kp.new(U.new_object(self, M)))
 end
 
-local fndbg = debug.getinfo
+local getinfo = debug.getinfo
 
 ---Inject the mode instance into single-argument callbacks; the captured
 ---arguments ride along after it.
@@ -85,7 +85,7 @@ function M:_rawmap(b, cfg, fn)
 	if cfg and not cfg._wrapped then
 		---@diagnostic disable-next-line: inject-field -- internal wrap memo
 		cfg._wrapped = true
-		if type(fn) == 'function' and fndbg(fn, 'u').nparams == 1 then cfg.cb = function(...) fn(self, ...) end end
+		if type(fn) == 'function' and getinfo(fn, 'u').nparams == 1 then cfg.cb = function(...) fn(self, ...) end end
 	end
 
 	if not self._enabled then return end
@@ -133,7 +133,7 @@ function M:_set_active(val)
 
 		if self.on_unassigned then
 			local api = self._mode_api
-			-- resolve below live, so a popped layer is never called
+			-- resolve live at call time, so a popped layer is never called
 			---@diagnostic disable-next-line: invisible, need-check-nil -- the mode's own raw field
 			local override = { old = api._on_unassigned }
 			override.new = function(key) self:on_unassigned(key, var_reg[api].on_unassigned[self].old) end
@@ -150,8 +150,8 @@ function M:_set_active(val)
 	else
 		if self.help_pager then self.help_pager.enabled = false end
 
-		local oou = var_reg[self._mode_api].on_unassigned:set(self, nil)
-		if oou then self._mode_api.on_unassigned = oou end
+		local restored = var_reg[self._mode_api].on_unassigned:set(self, nil)
+		if restored then self._mode_api.on_unassigned = restored end
 
 		for b, stack in pairs(binds[self._mode_api]) do
 			local old = stack:set(self)

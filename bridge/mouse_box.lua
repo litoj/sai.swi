@@ -16,9 +16,6 @@ local M = {
 	---The renderer pads every block line with `size * hpad_factor` px on
 	---each side, inside the block. Calibrated together with the width.
 	hpad_factor = 0,
-	---Test seam: fixed metrics instead of the real font lookup.
-	---@type false|fun(font:string, size:integer):number?, number?
-	_stub_metrics = false,
 }
 
 ---@type {[string]:text_location} the block address space by section code
@@ -48,11 +45,10 @@ setmetatable(utf8, {
 local function line_px(size, spacing, factor) return math.floor(math.floor(spacing * size) + size * factor) end
 
 local calibrated
----The first mouse query pays the font and utf8 loads: nothing before it loads.
 local function ensure_calibrated()
 	if calibrated then return end
 	calibrated = true
-	M.calibrate(sai.text.font, sai.text.size)
+	M.calibrate(sai.text.font, sai.text.size) -- the first query pays the font and utf8 loads
 end
 
 ---The pointer plus the px metrics it is judged against.
@@ -84,13 +80,13 @@ function M.rows_in(height, factor) return math.floor(height / line_px(sai.text.s
 ---@return integer
 local function block_rows(mt, loc)
 	if loc == 'status' then
-		local s = sai.text.status
-		if s == '' then return 0 end
-		return select(2, s:gsub('\n', '')) + 1
+		local status = sai.text.status
+		if status == '' then return 0 end
+		return select(2, status:gsub('\n', '')) + 1
 	end
 	---@diagnostic disable-next-line: invisible
-	local tr = mt._tracked[loc]
-	return tr and #tr.processed or #mt['_' .. loc] ---@diagnostic disable-next-line: invisible
+	local tracked = mt._tracked[loc]
+	return tracked and #tracked.processed or #mt['_' .. loc] ---@diagnostic disable-next-line: invisible
 end
 
 ---The block width in cells plus its layout: mode_text keeps it current at
@@ -102,14 +98,14 @@ end
 local function block_cells(mt, loc)
 	if loc == 'status' then
 		local w = 0
-		for l in sai.text.status:gmatch '[^\n]+' do
-			w = math.max(w, utf8.len(l) or #l) -- a bad byte renders as one glyph
+		for line in sai.text.status:gmatch '[^\n]+' do
+			w = math.max(w, utf8.len(line) or #line) -- a bad byte renders as one glyph
 		end
 		return w, false
 	end
 	---@diagnostic disable-next-line: invisible
-	local m = mt._metrics[loc]
-	return m and m.cells or 0, m and m.kv or false
+	local metrics = mt._metrics[loc]
+	return metrics and metrics.cells or 0, metrics and metrics.kv or false
 end
 
 ---The horizontal span of a block's text.
@@ -123,11 +119,11 @@ end
 local function x_span(p, loc, cells, kv)
 	local w = cells * p.cellpx + (kv and 2 * p.hpad or 0)
 	if loc == 'topleft' or loc == 'bottomleft' then
-		local x0 = p.pad + p.hpad
-		return x0, x0 + w
+		local left = p.pad + p.hpad
+		return left, left + w
 	end
-	local x1 = p.ws.width - p.pad - p.hpad
-	return x1 - w, x1
+	local right = p.ws.width - p.pad - p.hpad
+	return right - w, right
 end
 
 ---Which candidate section's block contains the pointer; first match wins.
@@ -153,8 +149,8 @@ function M.block_at(sections)
 			end
 			if p.m.x >= x0 and p.m.x <= x1 then
 				if s == 'TL' or s == 'TR' then
-					local idx = math.floor((p.m.y - p.pad) / p.linepx) + 1
-					if idx >= 1 and idx <= rows then return s, idx ~= 1 and idx - 1 or nil, loc end
+					local row = math.floor((p.m.y - p.pad) / p.linepx) + 1
+					if row >= 1 and row <= rows then return s, row ~= 1 and row - 1 or nil, loc end
 				else
 					-- a bottom block anchors at the window's bottom edge:
 					-- the last line sits on it, the header above the first
@@ -293,30 +289,30 @@ end)
 ---@param size integer pixel size
 ---@return number? cell any character's advance in px (a monospace cell)
 ---@return number? hpad the padding inside a rendered block line, in px
-local function font_metrics(font, size)
+function M.font_metrics(font, size)
 	local fc = fontlibs.fc
 
 	-- the app's own font resolution: parse, substitute, match, take the file
-	local cfg = fc.FcInitLoadConfigAndFonts()
-	if cfg == nil then return end
-	local pat = fc.FcNameParse(ffi.cast('const FcChar8*', font))
-	if pat == nil then
-		fc.FcConfigDestroy(cfg)
+	local config = fc.FcInitLoadConfigAndFonts()
+	if config == nil then return end
+	local pattern = fc.FcNameParse(ffi.cast('const FcChar8*', font))
+	if pattern == nil then
+		fc.FcConfigDestroy(config)
 		return
 	end
-	fc.FcConfigSubstitute(cfg, pat, 0) -- 0 = FcMatchPattern, like the app
-	fc.FcDefaultSubstitute(pat)
-	local match = fc.FcFontMatch(cfg, pat, ffi.new 'FcResult[1]')
-	fc.FcPatternDestroy(pat)
+	fc.FcConfigSubstitute(config, pattern, 0) -- 0 = FcMatchPattern, like the app
+	fc.FcDefaultSubstitute(pattern)
+	local match = fc.FcFontMatch(config, pattern, ffi.new 'FcResult[1]')
+	fc.FcPatternDestroy(pattern)
 	if match == nil then
-		fc.FcConfigDestroy(cfg)
+		fc.FcConfigDestroy(config)
 		return
 	end
 	local file = ffi.new 'FcChar8*[1]'
 	-- the string is owned by the pattern: copy it before the destroy frees it
 	local path = fc.FcPatternGetString(match, 'file', 0, file) == 0 and ffi.string(file[0]) or nil
 	fc.FcPatternDestroy(match)
-	fc.FcConfigDestroy(cfg)
+	fc.FcConfigDestroy(config)
 	if not path then return end
 
 	local lib = ffi.new 'FT_LibraryRec*[1]'
@@ -330,10 +326,12 @@ local function font_metrics(font, size)
 	ft.FT_Set_Pixel_Sizes(face[0], 0, size)
 
 	-- the app falls back to '?' for a glyph the font lacks
-	local idx = ft.FT_Get_Char_Index(face[0], string.byte 'M')
-	if idx == 0 then idx = ft.FT_Get_Char_Index(face[0], string.byte '?') end
-	local adv = ffi.new 'FT_Fixed[1]'
-	local cell = idx ~= 0 and ft.FT_Get_Advance(face[0], idx, 0, adv) == 0 and math.floor(tonumber(adv[0]) / 65536)
+	local glyph = ft.FT_Get_Char_Index(face[0], string.byte 'M')
+	if glyph == 0 then glyph = ft.FT_Get_Char_Index(face[0], string.byte '?') end
+	local advance = ffi.new 'FT_Fixed[1]'
+	local cell = glyph ~= 0
+			and ft.FT_Get_Advance(face[0], glyph, 0, advance) == 0
+			and math.floor(tonumber(advance[0]) / 65536)
 		or nil
 	-- a block line is a pixmap padded with a third of its base height
 	local hpad = math.floor(math.floor(tonumber(face[0].size.metrics.height) / 64) / 3)
@@ -347,7 +345,7 @@ end
 ---@param font string face name, as `sai.text.font` holds it
 ---@param size integer pixel size
 function M.calibrate(font, size)
-	local ok, cell, hpad = pcall(M._stub_metrics or font_metrics, font, size)
+	local ok, cell, hpad = pcall(M.font_metrics, font, size)
 	if ok and cell and cell > 0 then
 		M.width_factor = cell / size
 		M.hpad_factor = (hpad or 0) / size

@@ -120,12 +120,12 @@ end
 local HOME = os.getenv 'HOME'
 
 ---Define your custom rendering of long filenames
----@param x swayimg.image|swayimg.entry
+---@param entry swayimg.image|swayimg.entry
 ---@return string
-function M:render_item(x)
+function M:render_item(entry)
 	---@diagnostic disable: cast-local-type
-	x = x.path:gsub(HOME, '~', 1) -- take first letter of each word in the path and the full filename
-	return x:match('.*/'):gsub('([a-zA-Z])[a-z0-9]+', '%1') .. x:match '[^/]+$'
+	local path = entry.path:gsub(HOME, '~', 1) -- take first letter of each word in the path and the full filename
+	return path:match('.*/'):gsub('([a-zA-Z])[a-z0-9]+', '%1') .. path:match '[^/]+$'
 end
 
 ---@private
@@ -284,7 +284,7 @@ function M:filter_process()
 	return { nf = nf, lines = lines, ordered = ordered_filtered_paths }
 end
 
----Push the matches into the results list and the live imagelist.
+---Push the matches into the results list and the live l.
 ---@param matches {nf:{[string]:imgmeta}, lines:string[], ordered:string[]}
 function M:filter_show(matches)
 	local of = self._filtered

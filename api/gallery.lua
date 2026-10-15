@@ -68,10 +68,10 @@ M.go = setmetatable({}, {
 })
 
 ---@protected
-function M:set_cache_size(x)
-	x = math.floor(x)
-	self.super.cache = x
-	self._cache_size = x
+function M:set_cache_size(size)
+	size = math.floor(size)
+	self.super.cache = size
+	self._cache_size = size
 	return true
 end
 
@@ -90,7 +90,7 @@ M.set_thumb_size = set_int
 M.set_padding_size = set_int
 M.set_border_size = set_int
 
--- NOTE: injecting function to also affect mode_text
+-- inject the getter to also affect mode_text
 local api_get_img = api.get_image
 function api.get_image()
 	local img = api_get_img()
@@ -103,8 +103,8 @@ e.subscribe { -- ad-hoc registering for when user wants to subscribe
 	pattern = 'ImgChanged',
 	once = true,
 	callback = function(ev)
-		local h = ev.data ---@type hook.ImgChanged|hook_cfg
-		if not h.mode.gallery and not h.pattern.gallery then return end
+		local hook = ev.data ---@type hook.ImgChanged|hook_cfg
+		if not hook.mode.gallery and not hook.pattern.gallery then return end
 
 		api.on_image_change(
 			function()

@@ -227,9 +227,8 @@ function U.pretty_trace(action_match, stacktrace)
 			:gsub('[^\n<"]+/swayimg/', '') -- trim path to config dir
 			:gsub('[ \t]*%./', '') -- trim path to config dir
 			:gsub("in function '*([^%s']+)'?", '%1()') -- format as a fn call
-			-- :gsub('\n%s+%[C%][^\n]+', '') -- trim [C] calls
-			:gsub('\n(%S)', '\n\t%1')
-	) -- indent continuing lines
+			:gsub('\n(%S)', '\n\t%1') -- indent continuing lines
+	)
 end
 
 ---Group keybinds by action, best-described first.
@@ -320,7 +319,7 @@ end
 function U.get_dynvars(wrapper)
 	local backed
 	for k, v in pairs(rawget(wrapper, 'super') or {}) do
-		if type(k) == 'userdata' then -- the raw cpp api has fieldmethods hidden in an object
+		if type(k) == 'userdata' then -- the raw C++ api has field methods hidden in an object
 			backed = v
 			break
 		end
@@ -414,8 +413,8 @@ function U.timer()
 	end
 
 	local time = os.clock()
-	return function(tmsg)
-		print(tmsg .. '; cpu in ms:\t' .. math.floor((os.clock() - time) * 1000))
+	return function(msg)
+		print(msg .. '; cpu in ms:\t' .. math.floor((os.clock() - time) * 1000))
 		time = os.clock()
 	end
 end
@@ -443,9 +442,9 @@ function U.is_dir(path)
 		probe:close()
 		return true
 	end
-	local f = io.open(path, 'r')
-	if not f then error('no such path: ' .. path) end
-	f:close()
+	local file = io.open(path, 'r')
+	if not file then error('no such path: ' .. path) end
+	file:close()
 	return false
 end
 

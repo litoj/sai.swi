@@ -42,17 +42,22 @@ end)
 function M.xkb_to_utf8(k)
 	local toi = math.floor
 	local ch = string.char
-	k = xkb.xkb_keysym_to_utf32(type(k) == 'string' and xkb.xkb_keysym_from_name(k, 0) or k)
-	if k == 0 then return end
+	local cp = xkb.xkb_keysym_to_utf32(type(k) == 'string' and xkb.xkb_keysym_from_name(k, 0) or k)
+	if cp == 0 then return end
 
-	if k < 0x80 then
-		return ch(k)
-	elseif k < 0x800 then
-		return ch(0xC0 + toi(k / 0x40), 0x80 + k % 0x40)
-	elseif k < 0x10000 then
-		return ch(0xE0 + toi(k / 0x1000), 0x80 + toi(k / 0x40) % 0x40, 0x80 + k % 0x40)
+	if cp < 0x80 then
+		return ch(cp)
+	elseif cp < 0x800 then
+		return ch(0xC0 + toi(cp / 0x40), 0x80 + cp % 0x40)
+	elseif cp < 0x10000 then
+		return ch(0xE0 + toi(cp / 0x1000), 0x80 + toi(cp / 0x40) % 0x40, 0x80 + cp % 0x40)
 	else
-		return ch(0xF0 + toi(k / 0x40000), 0x80 + toi(k / 0x1000) % 0x40, 0x80 + toi(k / 0x40) % 0x40, 0x80 + k % 0x40)
+		return ch(
+			0xF0 + toi(cp / 0x40000),
+			0x80 + toi(cp / 0x1000) % 0x40,
+			0x80 + toi(cp / 0x40) % 0x40,
+			0x80 + cp % 0x40
+		)
 	end
 end
 
@@ -60,20 +65,23 @@ end
 ---@return string|false keysym
 function M.utf8_to_xkb(utf8_char)
 	local byte = string.byte
-	local k, b2, b3, b4 = byte(utf8_char, 1, 4)
-	if not k or (k < 128 and b2) then return false end
+	local b1, b2, b3, b4 = byte(utf8_char, 1, 4)
+	if not b1 or (b1 < 128 and b2) then return false end
 
-	if k >= 0xF0 then
-		k = (k % 0x8) * 0x40000 + (b2 % 0x40) * 0x1000 + (b3 % 0x40) * 0x40 + b4 % 0x40
-	elseif k >= 0xE0 then
-		k = (k % 0x10) * 0x1000 + (b2 % 0x40) * 0x40 + b3 % 0x40
-	elseif k >= 0xC0 then
-		k = (k % 0x20) * 0x40 + b2 % 0x40
+	local cp
+	if b1 >= 0xF0 then
+		cp = (b1 % 0x8) * 0x40000 + (b2 % 0x40) * 0x1000 + (b3 % 0x40) * 0x40 + b4 % 0x40
+	elseif b1 >= 0xE0 then
+		cp = (b1 % 0x10) * 0x1000 + (b2 % 0x40) * 0x40 + b3 % 0x40
+	elseif b1 >= 0xC0 then
+		cp = (b1 % 0x20) * 0x40 + b2 % 0x40
+	else
+		cp = b1
 	end
 
-	k = xkb.xkb_utf32_to_keysym(k)
+	local keysym = xkb.xkb_utf32_to_keysym(cp)
 	local buf = ffi.new 'char[32]'
-	xkb.xkb_keysym_get_name(k, buf, 32)
+	xkb.xkb_keysym_get_name(keysym, buf, 32)
 	return ffi.string(buf)
 end
 
@@ -153,10 +161,10 @@ M.key_map.SV = 'ScrollVertical'
 M.key_map.SH = 'ScrollHorizontal'
 
 for i = string.byte 'A', string.byte 'Z' do
-	local lc = string.char(i + 32)
-	local uc = string.char(i)
-	M.rev_key_map['Shift+' .. lc] = uc
-	M.key_map[uc] = lc
+	local lower = string.char(i + 32)
+	local upper = string.char(i)
+	M.rev_key_map['Shift+' .. lower] = upper
+	M.key_map[upper] = lower
 end
 
 setmetatable(M.key_map, {
@@ -184,7 +192,7 @@ function M.userbind_to_xkb(bind)
 		bind = bind:sub(1, -#key - 1) .. (M.key_map[key] or key)
 	end
 
-	-- ensure order of modifiers - Ctrl, Alt, Shift
+	-- ensure order of modifiers: Ctrl, Alt, Shift
 	bind = bind:gsub('Alt+(.*)Ctrl', '%1Ctrl+Alt'):gsub('Shift+(.*)Alt', '%1Alt+Shift')
 	return bind
 end
@@ -194,9 +202,10 @@ local mods = { Ctrl = 'C', Alt = 'A', Shift = 'S' }
 ---@param bind string
 ---@return string
 function M.short_key_name(bind)
-	bind = bind:gsub('([^+-]+)[+-]', function(x) return (mods[x] or x) .. '-' end):gsub('ISO_Left_Tab$', 'Tab')
+	bind = bind:gsub('([^+-]+)[+-]', function(m) return (mods[m] or m) .. '-' end):gsub('ISO_Left_Tab$', 'Tab')
 
 	local key = bind:match '[^+-]*.$'
+	-- single chars stand as-is, no bracket
 	if #bind == 1 and key:match '[%d%l]' then return key end
 	-- keep the readable xkb name for anything below a printable char (space):
 	-- non-printable keysyms (Home, F1, Tab) map via xkb_to_utf8 to a control

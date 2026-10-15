@@ -223,17 +223,17 @@ end
 local function parse_frames(conn)
 	local buf = conn._buffer
 	while true do
-		local hend = buf:find('\r\n\r\n', 1, true)
-		if not hend then break end
+		local header_end = buf:find('\r\n\r\n', 1, true)
+		if not header_end then break end
 		local len = tonumber(buf:match '^Content%-Length:%s*(%d+)')
-		local bstart = hend + 4
+		local body_start = header_end + 4
 		if not len then
-			buf = buf:sub(bstart)
-		elseif #buf < bstart - 1 + len then
+			buf = buf:sub(body_start)
+		elseif #buf < body_start - 1 + len then
 			break
 		else
-			local ok, msg = pcall(cjson.decode, buf:sub(bstart, bstart - 1 + len))
-			buf = buf:sub(bstart + len)
+			local ok, msg = pcall(cjson.decode, buf:sub(body_start, body_start - 1 + len))
+			buf = buf:sub(body_start + len)
 			if ok then
 				S.queue[#S.queue + 1] = msg
 			else
@@ -248,10 +248,10 @@ local function parse_frames(conn)
 	end
 end
 
-local function send_msg(m)
+local function send_msg(msg)
 	S.seq = S.seq + 1
-	m.seq = S.seq
-	local ok, enc = pcall(cjson.encode, m)
+	msg.seq = S.seq
+	local ok, enc = pcall(cjson.encode, msg)
 	if not ok then
 		log_err('encode error: ' .. tostring(enc))
 		return
@@ -324,7 +324,7 @@ function handlers.setBreakpoints(req)
 			local spec = { hits = 0 }
 			if type(bp.condition) == 'string' then spec.cond = bp.condition end
 			if type(bp.hitCondition) == 'string' or type(bp.hitCondition) == 'number' then
-				spec.hitn = tonumber(bp.hitCondition)
+				spec.hit_count = tonumber(bp.hitCondition)
 			end
 			if type(bp.logMessage) == 'string' then spec.log = bp.logMessage end
 			S.bps[bp.line] = S.bps[bp.line] or {}
@@ -338,8 +338,8 @@ end
 function handlers.setExceptionBreakpoints(req)
 	local args = tbl(req.arguments)
 	S.break_on_exception = false
-	for _, f in ipairs(tbl(args.filters)) do
-		if f == 'lua_error' then S.break_on_exception = true end
+	for _, filter in ipairs(tbl(args.filters)) do
+		if filter == 'lua_error' then S.break_on_exception = true end
 	end
 	if S.hooked then sync_exc_override() end
 	respond(req, { breakpoints = {} })
@@ -435,13 +435,13 @@ end
 
 -- Values go to the DAP client as single-line strings; the pretty tostring
 -- is multi-line, so flatten it (global tostring stays pretty).
-local function val_str(v) return (tostring(v):gsub('\n%s*', ' ')) end
+local function value_to_string(v) return (tostring(v):gsub('\n%s*', ' ')) end
 
 local function var_item(name, val)
-	local v = { name = tostring(name), type = type(val), variablesReference = 0 }
-	if type(val) == 'table' then v.variablesReference = new_var_ref(val) end
-	v.value = val_str(val)
-	return v
+	local item = { name = tostring(name), type = type(val), variablesReference = 0 }
+	if type(val) == 'table' then item.variablesReference = new_var_ref(val) end
+	item.value = value_to_string(val)
+	return item
 end
 
 function handlers.variables(req)
@@ -480,8 +480,8 @@ function handlers.variables(req)
 	-- - getlocal gives declaration order, pairs() is arbitrary hash order
 	-- - the index tiebreak keeps same-named locals and upvalues from flipping around
 	-- - all-digit names (array indexes) sort numerically, not as text
-	for i, v in ipairs(vars) do
-		v._i = i
+	for i, item in ipairs(vars) do
+		item._i = i
 	end
 	table.sort(vars, function(a, b)
 		if a.name == b.name then return a._i < b._i end
@@ -489,8 +489,8 @@ function handlers.variables(req)
 		if na and nb then return na < nb end
 		return a.name < b.name
 	end)
-	for _, v in ipairs(vars) do
-		v._i = nil
+	for _, item in ipairs(vars) do
+		item._i = nil
 	end
 	respond(req, { variables = vars })
 end
@@ -507,16 +507,16 @@ function handlers.evaluate(req)
 	local expr = (tostring(args.expression or ''):gsub('^/nat%s*', ''))
 	local ok, res = eval_in(level and level + 1, expr)
 	if not ok then res = res or 'evaluation failed' end
-	local v
+	local body
 	if type(res) == 'table' then
-		v = {
-			result = val_str(res),
+		body = {
+			result = value_to_string(res),
 			variablesReference = new_var_ref(res),
 		}
 	else
-		v = { result = val_str(res), variablesReference = 0 }
+		body = { result = value_to_string(res), variablesReference = 0 }
 	end
-	respond(req, v)
+	respond(req, body)
 end
 
 function handlers.setVariable(req)
@@ -545,7 +545,7 @@ function handlers.setVariable(req)
 		respond_err(req, 'unknown variablesReference: ' .. tostring(args.variablesReference))
 		return
 	end
-	local body = { value = val_str(val), type = type(val), variablesReference = 0 }
+	local body = { value = value_to_string(val), type = type(val), variablesReference = 0 }
 	if type(val) == 'table' then body.variablesReference = new_var_ref(val) end
 	respond(req, body)
 end
@@ -561,19 +561,19 @@ end
 
 function handlers.disconnect(req)
 	respond(req, {})
-	local term = tbl(req.arguments).terminateDebuggee == true
+	local terminate = tbl(req.arguments).terminateDebuggee == true
 	event 'terminated'
-	if term then event('exited', { exitCode = 0 }) end
-	session_reset(term)
-	if term then sai.defer_fn(function() sai.exit(0) end, 1) end
+	if terminate then event('exited', { exitCode = 0 }) end
+	session_reset(terminate)
+	if terminate then sai.defer_fn(function() sai.exit(0) end, 1) end
 end
 
 local function dispatch(msg)
 	if type(msg) ~= 'table' or not msg.command then return end
 	log('recv ' .. msg.command)
-	local h = handlers[msg.command]
-	if h then
-		local ok, err = pcall(h, msg)
+	local handler = handlers[msg.command]
+	if handler then
+		local ok, err = pcall(handler, msg)
 		if not ok then
 			-- the client would wait forever for the missing response
 			log_err('handler error: ' .. tostring(err))
@@ -657,7 +657,7 @@ local function hook(_, line)
 		if spec then
 			spec.hits = spec.hits + 1
 			local hit = true
-			if spec.hitn and spec.hits ~= spec.hitn then hit = false end
+			if spec.hit_count and spec.hits ~= spec.hit_count then hit = false end
 			if hit and spec.cond then
 				local ok, res = eval_in(3, spec.cond)
 				hit = ok and res == true
@@ -720,15 +720,15 @@ local function traceback_hook(...)
 	-- Freeze only when no outer Lua pcall will see this error path: the
 	-- dispatch xpcall itself always catches it (and logs it), a further
 	-- pcall/xpcall frame down the stack means handled context.
-	local calls = 0
+	local pcall_count = 0
 	off = 1
 	while true do
 		local info = debug.getinfo(off, 'f')
 		if not info then break end
-		if info.func == pcall or info.func == xpcall then calls = calls + 1 end
+		if info.func == pcall or info.func == xpcall then pcall_count = pcall_count + 1 end
 		off = off + 1
 	end
-	if calls > 1 then return orig_traceback(...) end
+	if pcall_count > 1 then return orig_traceback(...) end
 
 	local args = { ... }
 	S.exc_msg = tostring(args[1] or '')
@@ -738,13 +738,13 @@ local function traceback_hook(...)
 	while lvl <= top do
 		local info = debug.getinfo(lvl, 'Sln')
 		if info then
-			local desc = (info.short_src or '?') .. ':' .. (info.currentline or 0)
+			local frame = (info.short_src or '?') .. ':' .. (info.currentline or 0)
 			if info.name then
-				desc = desc .. ' in function ' .. info.name
+				frame = frame .. ' in function ' .. info.name
 			elseif info.what then
-				desc = desc .. ' in ' .. info.what .. ' chunk'
+				frame = frame .. ' in ' .. info.what .. ' chunk'
 			end
-			trace[#trace + 1] = desc
+			trace[#trace + 1] = frame
 		end
 		lvl = lvl + 1
 	end
@@ -873,6 +873,7 @@ function M.stop() session_reset(true) end
 ---@return boolean
 function M.is_attached() return S.attached end
 
+---Drain the socket and dispatch requests.
 ---@param timeout? integer poll wait in milliseconds
 function M.pump(timeout)
 	if not S.srv then return end

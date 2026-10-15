@@ -13,7 +13,7 @@ local help = require 'sai.mode.help'
 local M = {
 	_path = 'sai.mode.key_help',
 	_location = 'topright', -- topleft stays the var help window
-	-- the overlay window IS this mode's display: a corner one would fight it for the block
+	-- the overlay window is this mode's display: a corner one would fight it for the block
 	help_pager = false,
 	bind_fmt = '%s\t%s',
 
@@ -58,16 +58,20 @@ local function layer_groups()
 		if rawget(binder, 'component') then
 			---@diagnostic disable-next-line: invisible, need-check-nil -- other layers' binds, listed here
 			if next(binder._mappings or {}) then
-				local best, blen
+				-- longest matching root path owns the component
+				local best, best_len
 				for j = 2, #sai.modes do
-					local r = sai.modes[j]
+					local root = sai.modes[j]
 					---@diagnostic disable-next-line: invisible, need-check-nil
-					if not rawget(r, 'component') then
-						---@diagnostic disable-next-line: invisible, need-check-nil
-						local rpath = r._path or ''
-						---@diagnostic disable-next-line: invisible, need-check-nil
-						if (binder._path or ''):sub(1, #rpath + 1) == rpath .. '.' and (not blen or #rpath > blen) then
-							best, blen = r, #rpath
+					if not rawget(root, 'component') then
+						---@diagnostic disable: invisible, need-check-nil
+						local root_path = root._path or ''
+						if
+							(binder._path or ''):sub(1, #root_path + 1) == root_path .. '.'
+							and (not best_len or #root_path > best_len)
+						then
+							---@diagnostic enable: invisible, need-check-nil
+							best, best_len = root, #root_path
 						end
 					end
 				end
@@ -120,8 +124,8 @@ local function bindsets_effective()
 		end
 	end
 	local base_map = {}
-	for k, v in pairs(base.get_mappings()) do
-		if not claimed[k] then base_map[k] = v end
+	for bind, cfg in pairs(base.get_mappings()) do
+		if not claimed[bind] then base_map[bind] = cfg end
 	end
 	local used = {}
 	for _, entry in ipairs(ordered_layers()) do
@@ -131,8 +135,8 @@ local function bindsets_effective()
 			-- mid-flip: the registry does not know this layer yet - show its declarations
 			mappings = {}
 			---@diagnostic disable-next-line: invisible -- other layers' binds, listed here
-			for k, v in pairs(binder._mappings) do
-				if v.cb then mappings[k] = v end
+			for bind, cfg in pairs(binder._mappings) do
+				if cfg.cb then mappings[bind] = cfg end
 			end
 		end
 		---@diagnostic disable-next-line: invisible
@@ -149,8 +153,8 @@ end
 local function bindsets_all()
 	local base = sai.modes[1]
 	local base_map = {}
-	for k, v in pairs(base.get_mappings()) do
-		base_map[k] = v
+	for bind, cfg in pairs(base.get_mappings()) do
+		base_map[bind] = cfg
 	end
 	for key, stack in pairs(reg.binds[base]) do
 		local bottom = stack[1]
@@ -161,8 +165,8 @@ local function bindsets_all()
 		local binder = entry.binder
 		local mappings = {}
 		---@diagnostic disable-next-line: invisible -- other layers' binds, listed here
-		for k, v in pairs(binder._mappings) do
-			if v.cb then mappings[k] = v end
+		for bind, cfg in pairs(binder._mappings) do
+			if cfg.cb then mappings[bind] = cfg end
 		end
 		---@diagnostic disable-next-line: invisible
 		used[#used + 1] = { binder = binder, _path = binder._path, _mappings = mappings, root = entry.root }
@@ -234,17 +238,17 @@ local function group_tab(bindsets)
 		else
 			local entries = entries_of(bindset._mappings)
 			if entries[1] then
-				local tl, te = tab.lines, tab.entries
+				local tab_lines, tab_entries = tab.lines, tab.entries
 				-- ' ' not '' - the app skips truly empty lines
-				if tl[1] then
-					tl[#tl + 1] = ' '
-					te[#te + 1] = { line = ' ' }
+				if tab_lines[1] then
+					tab_lines[#tab_lines + 1] = ' '
+					tab_entries[#tab_entries + 1] = { line = ' ' }
 				end
-				tl[#tl + 1] = ('[%s]'):format(U.pretty_name(bindset._path, root_path))
-				te[#te + 1] = { line = tl[#tl] }
+				tab_lines[#tab_lines + 1] = ('[%s]'):format(U.pretty_name(bindset._path, root_path))
+				tab_entries[#tab_entries + 1] = { line = tab_lines[#tab_lines] }
 				for _, entry in ipairs(entries) do
-					tl[#tl + 1] = entry.line
-					te[#te + 1] = entry
+					tab_lines[#tab_lines + 1] = entry.line
+					tab_entries[#tab_entries + 1] = entry
 				end
 			end
 		end

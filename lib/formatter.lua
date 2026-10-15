@@ -20,13 +20,13 @@ function M.new(cfg)
 	-- the hook rides a closure, not the instance: splice is the only
 	-- consumer and nothing else can reach the paint
 	cfg.splice = function(self, target, from, to)
-		local r = self._rendered
-		---@cast r any
+		local rendered = self._rendered
+		---@cast rendered any
 		for i = from, to do
-			local row = r[i]
+			local row = rendered[i]
 			if row == nil then
 				row = format(i, self[i])
-				r[i] = row
+				rendered[i] = row
 			end
 			target[#target + 1] = row
 		end
@@ -38,44 +38,44 @@ end
 ---A set dirties only its own rows.
 ---@generic I
 ---@type fun(self: sai.lib.formatter<I>, lines: I[])|fun(self: sai.lib.formatter<I>, idx: integer, val: I|integer|nil)
-function M:set(a, b)
-	if type(a) == 'table' then
+function M:set(idx, val)
+	if type(idx) == 'table' then
 		for i = 1, #self do
 			self[i] = nil
 		end
-		for i, v in ipairs(a) do
+		for i, v in ipairs(idx) do
 			self[i] = v
 		end
 		self._rendered = {}
 		return
 	end
 
-	if type(b) == 'number' then
+	if type(val) == 'number' then
 		local len = #self
-		if b < a then error 'formatter: range end before its start' end
-		if a < 1 or b > len then error 'formatter: delete out of range' end
+		if val < idx then error 'formatter: range end before its start' end
+		if idx < 1 or val > len then error 'formatter: delete out of range' end
 
-		local n = b - a + 1
-		for i = a, len - n do -- the tail shifts, its paint in lockstep
-			self[i] = self[i + n]
-			self._rendered[i] = self._rendered[i + n]
+		local count = val - idx + 1
+		for i = idx, len - count do -- the tail shifts, its paint in lockstep
+			self[i] = self[i + count]
+			self._rendered[i] = self._rendered[i + count]
 		end
-		for i = len - n + 1, len do
+		for i = len - count + 1, len do
 			self[i] = nil
 			self._rendered[i] = nil
 		end
 		return
 	end
 
-	if b == nil then
-		if a < 1 or a > #self then error 'formatter: delete out of range' end
-		M.set(self, a, a)
+	if val == nil then
+		if idx < 1 or idx > #self then error 'formatter: delete out of range' end
+		M.set(self, idx, idx)
 		return
 	end
 
-	if a < 1 or a > #self + 1 then error 'formatter: index out of range' end
-	self[a] = b
-	self._rendered[a] = nil
+	if idx < 1 or idx > #self + 1 then error 'formatter: index out of range' end
+	self[idx] = val
+	self._rendered[idx] = nil
 end
 
 ---Mark rows dirty: a paint hook reading live state (the cursor, the

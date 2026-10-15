@@ -84,23 +84,23 @@ end
 ---The possible keys of a wheel frame, from the clumped accumulated deltas.
 ---@param v number accumulated vertical delta, positive down
 ---@param h number accumulated horizontal delta, positive right
----@return {[string]:{pos:string, neg:string, axis:string, units:integer, frac:number}} keys per axis ('v','h'): the two direction keys, the raw axis key, the whole units (their sign names the direction) and the fraction below a unit
+---@return {[string]:{pos:string, neg:string, axis:string, units:integer, frac:number}} keys per axis ('v','h'): the direction keys, the raw axis key, the whole units and the fraction below a unit
 function M:_wheel_keys(v, h)
-	local fv, fh = math.fmod(v, 1), math.fmod(h, 1)
+	local frac_v, frac_h = math.fmod(v, 1), math.fmod(h, 1)
 	return {
 		v = {
 			pos = 'ScrollDown',
 			neg = 'ScrollUp',
 			axis = 'ScrollVertical',
-			units = v - fv,
-			frac = fv,
+			units = v - frac_v,
+			frac = frac_v,
 		},
 		h = {
 			pos = 'ScrollRight',
 			neg = 'ScrollLeft',
 			axis = 'ScrollHorizontal',
-			units = h - fh,
-			frac = fh,
+			units = h - frac_h,
+			frac = frac_h,
 		},
 	}
 end
@@ -123,33 +123,33 @@ function M:_on_scroll(kmods, h, v)
 
 	-- the direction forms run once per unit; a miss rides to the axis value
 	local fired, miss = { v = false, h = false }, { v = 0, h = 0 }
-	for _, a in ipairs { 'v', 'h' } do
-		local f = keys[a]
-		if f.units ~= 0 then
-			local key = qkey(kmods, f.units > 0 and f.pos or f.neg)
+	for _, axis in ipairs { 'v', 'h' } do
+		local axis_keys = keys[axis]
+		if axis_keys.units ~= 0 then
+			local key = qkey(kmods, axis_keys.units > 0 and axis_keys.pos or axis_keys.neg)
 			-- the plain direction form stays out while a raw axis bind owns the axis
-			local plain = self:_collect(qkey(kmods, f.axis)) == nil
-			fired[a] = self:_run_bind(key, plain, math.abs(f.units))
+			local plain = self:_collect(qkey(kmods, axis_keys.axis)) == nil
+			fired[axis] = self:_run_bind(key, plain, math.abs(axis_keys.units))
 		end
-		if fired[a] then
+		if fired[axis] then
 			-- a fired step resets the other axis's fraction and claims its own frame delta
-			w[a == 'v' and 'h' or 'v'] = 0
-			left[a] = 0
+			w[axis == 'v' and 'h' or 'v'] = 0
+			left[axis] = 0
 		else
-			miss[a] = f.units
+			miss[axis] = axis_keys.units
 		end
 	end
 
 	-- the axis forms take the missed units plus the fraction; a
 	-- numeric return becomes the new accumulator
-	for _, a in ipairs { 'v', 'h' } do
-		if not fired[a] then
-			local fams = self:_collect(qkey(kmods, keys[a].axis))
+	for _, axis in ipairs { 'v', 'h' } do
+		if not fired[axis] then
+			local fams = self:_collect(qkey(kmods, keys[axis].axis))
 			local fam = fams and fams[''] or nil
-			if w[a] + miss[a] ~= 0 and fam and fam.max_count == 1 and fam.actions[1] then
-				local ret = fam.actions[1](w[a] + miss[a])
-				w[a] = (type(ret) == 'number') and ret or 0
-				left[a] = 0
+			if w[axis] + miss[axis] ~= 0 and fam and fam.max_count == 1 and fam.actions[1] then
+				local ret = fam.actions[1](w[axis] + miss[axis])
+				w[axis] = (type(ret) == 'number') and ret or 0
+				left[axis] = 0
 			end
 		end
 	end
@@ -163,8 +163,8 @@ function M:_on_scroll(kmods, h, v)
 		if of and of[''] and math.abs(d) < 1 then return 0 end
 		return d
 	end
-	for _, a in ipairs { 'v', 'h' } do
-		if left[a] ~= 0 then left[a] = unclaimed(left[a], keys[a].pos, keys[a].neg) end
+	for _, axis in ipairs { 'v', 'h' } do
+		if left[axis] ~= 0 then left[axis] = unclaimed(left[axis], keys[axis].pos, keys[axis].neg) end
 	end
 	if left.v == 0 and left.h == 0 then return end
 
@@ -183,8 +183,8 @@ function M:_on_scroll(kmods, h, v)
 		self:_run_bind(sk)
 	end
 	-- an axis that rode to the plain tail leaves no fraction behind
-	for _, a in ipairs { 'v', 'h' } do
-		if left[a] ~= 0 then w[a] = 0 end
+	for _, axis in ipairs { 'v', 'h' } do
+		if left[axis] ~= 0 then w[axis] = 0 end
 	end
 end
 
@@ -214,9 +214,8 @@ function M:_collect(key)
 	return fams
 end
 
--- Push and pop need no mode-side work: every input already routes
--- through the universal handlers, and whatever no bind claims falls
--- to the unassigned chain.
+-- Push and pop need no mode-side work: every input already routes through the
+-- universal handlers, and whatever no bind claims falls to the unassigned chain.
 function M:_rawmap() end
 
 function M:_rawunmap() end
@@ -260,8 +259,8 @@ function M.new(self, api_name)
 		local ok
 		if #sym > 1 then
 			if sym:sub(1, 3) == 'KP_' then
-				local k = self._mappings[key:gsub('KP_', '')]
-				if k then return k.cb() end
+				local mapped = self._mappings[key:gsub('KP_', '')]
+				if mapped then return mapped.cb() end
 			else
 				ok = sym:sub(1, 1):match '%l' -- allow ccaron/aacute, not Next/End
 			end
@@ -270,9 +269,9 @@ function M.new(self, api_name)
 		end
 
 		if ok then
-			local k = key:find('Shift', 1, true) and key:gsub('Shift%+', '') or key:gsub('([^+]+)$', 'Shift+%1')
-			k = self._mappings[k]
-			if k then return k.cb() end
+			local shifted = key:find('Shift', 1, true) and key:gsub('Shift%+', '') or key:gsub('([^+]+)$', 'Shift+%1')
+			shifted = self._mappings[shifted]
+			if shifted then return shifted.cb() end
 		end
 
 		if sym == 'ISO_Level3_Shift' then return end
@@ -280,7 +279,7 @@ function M.new(self, api_name)
 	end
 	self._m_wheel = { v = 0, h = 0 }
 	self._m_burst = false
-	-- the host wraps: pure wraps of the handlers
+	-- the host wraps: pure wraps of the handlers of the handlers
 	api.on_unassigned_key(function(key) self:_handle(key) end)
 	for _, btn in ipairs { 'MouseLeft', 'MouseMiddle', 'MouseRight' } do
 		api.on_mouse(btn, function() self:_handle(btn) end)

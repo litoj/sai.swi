@@ -89,14 +89,14 @@ function M.default()
 		map(k, 'bracketright', function() v.rotate(90) end, 'Rotate right')
 		map(k, 'm', v.flip_vertical, 'Flip vertical')
 		map(k, 'Shift+m', v.flip_horizontal, 'Flip horizontal')
-		-- Text oevrlay toggle
+		-- Text overlay toggle
 		map(k, 't', function() t.enabled = not t.enabled end, 'Toggle text')
-		-- Image naigation
+		-- Image navigation
 		map(k, 'Home', v.go.first, 'Go first')
 		map(k, 'End', v.go.last, 'Go last')
 		map(k, 'Next', v.go.next, 'Go next')
 		map(k, 'Prior', v.go.prev, 'Go prev')
-		-- Frame naigation
+		-- Frame navigation
 		map(k, 'Shift+Next', function() v.frame = v.frame + 1 end, 'Next frame')
 		map(k, 'Shift+Prior', function() v.frame = v.frame - 1 end, 'Previous frame')
 		-- Scale (zoom)
@@ -114,6 +114,7 @@ function M.default()
 	end
 end
 
+---Bind mapper factory: returns a `map(bind, action, desc)` bound to the mode.
 ---@private
 ---@generic O: keybind_processor
 ---@param modeapi sai.lib.keybind_processor|`O`
@@ -154,9 +155,9 @@ function M.help(self)
 end
 
 ---Keyboard scrolling binds of a pager that owns its input.
----@param p sai.lib.pager a full overlay mode's display; the wheel is its own block bind
-function M.pager_scrolls(p)
-	local map = M.gen_mapadd(p, { kind = 'private' })
+---@param pager sai.lib.pager a full overlay mode's display; the wheel is its own block bind
+function M.pager_scrolls(pager)
+	local map = M.gen_mapadd(pager, { kind = 'private' })
 	map({ 'Up', 'k' }, function(p) p.scroll = p.scroll - 1 end)
 	map({ 'Down', 'j' }, function(p) p.scroll = p.scroll + 1 end)
 	map('Prior', function(p) p.scroll = p.scroll - p.page_size end)
@@ -166,23 +167,31 @@ end
 ---Navigation of a help window: window scrolls idle, line cursor walks
 ---while the status filter narrows the listing; confirming runs the line.
 ---The wheel always scrolls the window, like every other pager.
----@param p sai.mode.help.pager the help window over the listing
-function M.help_pager(p)
-	p.map(section.key(p._location, 'ScrollUp'), function() p.scroll = p.scroll - 1 end, { kind = 'private' })
-	p.map(section.key(p._location, 'ScrollDown'), function() p.scroll = p.scroll + 1 end, { kind = 'private' })
-	local map = M.gen_mapadd(p, { kind = 'private' })
+---@param pager sai.mode.help.pager the help window over the listing
+function M.help_pager(pager)
+	pager.map(
+		section.key(pager._location, 'ScrollUp'),
+		function() pager.scroll = pager.scroll - 1 end,
+		{ kind = 'private' }
+	)
+	pager.map(
+		section.key(pager._location, 'ScrollDown'),
+		function() pager.scroll = pager.scroll + 1 end,
+		{ kind = 'private' }
+	)
+	local map = M.gen_mapadd(pager, { kind = 'private' })
 	local function step(delta)
-		if p._filtering then
-			p:move(delta)
+		if pager._filtering then
+			pager:move(delta)
 		else
-			p.scroll = p.scroll + delta
+			pager.scroll = pager.scroll + delta
 		end
 	end
 	map({ 'Up', 'k' }, function() step(-1) end)
 	map({ 'Down', 'j' }, function() step(1) end)
-	map('Prior', function() step(-p.page_size) end)
-	map('Next', function() step(p.page_size) end)
-	map('Return', function() p:confirm() end)
+	map('Prior', function() step(-pager.page_size) end)
+	map('Next', function() step(pager.page_size) end)
+	map('Return', function() pager:confirm() end)
 end
 
 ---@param self sai.mode.selector
@@ -347,32 +356,39 @@ function M.sort(self)
 	end, 'Sort by the clicked field, descending')
 
 	-- the picked pane: the cursor walks it, Ctrl+Shift+Up/Down reorders,
-	-- Ctrl+i flips the direction, Alt+Delete drops, the pointer flips or
-	-- drops the clicked criterion
-	local by = self.sort_by
-	by.map('Ctrl+Up', function() by:move(-1) end, 'Previous picked criterion')
-	by.map('Ctrl+Down', function() by:move(1) end, 'Next picked criterion')
-	by.map('Ctrl+Shift+Up', function() self:move_criterion(by.lines[by.line], -1) end, 'Move the picked criterion up')
-	by.map(
+	-- Ctrl+i flips the direction, Alt+Delete drops
+	local picked = self.sort_by
+	picked.map('Ctrl+Up', function() picked:move(-1) end, 'Previous picked criterion')
+	picked.map('Ctrl+Down', function() picked:move(1) end, 'Next picked criterion')
+	picked.map(
+		'Ctrl+Shift+Up',
+		function() self:move_criterion(picked.lines[picked.line], -1) end,
+		'Move the picked criterion up'
+	)
+	picked.map(
 		'Ctrl+Shift+Down',
-		function() self:move_criterion(by.lines[by.line], 1) end,
+		function() self:move_criterion(picked.lines[picked.line], 1) end,
 		'Move the picked criterion down'
 	)
-	by.map(
+	picked.map(
 		'Ctrl+i',
-		function() self:flip_criterion(by.lines[by.line]) end,
+		function() self:flip_criterion(picked.lines[picked.line]) end,
 		'Toggle the direction of the picked criterion'
 	)
-	by.map('Alt+Delete', function() self:remove_criterion(by.lines[by.line]) end, 'Drop the picked criterion')
-	by.map('BL+MouseLeft', function(row, _)
+	picked.map(
+		'Alt+Delete',
+		function() self:remove_criterion(picked.lines[picked.line]) end,
+		'Drop the picked criterion'
+	)
+	picked.map('BL+MouseLeft', function(row, _)
 		if not row then return end
-		by:select_at_mouse()
-		self:flip_criterion(by.lines[by.line])
+		picked:select_at_mouse()
+		self:flip_criterion(picked.lines[picked.line])
 	end, 'Toggle the direction of the clicked criterion')
-	by.map('BL+MouseRight', function(row, _)
+	picked.map('BL+MouseRight', function(row, _)
 		if not row then return end
-		by:select_at_mouse()
-		self:remove_criterion(by.lines[by.line])
+		picked:select_at_mouse()
+		self:remove_criterion(picked.lines[picked.line])
 	end, 'Drop the clicked criterion')
 end
 
@@ -385,31 +401,30 @@ function M.text_adjust(self)
 
 	local modmap = { TL = 'topleft', TR = 'topright', BL = 'bottomleft', ST = 'status', BR = 'bottomright' }
 	for mod, loc in pairs(modmap) do
-		mod = mod .. '+'
-		local inc_dir, dec_dir
-		if mod:sub(1, 1) == 'T' then
-			inc_dir, dec_dir = 'ScrollDown', 'ScrollUp'
+		local inc, dec
+		if mod:sub(1, 1) == 'T' then -- top corners: scroll down grows
+			inc, dec = 'ScrollDown', 'ScrollUp'
 		else
-			dec_dir, inc_dir = 'ScrollDown', 'ScrollUp'
+			dec, inc = 'ScrollDown', 'ScrollUp'
 		end
 
-		map(mod .. dec_dir, function() self:adjust_height(loc, -1) end, 'Shrink pager')
-		map(mod .. inc_dir, function() self:adjust_height(loc, 1) end, 'Grow pager')
-		map(mod .. 'Shift+' .. dec_dir, function() self:adjust_scrolloff(loc, -1) end, 'Dec scrolloff')
-		map(mod .. 'Shift+' .. inc_dir, function() self:adjust_scrolloff(loc, 1) end, 'Inc scrolloff')
+		map(mod .. '+' .. dec, function() self:adjust_height(loc, -1) end, 'Shrink pager')
+		map(mod .. '+' .. inc, function() self:adjust_height(loc, 1) end, 'Grow pager')
+		map(mod .. '+Shift+' .. dec, function() self:adjust_scrolloff(loc, -1) end, 'Decrease scrolloff')
+		map(mod .. '+Shift+' .. inc, function() self:adjust_scrolloff(loc, 1) end, 'Increase scrolloff')
 
 		if mod:sub(1, 1) == 'T' then
-			map(mod .. 's', function() self:swap(loc, loc:gsub('top', 'bottom')) end, 'Swap ↓')
-		elseif mod:sub(1, 1) == 'B' then -- don't match status
-			map(mod .. 'w', function() self:swap(loc, loc:gsub('bottom', 'top')) end, 'Swap ↑')
+			map(mod .. '+s', function() self:swap(loc, loc:gsub('top', 'bottom')) end, 'Swap down')
+		elseif mod:sub(1, 1) == 'B' then -- status is no corner: no swap
+			map(mod .. '+w', function() self:swap(loc, loc:gsub('bottom', 'top')) end, 'Swap up')
 		end
 	end
-	map('TR+a', function() self:swap('topright', 'topleft') end, 'Swap ←')
-	map('TL+d', function() self:swap('topleft', 'topright') end, 'Swap →')
-	map('BR+a', function() self:swap('bottomright', 'status') end, 'Swap ←')
-	map('ST+a', function() self:swap('status', 'bottomleft') end, 'Swap ←')
-	map('ST+d', function() self:swap('status', 'bottomright') end, 'Swap →')
-	map('BL+d', function() self:swap('bottomleft', 'status') end, 'Swap →')
+	map('TR+a', function() self:swap('topright', 'topleft') end, 'Swap left')
+	map('TL+d', function() self:swap('topleft', 'topright') end, 'Swap right')
+	map('BR+a', function() self:swap('bottomright', 'status') end, 'Swap left')
+	map('ST+a', function() self:swap('status', 'bottomleft') end, 'Swap left')
+	map('ST+d', function() self:swap('status', 'bottomright') end, 'Swap right')
+	map('BL+d', function() self:swap('bottomleft', 'status') end, 'Swap right')
 end
 
 return M
